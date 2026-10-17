@@ -118,6 +118,24 @@ def stale_keys(parenting: Mapping[str, Sequence[str]], old: str, new: str) -> li
     ]
 
 
+def is_unmatched(pattern: str, gone: str, required: Sequence[str]) -> bool:
+    """Whether `pattern` matched the deleted bone `gone` but no bone in `required`."""
+    return match(pattern, gone) is not None and not any(
+        match(pattern, bone) is not None for bone in required
+    )
+
+
+def unmatched_keys(
+    parenting: Mapping[str, Sequence[str]], gone: str, required: Sequence[str]
+) -> list[str]:
+    """The keys whose key or a child pattern `is_unmatched`."""
+    return [
+        key
+        for key, patterns in parenting.items()
+        if any(is_unmatched(pattern, gone, required) for pattern in [key, *patterns])
+    ]
+
+
 def generalize(names: Sequence[str]) -> str | None:
     """`names` with `{n}` wherever they differ, or `None` if bases or lengths do."""
     split = [name.split(".") for name in names]

@@ -54,6 +54,19 @@ def stale_roles(roles: Mapping[str, Mapping], old: str, new: str) -> list[str]:
     ]
 
 
+def unmatched_roles(
+    roles: Mapping[str, Mapping], gone: str, required: Sequence[str]
+) -> list[str]:
+    """The roles whose `vtx_grp` matched the deleted `gone` but none of `required`."""
+    return [
+        name
+        for name, role in roles.items()
+        if "vtx_grp" in role
+        and matches(role["vtx_grp"], [gone])
+        and not matches(role["vtx_grp"], required)
+    ]
+
+
 def infer_vtx_grp(checked: Collection[str], required: Sequence[str]) -> str:
     """The pattern matching exactly `checked` among `required`, else `ValueError`."""
     names = [bone for bone in required if bone in checked]

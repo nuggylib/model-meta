@@ -250,3 +250,38 @@ STALE = {"root": ["arm.{1}"], "arm.L": ["hand.L"], "leg.{1}": ["foot.{1}"]}
 )
 def test_stale_keys(old, new, expected):
     assert parenting.stale_keys(STALE, old, new) == expected
+
+
+# --- is_unmatched / unmatched_keys -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("pattern", "gone", "required", "expected"),
+    [
+        ("arm.L", "arm.L", ["arm.R"], True),  # a literal loses its only bone
+        ("arm.{1}", "arm.L", ["arm.R"], False),  # the pattern still covers one
+        ("arm.{1}", "arm.L", ["root"], True),
+        ("leg.L", "arm.L", [], False),  # it never matched
+    ],
+)
+def test_is_unmatched(pattern, gone, required, expected):
+    assert parenting.is_unmatched(pattern, gone, required) is expected
+
+
+@pytest.mark.parametrize(
+    ("gone", "required", "expected"),
+    [
+        ("arm.L", ["root", "hand.L", "leg.L", "foot.L"], ["root", "arm.L"]),
+        ("hand.L", ["root", "arm.L", "leg.L", "foot.L"], ["arm.L"]),  # child only
+        ("leg.L", ["root", "leg.R", "foot.L"], []),  # the pattern still covers it
+        ("root", ["arm.L", "hand.L"], ["root"]),  # key only
+        ("spine", ["root"], []),  # nothing names it
+    ],
+)
+def test_unmatched_keys(gone, required, expected):
+    assert parenting.unmatched_keys(STALE, gone, required) == expected
+
+
+def test_unmatched_keys_both_key_and_child():
+    entries = {"arm.L": ["arm.L.twist"], "root": ["spine"]}
+    assert parenting.unmatched_keys(entries, "arm.L", ["root", "spine"]) == ["arm.L"]
