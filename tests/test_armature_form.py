@@ -1149,6 +1149,63 @@ async def test_yes_deletes_only_that_bone(tmp_path, monkeypatch):
         assert _highlighted(app) == 0  # clamped to the new last bone
 
 
+async def test_deleting_the_last_match_warns_and_marks(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 1, "right", "enter")
+        assert _status(app) == "Bone 'arm.L' deleted."  # `arm.{1}` still has arm.R
+        assert _marked(app) == []
+
+        await _delete(pilot, app, 1, "right", "enter")
+        assert _status(app) == (
+            "Bone 'arm.R' deleted. Parenting 'root' and mesh role 'arm' "
+            "now match no bone — update them."
+        )
+        assert _marked(app) == ["arm.{1}"]  # the child line, not its key
+        assert _armature(path)["parenting"] == {"root": ["arm.{1}"]}
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert _marked(app) == ["arm.{1}"]
+
+        await pilot.press("a")
+        await pilot.pause()
+        assert _status(app) == ""
+        assert _marked(app) == []
+
+
+async def test_deleting_a_parent_marks_its_key(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 0, "right", "enter")
+
+        assert _status(app) == (
+            "Bone 'root' deleted. Parenting 'root' and mesh role 'base' "
+            "now match no bone — update them."
+        )
+        assert _marked(app) == ["root"]
+
+
+async def test_deleting_with_one_reference_says_it(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    specs_store.update_armature(
+        path, add_bones=["root", "spine"], add_parenting={"root": ["spine"]}
+    )
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 1, "right", "enter")
+
+        assert _status(app) == (
+            "Bone 'spine' deleted. Parenting 'root' now matches no bone — update it."
+        )
+        assert _marked(app) == ["spine"]
+
+
 async def test_yes_closes_an_open_rename_and_no_keeps_it(tmp_path, monkeypatch):
     path = _arms(tmp_path)
     app = _app(tmp_path, monkeypatch)
