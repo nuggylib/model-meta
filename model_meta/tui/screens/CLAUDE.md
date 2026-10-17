@@ -152,8 +152,11 @@ in the app (analogous to a route in a web app).
   `@work(exclusive=True, group="delete-bone")` worker that
   `push_screen_wait`s a `ConfirmModal`. Yes closes any open editor unwritten,
   then `store.delete_bone` removes only that bone; the cursor keeps its index
-  (clamped). No warning: parenting and `vtx_grp` patterns just stop matching
-  it. No or `escape` changes nothing.
+  (clamped). `#bone-status` then names parenting keys and mesh roles that
+  matched the bone and now match no bone (`unmatched_keys` /
+  `unmatched_roles`, never rewritten), and those `#parenting-list` rows are
+  marked red until `_status` clears them — the rename warning's shape, sharing
+  `_references`. No or `escape` changes nothing.
   **Two columns** under the name/status: bones on the left, parenting on the
   right. **Parenting:** `#parenting-editor` sits above the list.
   `#parent-bones` is a checklist of `required_bones`; **Choose children**
