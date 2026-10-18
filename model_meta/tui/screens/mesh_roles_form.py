@@ -6,7 +6,9 @@ its meshes; **Add** writes the inferred `vtx_grp` and the `mesh_regex` and
 returns to an empty name for the next one. A role without a `mesh_regex` is
 marked in the list. Enter on a
 role pushes `MeshRoleFormScreen`, where that one role's fields are edited; on
-return the cursor follows the role's current name. The rules live in
+return the cursor follows the role's current name. `x` asks Yes/No, then
+deletes only the highlighted role; nothing else names a role, so there is
+nothing to warn about. The rules live in
 `specs.mesh_roles`; this screen only sequences them.
 """
 
@@ -24,6 +26,7 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, SelectionList, Static
 
 from model_meta.specs import mesh_roles, store
+from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.mesh_role_form import MeshRoleFormScreen
 from model_meta.tui.widgets.field_list import FieldList
 
@@ -34,15 +37,17 @@ _NO_BONES = "Add required bones first."
 class MeshRolesFormScreen(Screen):
     """Stay-on form for a spec's mesh roles, pushed as an instance.
 
-    Opening a role discards an Add in progress unwritten. `escape` hides the
-    bones question back to the name, clears a non-empty name, closes the Add
-    editor from an empty one, and leaves when it is closed. `q` is shadowed:
-    the form holds an Input and a Button.
+    Opening a role, or a confirmed delete, discards an Add in progress
+    unwritten. `x` works only from a focused, non-empty role list. `escape`
+    hides the bones question back to the name, clears a non-empty name, closes
+    the Add editor from an empty one, and leaves when it is closed. `q` is
+    shadowed: the form holds an Input and a Button.
     """
 
     BINDINGS = [
         Binding("escape", "back", "Back"),
         Binding("a", "add", "Add"),
+        Binding("x", "delete_role", "Delete"),
         Binding("q", "noop", show=False),
     ]
 
@@ -115,6 +120,13 @@ class MeshRolesFormScreen(Screen):
 
     # -- bindings ----------------------------------------------------------
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        if action == "delete_role":
+            focused = self.focused
+            on_list = focused is not None and focused.id == "role-list"
+            return on_list and bool(self._role_names)
+        return True
+
     def action_back(self) -> None:
         self._status("")
         name = self.query_one("#role-name", Input)
@@ -136,6 +148,29 @@ class MeshRolesFormScreen(Screen):
             self._open()
         target = "#role-name" if self._name is None else "#role-bones"
         self.query_one(target).focus()
+
+    def action_delete_role(self) -> None:
+        index = self.query_one("#role-list", FieldList).highlighted
+        if index is not None:
+            self._delete_role(self._role_names[index])
+
+    @work(exclusive=True, group="delete-role")
+    async def _delete_role(self, name: str) -> None:
+        """Ask Yes/No; on Yes, discard any Add and delete `name` alone."""
+        question = ConfirmModal(f"Delete mesh role '{name}'?")
+        if not await self.app.push_screen_wait(question):
+            return
+        self._status("")
+        self._close()
+        try:
+            store.delete_mesh_role(self.path, name)
+        except (OSError, ValueError) as error:
+            self._show_roles()
+            self._status(f"Could not write the spec: {_reason(error)}")
+        else:
+            self._show_roles()
+            self._status(f"Mesh role '{name}' deleted.")
+        self.query_one("#role-list", FieldList).focus()
 
     def action_noop(self) -> None:
         """Absorb `q` so the app's global quit can't fire from the form."""
@@ -303,6 +338,7 @@ class MeshRolesFormScreen(Screen):
             return
         roles = store.mesh_roles(document)
         self._role_names = list(roles)
+        self.refresh_bindings()
         lines: list[tuple[str, int]] = []
         marked: set[int] = set()
         for name, role in roles.items():

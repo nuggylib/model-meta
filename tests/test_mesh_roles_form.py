@@ -9,6 +9,7 @@ from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
 from model_meta.godot import discovery
 from model_meta.specs import store as specs_store
+from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.mesh_role_form import MeshRoleFormScreen
 from model_meta.tui.screens.mesh_roles_form import MeshRolesFormScreen
@@ -542,3 +543,162 @@ async def test_a_role_removed_by_hand_is_reported(tmp_path, monkeypatch):
         assert isinstance(app.screen, MeshRolesFormScreen)
         assert _status(app) == "'body' is no longer a mesh role."
         assert _lines(app)[0] == "susarm"
+
+
+# --- deleting a role ---------------------------------------------------------
+
+
+async def _delete(pilot, app, index, *keys):
+    """Highlight role `index`, press `x`, then `keys` in the dialog."""
+    role_list = app.screen.query_one("#role-list", FieldList)
+    role_list.focus()
+    role_list.highlighted = index
+    await pilot.press("x")
+    assert await _wait_for(pilot, lambda: isinstance(app.screen, ConfirmModal))
+    await pilot.pause()
+    if keys:
+        await pilot.press(*keys)
+    assert await _wait_for(pilot, lambda: isinstance(app.screen, MeshRolesFormScreen))
+    await pilot.pause()
+
+
+def _listed(app):
+    rows = app.screen.query("#role-list .field-list-row")
+    return [str(row.render()) for row in rows if not row.has_class("field-list-child")]
+
+
+def _bindings(app):
+    return {b.binding.key for b in app.screen.active_bindings.values()}
+
+
+async def test_x_deletes_from_a_non_empty_role_list_only(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    specs_store.add_mesh_role(path, "body", "body", "^m$")
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        assert "x" in _bindings(app)
+
+        await _start_add(pilot)
+        assert _focused_id(app) == "role-name"
+        assert "x" not in _bindings(app)
+        await pilot.press("escape")
+        await pilot.pause()
+
+        await _delete(pilot, app, 0, "right", "enter")
+        assert _roles(path) == {}
+        assert _cursor(app) is None
+        assert "x" not in _bindings(app)
+        await pilot.press("x")
+        await pilot.pause()
+        assert isinstance(app.screen, MeshRolesFormScreen)
+
+        await pilot.press("enter")  # an empty list still opens Add
+        await pilot.pause()
+        assert _focused_id(app) == "role-name"
+
+
+async def test_dialog_asks_about_the_highlighted_role(tmp_path, monkeypatch):
+    path = _with_roles(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        app.screen.query_one("#role-list", FieldList).highlighted = 1
+        await pilot.press("x")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, ConfirmModal))
+        await pilot.pause()
+        question = app.screen.query_one("#confirm-question", Static)
+        assert str(question.render()) == "Delete mesh role 'susarm'?"
+        assert _focused_id(app) == "confirm-no"
+
+
+async def test_no_and_escape_cancel_and_write_nothing(tmp_path, monkeypatch):
+    path = _with_roles(tmp_path)
+    before = path.read_bytes()
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        for keys in (("enter",), ("escape",)):
+            await _delete(pilot, app, 1, *keys)
+            assert path.read_bytes() == before
+            assert _focused_id(app) == "role-list"
+            assert _cursor(app) == 1
+            assert _status(app) == ""
+
+
+async def test_yes_deletes_only_that_role(tmp_path, monkeypatch):
+    path = _with_roles(tmp_path)
+    specs_store.update_armature(path, add_parenting={"body": ["arm[L]"]})
+    before = json.loads(path.read_text(encoding="utf-8"))
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 1, "right", "enter")
+
+        after = json.loads(path.read_text(encoding="utf-8"))
+        del before["mesh_roles"]["susarm"]
+        assert after == before  # armature and the other roles untouched
+        assert _listed(app) == ["body", "glass"]
+        assert _marked(app) == ["mesh_regex: not set"]  # glass, recomputed
+        assert _focused_id(app) == "role-list"
+        assert _cursor(app) == 1  # the role that moved up
+        assert _status(app) == "Mesh role 'susarm' deleted."
+
+        await _delete(pilot, app, 1, "right", "enter")
+        assert _listed(app) == ["body"]
+        assert _cursor(app) == 0  # clamped to the new last role
+        assert _status(app) == "Mesh role 'glass' deleted."
+
+
+async def test_yes_discards_an_open_add_and_no_keeps_it(tmp_path, monkeypatch):
+    path = _with_roles(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _start_add(pilot)
+        await _type(pilot, "wheel")
+        assert _question_shown(app)
+
+        await _delete(pilot, app, 0, "enter")
+        assert app.screen.query_one("#role-editor").display
+        assert _question_shown(app)
+        assert app.screen.query_one("#role-name", Input).value == "wheel"
+
+        await _delete(pilot, app, 0, "right", "enter")
+        assert not app.screen.query_one("#role-editor").display
+        assert app.screen.query_one("#role-name", Input).value == ""
+        assert list(_roles(path)) == ["susarm", "glass"]
+        assert _focused_id(app) == "role-list"
+
+
+async def test_a_role_gone_by_hand_reports_and_refreshes(tmp_path, monkeypatch):
+    path = _with_roles(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        app.screen.query_one("#role-list", FieldList).highlighted = 1
+        await pilot.press("x")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, ConfirmModal))
+        await pilot.pause()
+        specs_store.delete_mesh_role(path, "susarm")
+        await pilot.press("right", "enter")
+        assert await _wait_for(
+            pilot, lambda: isinstance(app.screen, MeshRolesFormScreen)
+        )
+        await pilot.pause()
+
+        assert _status(app) == (
+            "Could not write the spec: 'susarm' is no longer a mesh role."
+        )
+        assert _listed(app) == ["body", "glass"]
+        assert _focused_id(app) == "role-list"
+
+
+async def test_q_does_not_quit_from_the_dialog(tmp_path, monkeypatch):
+    path = _with_roles(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 0, "q", "escape")
+        assert app.is_running
+        assert len(_roles(path)) == 3
