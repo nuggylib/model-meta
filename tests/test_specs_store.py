@@ -725,3 +725,32 @@ def test_rename_bone_leaves_no_tmp_behind(tmp_path):
     store.rename_bone(path, "root", "base")
 
     assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]
+
+
+# --- delete_bone -----------------------------------------------------------
+
+
+def test_delete_bone_keeps_the_order_and_every_other_key(tmp_path):
+    path, document = _rigged(tmp_path)
+    store.delete_bone(path, "arm.L")
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    document["armature"]["required_bones"] = ["root", "arm.R"]
+    assert after == document
+
+
+def test_delete_bone_rejects_a_missing_bone_and_writes_nothing(tmp_path):
+    path, _ = _rigged(tmp_path)
+    before = path.read_bytes()
+
+    with pytest.raises(ValueError, match="'leg.L' is no longer a required bone."):
+        store.delete_bone(path, "leg.L")
+
+    assert path.read_bytes() == before
+
+
+def test_delete_bone_leaves_no_tmp_behind(tmp_path):
+    path, _ = _rigged(tmp_path)
+    store.delete_bone(path, "root")
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]

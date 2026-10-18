@@ -109,6 +109,10 @@ in the app (analogous to a route in a web app).
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles). Returns the key, or `None` on `escape`.
   Writes nothing. Own `Footer`, `q` shadowed — `NewSpecModal`'s shape.
+- `confirm_modal.py` — `ConfirmModal(question)`, a generic
+  `ModalScreen[bool]`: the question (`markup=False`), **No** (focused) and
+  **Yes** buttons, `left`/`right` between them. Yes → `True`; No or `escape`
+  → `False`. Writes nothing. Own `Footer`, `q` shadowed.
 - `armature_form.py` — `ArmatureFormScreen(path)`, a full `Screen` the user
   stays on to name the armature and add bone after bone. **Read-only until
   selected:** each field (`#armature-name-view`, `#bone-list`,
@@ -144,6 +148,15 @@ in the app (analogous to a route in a web app).
   The `#parenting-list` rows whose pattern `is_stale` are marked red
   (`FieldList.marked`) while that warning shows: `_status` clears the marks.
   `escape` in a rename steps back a question, then closes unsaved.
+  **Delete:** `x` (`check_action`: `#bone-list` focused and non-empty) runs a
+  `@work(exclusive=True, group="delete-bone")` worker that
+  `push_screen_wait`s a `ConfirmModal`. Yes closes any open editor unwritten,
+  then `store.delete_bone` removes only that bone; the cursor keeps its index
+  (clamped). `#bone-status` then names parenting keys and mesh roles that
+  matched the bone and now match no bone (`unmatched_keys` /
+  `unmatched_roles`, never rewritten), and those `#parenting-list` rows are
+  marked red until `_status` clears them — the rename warning's shape, sharing
+  `_references`. No or `escape` changes nothing.
   **Two columns** under the name/status: bones on the left, parenting on the
   right. **Parenting:** `#parenting-editor` sits above the list.
   `#parent-bones` is a checklist of `required_bones`; **Choose children**
@@ -240,8 +253,8 @@ in the app (analogous to a route in a web app).
 
 ## Conventions
 - One screen per file, named `<Name>Screen`. The value-returning screens are the
-  deliberate exceptions — `SetupWizard` and `NewSpecModal` are flows that return
-  a result, not landing views, and are named for what they are.
+  deliberate exceptions — `SetupWizard`, `NewSpecModal` and `ConfirmModal` are
+  flows that return a result, not landing views, and are named for what they are.
 - Register landing screens in `ModelMetaApp.SCREENS` and navigate with
   `push_screen` / `pop_screen`; push value-returning screens with
   `push_screen_wait` from inside a `@work` worker.

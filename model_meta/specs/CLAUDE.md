@@ -32,13 +32,17 @@ disk. **No Textual, no UI.**
   written as **exact names**. Other syntaxes (`*`, regex) just match literally.
   `is_stale(pattern, old, new)`: the pattern matches a renamed bone's old name
   but not its new one. `stale_keys(parenting, old, new)`: keys whose key or a
-  child pattern `is_stale`.
+  child pattern `is_stale`. `is_unmatched(pattern, gone, required)` /
+  `unmatched_keys(parenting, gone, required)`: the delete counterparts — the
+  pattern matched the deleted bone and matches none of the bones left.
 - `mesh_roles.py` — pure `mesh_roles` logic. `validate_name` (trimmed,
   non-empty, unique by exact compare) and `infer_vtx_grp(checked, required)`:
   the `parenting`-syntax pattern (`generalize`, 63-byte limit) that `matches`
   **exactly** the checked bones, else `ValueError` naming why (incl. any extra
   bones it would match). Every `{n}` is free for now. `stale_roles(roles, old,
   new)`: roles whose `vtx_grp` matches `old` but not `new`.
+  `unmatched_roles(roles, gone, required)`: roles whose `vtx_grp` matched the
+  deleted `gone` and matches none of `required`.
   `validate_mesh_regex(pattern)`: blank or not compiling under Python `re`,
   else `None`. A role's `mesh_regex` names its mesh objects; nothing ties its
   groups to `vtx_grp`.
@@ -70,9 +74,13 @@ disk. **No Textual, no UI.**
   `ValueError` when `name` is gone or `new_name` is another required bone, and
   replaces it in place, applying `set_inverses`. Parenting and mesh roles are
   never rewritten.
+  `delete_bone(path, name)` re-reads, raises `ValueError` when `name` is gone,
+  and removes it alone. Inverses, parenting and mesh roles are never
+  rewritten; callers find the ones it stranded with `unmatched_keys` /
+  `unmatched_roles`.
 
 ## Updates replace atomically; `create` uses O_EXCL
-`update_armature`, `rename_bone`, `add_mesh_role` and `update_mesh_role` write a sibling `.tmp` and `os.replace`
+`update_armature`, `rename_bone`, `delete_bone`, `add_mesh_role` and `update_mesh_role` write a sibling `.tmp` and `os.replace`
 it, like `config/store.py`: replacing *is* the point of an update, and a crash never
 leaves a half-written spec. `create` deliberately does not: a replace would
 *overwrite* the existing file, defeating

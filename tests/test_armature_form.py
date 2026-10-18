@@ -10,6 +10,7 @@ from model_meta.config.settings import Settings
 from model_meta.godot import discovery
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.armature_form import ArmatureFormScreen
+from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.dashboard import DashboardScreen
 
 FRONT_REAR = {".front": ".rear", ".rear": ".front"}
@@ -1053,4 +1054,194 @@ async def test_renaming_a_bone_removed_by_hand(tmp_path, monkeypatch):
         await pilot.press("escape")
         await pilot.pause()
         await _edit_bone(pilot, app, 1)
+        assert _listed(app) == ["root", "arm.R"]
+
+
+# --- deleting a bone ---------------------------------------------------------
+
+
+async def _delete(pilot, app, index, *keys):
+    """Highlight bone `index`, press `x`, then `keys` in the dialog."""
+    bone_list = app.screen.query_one("#bone-list")
+    bone_list.focus()
+    bone_list.highlighted = index
+    await pilot.press("x")
+    assert await _wait_for(pilot, lambda: isinstance(app.screen, ConfirmModal))
+    await pilot.pause()
+    if keys:
+        await pilot.press(*keys)
+    assert await _wait_for(pilot, lambda: isinstance(app.screen, ArmatureFormScreen))
+    await pilot.pause()
+
+
+async def test_x_deletes_from_a_non_empty_bone_list_only(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    specs_store.update_armature(path, add_bones=["root"])
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        assert "x" in _bindings(app)
+
+        app.screen.query_one("#parenting-list").focus()
+        await pilot.pause()
+        assert "x" not in _bindings(app)
+        await pilot.press("x")
+        await pilot.pause()
+        assert isinstance(app.screen, ArmatureFormScreen)
+
+        await _delete(pilot, app, 0, "right", "enter")
+        assert _armature(path)["required_bones"] == []
+        assert _highlighted(app) is None
+        assert "x" not in _bindings(app)
+
+        await pilot.press("enter")  # an empty list still opens Add
+        await pilot.pause()
+        assert _focused_id(app) == "bone-name"
+
+
+async def test_dialog_asks_about_the_highlighted_bone(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        app.screen.query_one("#bone-list").highlighted = 1
+        await pilot.press("x")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, ConfirmModal))
+        await pilot.pause()
+        question = app.screen.query_one("#confirm-question", Static)
+        assert str(question.render()) == "Delete 'arm.L'?"
+        assert _focused_id(app) == "confirm-no"
+
+
+async def test_no_and_escape_cancel_and_write_nothing(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    before = path.read_bytes()
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        for keys in (("enter",), ("escape",)):
+            await _delete(pilot, app, 1, *keys)
+            assert path.read_bytes() == before
+            assert _focused_id(app) == "bone-list"
+            assert _highlighted(app) == 1
+            assert _status(app) == ""
+
+
+async def test_yes_deletes_only_that_bone(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    before = json.loads(path.read_text(encoding="utf-8"))
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 1, "right", "enter")
+
+        after = json.loads(path.read_text(encoding="utf-8"))
+        before["armature"]["required_bones"] = ["root", "arm.R"]
+        assert after == before  # parenting and mesh roles untouched
+        assert _listed(app) == ["root", "arm.R"]
+        assert _focused_id(app) == "bone-list"
+        assert _highlighted(app) == 1  # the bone that moved up
+        assert _status(app) == "Bone 'arm.L' deleted."
+        assert _marked(app) == []
+
+        await _delete(pilot, app, 1, "right", "enter")
+        assert _listed(app) == ["root"]
+        assert _highlighted(app) == 0  # clamped to the new last bone
+
+
+async def test_deleting_the_last_match_warns_and_marks(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 1, "right", "enter")
+        assert _status(app) == "Bone 'arm.L' deleted."  # `arm.{1}` still has arm.R
+        assert _marked(app) == []
+
+        await _delete(pilot, app, 1, "right", "enter")
+        assert _status(app) == (
+            "Bone 'arm.R' deleted. Parenting 'root' and mesh role 'arm' "
+            "now match no bone — update them."
+        )
+        assert _marked(app) == ["arm.{1}"]  # the child line, not its key
+        assert _armature(path)["parenting"] == {"root": ["arm.{1}"]}
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert _marked(app) == ["arm.{1}"]
+
+        await pilot.press("a")
+        await pilot.pause()
+        assert _status(app) == ""
+        assert _marked(app) == []
+
+
+async def test_deleting_a_parent_marks_its_key(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 0, "right", "enter")
+
+        assert _status(app) == (
+            "Bone 'root' deleted. Parenting 'root' and mesh role 'base' "
+            "now match no bone — update them."
+        )
+        assert _marked(app) == ["root"]
+
+
+async def test_deleting_with_one_reference_says_it(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    specs_store.update_armature(
+        path, add_bones=["root", "spine"], add_parenting={"root": ["spine"]}
+    )
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _delete(pilot, app, 1, "right", "enter")
+
+        assert _status(app) == (
+            "Bone 'spine' deleted. Parenting 'root' now matches no bone — update it."
+        )
+        assert _marked(app) == ["spine"]
+
+
+async def test_yes_closes_an_open_rename_and_no_keeps_it(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _edit_bone(pilot, app, 1)
+        app.screen.query_one("#bone-name", Input).value = "upperarm.L"
+
+        await _delete(pilot, app, 1, "enter")
+        assert app.screen.query_one("#bone-editor").display
+        assert app.screen.query_one("#bone-name", Input).value == "upperarm.L"
+
+        await _delete(pilot, app, 1, "right", "enter")
+        assert not app.screen.query_one("#bone-editor").display
+        assert _label(app) == "Bone name"
+        assert _armature(path)["required_bones"] == ["root", "arm.R"]
+        assert _focused_id(app) == "bone-list"
+
+
+async def test_a_bone_gone_by_hand_reports_and_refreshes(tmp_path, monkeypatch):
+    path = _arms(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        app.screen.query_one("#bone-list").highlighted = 1
+        await pilot.press("x")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, ConfirmModal))
+        await pilot.pause()
+        specs_store.delete_bone(path, "arm.L")
+        await pilot.press("right", "enter")
+        assert await _wait_for(
+            pilot, lambda: isinstance(app.screen, ArmatureFormScreen)
+        )
+        await pilot.pause()
+
+        assert _status(app) == (
+            "Could not write the spec: 'arm.L' is no longer a required bone."
+        )
         assert _listed(app) == ["root", "arm.R"]

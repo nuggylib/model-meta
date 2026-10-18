@@ -155,3 +155,19 @@ ROLES = {
 )
 def test_stale_roles(old, new, expected):
     assert mesh_roles.stale_roles(ROLES, old, new) == expected
+
+
+# --- unmatched_roles -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("gone", "required", "expected"),
+    [
+        ("body", ["arm.L"], ["body"]),  # a literal
+        ("arm.L", ["arm.R"], []),  # the pattern still covers one
+        ("arm.L", ["body"], ["arm"]),  # the pattern loses its last bone
+        ("glass", [], []),  # no vtx_grp
+    ],
+)
+def test_unmatched_roles(gone, required, expected):
+    assert mesh_roles.unmatched_roles(ROLES, gone, required) == expected
