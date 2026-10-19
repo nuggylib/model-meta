@@ -187,6 +187,12 @@ in the app (analogous to a route in a web app).
   `_open_role`, a `@work(exclusive=True, group="role-view")` worker,
   `push_screen_wait`s `MeshRoleFormScreen` and puts the cursor on the name it
   returns. Failures keep text and checks and write nothing. No typed pattern.
+  **Delete:** `x` (`check_action`: `#role-list` focused and non-empty; the
+  only gated key here) runs a `@work(exclusive=True, group="delete-role")`
+  worker that `push_screen_wait`s a `ConfirmModal`. Yes discards any Add
+  unwritten, then `store.delete_mesh_role` removes only that role; the cursor
+  keeps its index (clamped). One-and-done: nothing else names a role, so
+  there is no warning — unlike the bone delete. No or `escape` changes nothing.
   `q` shadowed.
 - `mesh_role_form.py` — `MeshRoleFormScreen(path, name)`, one mesh role,
   dismissed with its **current** name. The name is the attribute `role`:

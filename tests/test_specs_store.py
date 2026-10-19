@@ -754,3 +754,44 @@ def test_delete_bone_leaves_no_tmp_behind(tmp_path):
     store.delete_bone(path, "root")
 
     assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]
+
+
+# --- delete_mesh_role ------------------------------------------------------
+
+
+def _roled(tmp_path):
+    path, document = _rigged(tmp_path)
+    document["mesh_roles"] = {
+        "body": {"mesh_regex": "^body$", "vtx_grp": "root"},
+        "arm": {"mesh_regex": "^arm$", "vtx_grp": "arm.{1}", "weight": 1.0},
+        "glass": {"weight": 0.5},
+    }
+    _write(tmp_path, "vehicle", document)
+    return path, document
+
+
+def test_delete_mesh_role_keeps_the_order_and_every_other_key(tmp_path):
+    path, document = _roled(tmp_path)
+    store.delete_mesh_role(path, "arm")
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    del document["mesh_roles"]["arm"]
+    assert after == document
+    assert list(after["mesh_roles"]) == ["body", "glass"]
+
+
+def test_delete_mesh_role_rejects_a_missing_role_and_writes_nothing(tmp_path):
+    path, _ = _roled(tmp_path)
+    before = path.read_bytes()
+
+    with pytest.raises(ValueError, match="'wheel' is no longer a mesh role."):
+        store.delete_mesh_role(path, "wheel")
+
+    assert path.read_bytes() == before
+
+
+def test_delete_mesh_role_leaves_no_tmp_behind(tmp_path):
+    path, _ = _roled(tmp_path)
+    store.delete_mesh_role(path, "body")
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]

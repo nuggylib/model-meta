@@ -70,6 +70,9 @@ disk. **No Textual, no UI.**
   role, and rewrites that one role in place — same position, other fields
   kept; a `None` field is kept as is (or left absent), so each editor writes
   only its own field.
+  `delete_mesh_role(path, name)` re-reads, raises `ValueError` when `name` is
+  gone, and removes that one role, keeping the others' order. Nothing else in
+  a spec names a role, so nothing is stranded.
   `rename_bone(path, name, new_name, set_inverses=)` re-reads, raises
   `ValueError` when `name` is gone or `new_name` is another required bone, and
   replaces it in place, applying `set_inverses`. Parenting and mesh roles are
@@ -80,7 +83,7 @@ disk. **No Textual, no UI.**
   `unmatched_roles`.
 
 ## Updates replace atomically; `create` uses O_EXCL
-`update_armature`, `rename_bone`, `delete_bone`, `add_mesh_role` and `update_mesh_role` write a sibling `.tmp` and `os.replace`
+`update_armature`, `rename_bone`, `delete_bone`, `add_mesh_role`, `update_mesh_role` and `delete_mesh_role` write a sibling `.tmp` and `os.replace`
 it, like `config/store.py`: replacing *is* the point of an update, and a crash never
 leaves a half-written spec. `create` deliberately does not: a replace would
 *overwrite* the existing file, defeating

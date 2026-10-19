@@ -214,6 +214,20 @@ def update_mesh_role(
     _replace(path, document)
 
 
+def delete_mesh_role(path: Path, name: str) -> None:
+    """Re-read the spec and remove one mesh role, touching nothing else.
+
+    Raises `ValueError` if `name` is gone, or like `read`, or `OSError` on
+    write.
+    """
+    document = read(path)
+    roles = mesh_roles(document)
+    if name not in roles:
+        raise ValueError(f"'{name}' is no longer a mesh role.")
+    document["mesh_roles"] = {key: role for key, role in roles.items() if key != name}
+    _replace(path, document)
+
+
 def list_specs(specs_dir: Path) -> list[SpecEntry]:
     """Every spec in `specs_dir`, sorted by name. A missing dir is `[]`.
 
