@@ -4,7 +4,9 @@ A role's `vtx_grp` is a pattern in `parenting`'s syntax — a literal base whose
 dot-segments may be `{n}` placeholders — inferred from checked
 `required_bones` so it matches exactly those. Placeholders are all free for now.
 Its `mesh_regex`, required on new roles, is a Python regex naming the mesh
-objects in the role; nothing ties its groups to the `vtx_grp`.
+objects in the role; nothing ties its groups to the `vtx_grp`. Its `count`,
+also required on new roles, is exactly how many mesh objects that regex must
+match.
 
 Pure functions over strings, like `bones`.
 """
@@ -36,6 +38,21 @@ def validate_mesh_regex(pattern: str) -> str | None:
         where = "" if error.pos is None else f" at position {error.pos}"
         return f"Not a valid regex: {error.msg}{where}."
     return None
+
+
+def parse_count(text: str) -> int:
+    """The `count` that `text` names, else `ValueError`. Pass it trimmed."""
+    if not text:
+        raise ValueError("Enter a count.")
+    if not re.fullmatch(r"[0-9]+", text):
+        raise ValueError("The count must be a whole number.")
+    try:
+        count = int(text)
+    except ValueError:
+        raise ValueError("The count must be a whole number.") from None
+    if count < 1:
+        raise ValueError("The count must be at least 1.")
+    return count
 
 
 def matches(pattern: str, required: Sequence[str]) -> list[str]:

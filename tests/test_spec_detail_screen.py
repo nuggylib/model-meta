@@ -328,8 +328,8 @@ async def test_armature_name_set_on_the_form_shows_on_return(tmp_path, monkeypat
 async def test_spec_detail_lists_the_mesh_role_names(tmp_path, monkeypatch):
     app = _app(tmp_path, monkeypatch, specs=("vehicle",))
     spec = tmp_path / "specs" / "vehicle.json"
-    specs_store.add_mesh_role(spec, "body", "body", "^m$")
-    specs_store.add_mesh_role(spec, "arm[L]", "body", "^m$")
+    specs_store.add_mesh_role(spec, "body", "body", "^m$", 1)
+    specs_store.add_mesh_role(spec, "arm[L]", "body", "^m$", 1)
     async with app.run_test() as pilot:
         await _open_spec(pilot, app)
         assert await _wait_for(
@@ -345,7 +345,7 @@ async def test_spec_detail_wraps_mesh_roles_into_columns_of_ten(tmp_path, monkey
     spec = tmp_path / "specs" / "vehicle.json"
     names = [f"role{i:02}" for i in range(23)]
     for name in names:
-        specs_store.add_mesh_role(spec, name, "body", "^m$")
+        specs_store.add_mesh_role(spec, name, "body", "^m$", 1)
     numbered = [f"{n:>2}). {name}" for n, name in enumerate(names, start=1)]
     async with app.run_test() as pilot:
         await _open_spec(pilot, app)
@@ -387,7 +387,7 @@ async def test_edit_data_opens_the_mesh_roles_form_and_refreshes_on_return(
 
         await pilot.press("enter", *"body", "enter")
         await pilot.pause()
-        await pilot.press("space", "tab", *"^body$", "enter")
+        await pilot.press("space", "tab", *"^body$", "enter", "1", "enter")
         await pilot.pause()
         await pilot.press("escape", "escape")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecDetailScreen))

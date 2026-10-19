@@ -165,7 +165,9 @@ def delete_bone(path: Path, name: str) -> None:
     _replace(path, document)
 
 
-def add_mesh_role(path: Path, name: str, vtx_grp: str, mesh_regex: str) -> None:
+def add_mesh_role(
+    path: Path, name: str, vtx_grp: str, mesh_regex: str, count: int
+) -> None:
     """Re-read the spec and add one mesh role, touching nothing else.
 
     Raises `ValueError` if `name` is already a role, or like `read`, or
@@ -175,7 +177,7 @@ def add_mesh_role(path: Path, name: str, vtx_grp: str, mesh_regex: str) -> None:
     roles = document.setdefault("mesh_roles", {})
     if name in roles:
         raise ValueError(f"'{name}' is already a mesh role.")
-    roles[name] = {"mesh_regex": mesh_regex, "vtx_grp": vtx_grp}
+    roles[name] = {"mesh_regex": mesh_regex, "vtx_grp": vtx_grp, "count": count}
     _replace(path, document)
 
 
@@ -186,11 +188,12 @@ def update_mesh_role(
     vtx_grp: str | None = None,
     *,
     mesh_regex: str | None = None,
+    count: int | None = None,
 ) -> None:
     """Re-read the spec and rename and re-pattern one role, touching nothing else.
 
-    The role keeps its position and its other fields; a `vtx_grp` or
-    `mesh_regex` of `None` keeps that field too, or its lack of one. Raises
+    The role keeps its position and its other fields; a `vtx_grp`,
+    `mesh_regex` or `count` of `None` keeps that field too, or its lack of one. Raises
     `ValueError` if `name` is gone or `new_name` is another role, or like
     `read`, or `OSError` on write.
     """
@@ -202,7 +205,11 @@ def update_mesh_role(
         raise ValueError(f"'{new_name}' is already a mesh role.")
     changes = {
         key: value
-        for key, value in (("vtx_grp", vtx_grp), ("mesh_regex", mesh_regex))
+        for key, value in (
+            ("vtx_grp", vtx_grp),
+            ("mesh_regex", mesh_regex),
+            ("count", count),
+        )
         if value is not None
     }
     document["mesh_roles"] = {
@@ -284,7 +291,8 @@ def _check_armature(armature: object) -> None:
 
 
 def _check_mesh_roles(roles: object) -> None:
-    """Raise `ValueError` unless every role is an object with string patterns."""
+    """Raise `ValueError` unless every role is an object with string patterns and
+    integer counts."""
     if not (
         isinstance(roles, dict) and all(isinstance(r, dict) for r in roles.values())
     ):
@@ -292,6 +300,10 @@ def _check_mesh_roles(roles: object) -> None:
     for key in ("vtx_grp", "mesh_regex"):
         if not all(isinstance(r.get(key, ""), str) for r in roles.values()):
             raise ValueError(f"A mesh role's `{key}` is not a string.")
+    for role in roles.values():
+        count = role.get("count", 1)
+        if not isinstance(count, int) or isinstance(count, bool):
+            raise ValueError("A mesh role's `count` is not a whole number.")
 
 
 def _replace(path: Path, document: dict) -> None:

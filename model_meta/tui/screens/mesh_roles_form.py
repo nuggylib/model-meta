@@ -1,10 +1,10 @@
 """The mesh roles form — add mesh role after mesh role, or open one.
 
 The role list shows read-only, with a cursor. `a` adds: type the role's name,
-then check the required bones its vertex group covers and type the regex naming
-its meshes; **Add** writes the inferred `vtx_grp` and the `mesh_regex` and
-returns to an empty name for the next one. A role without a `mesh_regex` is
-marked in the list. Enter on a
+then check the required bones its vertex group covers, type the regex naming
+its meshes and how many it must match; **Add** writes the inferred `vtx_grp`,
+the `mesh_regex` and the `count` and returns to an empty name for the next one.
+A role without a `mesh_regex` or `count` is marked in the list. Enter on a
 role pushes `MeshRoleFormScreen`, where that one role's fields are edited; on
 return the cursor follows the role's current name. `x` asks Yes/No, then
 deletes only the highlighted role; nothing else names a role, so there is
@@ -108,6 +108,9 @@ class MeshRolesFormScreen(Screen):
                     role_regex = Input(id="role-regex")
                     role_regex.border_title = "Mesh regex"
                     yield role_regex
+                    role_count = Input(id="role-count")
+                    role_count.border_title = "Count"
+                    yield role_count
                     yield Button("Add", id="confirm-role", variant="primary")
             yield FieldList(
                 "Mesh roles", _EMPTY, cursor=True, id="role-list", classes="field-list"
@@ -242,6 +245,7 @@ class MeshRolesFormScreen(Screen):
 
     @on(Button.Pressed, "#confirm-role")
     @on(Input.Submitted, "#role-regex")
+    @on(Input.Submitted, "#role-count")
     def _on_confirm(self) -> None:
         self._status("")
         name = self._name
@@ -256,8 +260,15 @@ class MeshRolesFormScreen(Screen):
             self._status(error)
             role_regex.focus()
             return
+        role_count = self.query_one("#role-count", Input)
         try:
-            store.add_mesh_role(self.path, name, pattern, regex)
+            count = mesh_roles.parse_count(role_count.value.strip())
+        except ValueError as error:
+            self._status(str(error))
+            role_count.focus()
+            return
+        try:
+            store.add_mesh_role(self.path, name, pattern, regex, count)
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
             return
@@ -330,6 +341,7 @@ class MeshRolesFormScreen(Screen):
         self.query_one("#role-bones", SelectionList).clear_options()
         self.query_one("#role-preview", Static).update("")
         self.query_one("#role-regex", Input).value = ""
+        self.query_one("#role-count", Input).value = ""
         self.query_one("#role-bones-question").display = False
 
     def _show_roles(self) -> None:
@@ -348,6 +360,9 @@ class MeshRolesFormScreen(Screen):
             lines.append((f"mesh_regex: {role.get('mesh_regex') or 'not set'}", 1))
             if "vtx_grp" in role:
                 lines.append((f"vtx_grp: {role['vtx_grp']}", 1))
+            if "count" not in role:
+                marked.add(len(lines))
+            lines.append((f"count: {role.get('count', 'not set')}", 1))
         role_list = self.query_one("#role-list", FieldList)
         role_list.lines = tuple(lines)
         role_list.marked = frozenset(marked)

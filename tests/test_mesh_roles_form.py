@@ -107,9 +107,11 @@ async def _check(pilot, app, *bones):
     await pilot.pause()
 
 
-async def _confirm(pilot, app, regex="^m$"):
+async def _confirm(pilot, app, regex="^m$", count="1"):
     if regex is not None:
         app.screen.query_one("#role-regex", Input).value = regex
+    if count is not None:
+        app.screen.query_one("#role-count", Input).value = count
     app.screen.query_one("#confirm-role").focus()
     await pilot.pause()
     while app.screen.focused.has_class("-active"):  # Button ignores repeat presses
@@ -145,7 +147,7 @@ async def test_form_opens_read_only_on_the_role_list(tmp_path, monkeypatch):
 
 async def test_lists_existing_roles_with_their_vtx_grp(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$")
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
     document = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["glass"] = {}
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -156,16 +158,20 @@ async def test_lists_existing_roles_with_their_vtx_grp(tmp_path, monkeypatch):
             "body",
             "mesh_regex: ^m$",
             "vtx_grp: body",
+            "count: 1",
             "glass",
             "mesh_regex: not set",
+            "count: not set",
         ]
         children = app.screen.query("#role-list .field-list-child")
         assert [str(row.render()) for row in children] == [
             "mesh_regex: ^m$",
             "vtx_grp: body",
+            "count: 1",
             "mesh_regex: not set",
+            "count: not set",
         ]
-        assert _marked(app) == ["mesh_regex: not set"]
+        assert _marked(app) == ["mesh_regex: not set", "count: not set"]
 
 
 async def test_no_required_bones_opens_nothing(tmp_path, monkeypatch):
@@ -196,11 +202,12 @@ async def test_roles_are_added_one_after_another(tmp_path, monkeypatch):
 
         await _check(pilot, app, "susarm.front.top.R", "susarm.front.top.L")
         assert _preview(app) == "vtx_grp: susarm.front.top.{1}"
-        await _confirm(pilot, app, f"  {SUSARM_REGEX}  ")
+        await _confirm(pilot, app, f"  {SUSARM_REGEX}  ", " 2 ")
         assert _roles(path) == {
             "susarm_upper": {
                 "mesh_regex": SUSARM_REGEX,
                 "vtx_grp": "susarm.front.top.{1}",
+                "count": 2,
             }
         }
         assert _status(app) == "Mesh role 'susarm_upper' added."
@@ -208,6 +215,7 @@ async def test_roles_are_added_one_after_another(tmp_path, monkeypatch):
         assert _focused_id(app) == "role-name"
         assert app.screen.query_one("#role-name", Input).value == ""
         assert app.screen.query_one("#role-regex", Input).value == ""
+        assert app.screen.query_one("#role-count", Input).value == ""
 
         await _type(pilot, "body")
         await pilot.press("space")
@@ -219,16 +227,18 @@ async def test_roles_are_added_one_after_another(tmp_path, monkeypatch):
             "susarm_upper",
             f"mesh_regex: {SUSARM_REGEX}",
             "vtx_grp: susarm.front.top.{1}",
+            "count: 2",
             "body",
             "mesh_regex: ^body$",
             "vtx_grp: body",
+            "count: 1",
         ]
         assert _marked(app) == []
 
 
 async def test_bad_role_names_are_rejected(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$")
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
     app = _app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open(pilot, app, path)
@@ -302,7 +312,32 @@ async def test_bad_regexes_are_rejected_and_nothing_written(tmp_path, monkeypatc
         assert _roles(path) == {}
 
 
-async def test_enter_in_the_regex_adds(tmp_path, monkeypatch):
+async def test_bad_counts_are_rejected_and_nothing_written(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _start_add(pilot)
+        await _type(pilot, "body")
+        await _check(pilot, app, "body")
+
+        cases = [
+            ("  ", "Enter a count."),
+            ("0", "The count must be at least 1."),
+            ("4.0", "The count must be a whole number."),
+        ]
+        for count, message in cases:
+            await _confirm(pilot, app, "^body$", count)
+            assert _status(app) == message
+            assert _focused_id(app) == "role-count"
+            assert app.screen.query_one("#role-count", Input).value == count
+            assert app.screen.query_one("#role-regex", Input).value == "^body$"
+            assert _selected(app) == ["body"]
+            assert _question_shown(app)
+        assert _roles(path) == {}
+
+
+async def test_enter_in_the_regex_with_no_count_asks_for_one(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
@@ -312,7 +347,25 @@ async def test_enter_in_the_regex_adds(tmp_path, monkeypatch):
         await _check(pilot, app, "body")
         app.screen.query_one("#role-regex", Input).focus()
         await _type(pilot, "^body$")
-        assert _roles(path) == {"body": {"mesh_regex": "^body$", "vtx_grp": "body"}}
+        assert _status(app) == "Enter a count."
+        assert _focused_id(app) == "role-count"
+        assert _roles(path) == {}
+
+
+async def test_enter_in_the_count_adds(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path)
+        await _start_add(pilot)
+        await _type(pilot, "body")
+        await _check(pilot, app, "body")
+        app.screen.query_one("#role-regex", Input).value = "^body$"
+        app.screen.query_one("#role-count", Input).focus()
+        await _type(pilot, "1")
+        assert _roles(path) == {
+            "body": {"mesh_regex": "^body$", "vtx_grp": "body", "count": 1}
+        }
         assert _status(app) == "Mesh role 'body' added."
         assert _focused_id(app) == "role-name"
 
@@ -324,14 +377,16 @@ async def test_role_taken_in_between_is_reported(tmp_path, monkeypatch):
         await _open(pilot, app, path)
         await _start_add(pilot)
         await _type(pilot, "body")
-        specs_store.add_mesh_role(path, "body", "body", "^m$")
+        specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
 
         await _check(pilot, app, "body")
         await _confirm(pilot, app)
         assert (
             _status(app) == "Could not write the spec: 'body' is already a mesh role."
         )
-        assert _roles(path) == {"body": {"mesh_regex": "^m$", "vtx_grp": "body"}}
+        assert _roles(path) == {
+            "body": {"mesh_regex": "^m$", "vtx_grp": "body", "count": 1}
+        }
         assert _selected(app) == ["body"]
 
 
@@ -392,7 +447,12 @@ async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
         await _check(pilot, app, "arm[L]")
         assert _preview(app) == "vtx_grp: arm[L]"
         await _confirm(pilot, app)
-        assert _lines(app) == ["[b]arm", "mesh_regex: ^m$", "vtx_grp: arm[L]"]
+        assert _lines(app) == [
+            "[b]arm",
+            "mesh_regex: ^m$",
+            "vtx_grp: arm[L]",
+            "count: 1",
+        ]
         assert _status(app) == "Mesh role '[b]arm' added."
 
 
@@ -417,8 +477,8 @@ async def test_clicking_the_list_opens_or_refocuses_the_editor(tmp_path, monkeyp
 
 def _with_roles(tmp_path, bones=BONES):
     path = _spec(tmp_path, bones)
-    specs_store.add_mesh_role(path, "body", "body", "^m$")
-    specs_store.add_mesh_role(path, "susarm", "susarm.front.top.{1}", "^m$")
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
+    specs_store.add_mesh_role(path, "susarm", "susarm.front.top.{1}", "^m$", 1)
     document = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["glass"] = {"weight": 1.0}
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -573,7 +633,7 @@ def _bindings(app):
 
 async def test_x_deletes_from_a_non_empty_role_list_only(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$")
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path)
@@ -639,7 +699,7 @@ async def test_yes_deletes_only_that_role(tmp_path, monkeypatch):
         del before["mesh_roles"]["susarm"]
         assert after == before  # armature and the other roles untouched
         assert _listed(app) == ["body", "glass"]
-        assert _marked(app) == ["mesh_regex: not set"]  # glass, recomputed
+        assert _marked(app) == ["mesh_regex: not set", "count: not set"]  # glass
         assert _focused_id(app) == "role-list"
         assert _cursor(app) == 1  # the role that moved up
         assert _status(app) == "Mesh role 'susarm' deleted."

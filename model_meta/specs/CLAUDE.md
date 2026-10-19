@@ -45,7 +45,9 @@ disk. **No Textual, no UI.**
   deleted `gone` and matches none of `required`.
   `validate_mesh_regex(pattern)`: blank or not compiling under Python `re`,
   else `None`. A role's `mesh_regex` names its mesh objects; nothing ties its
-  groups to `vtx_grp`.
+  groups to `vtx_grp`. `parse_count(text)`: the `count` (how many meshes the
+  regex must match, exactly) — ASCII digits only, at least 1, else
+  `ValueError` naming why.
 - `store.py` — the filesystem: `create(specs_dir, model_type)` writes a new
   skeleton (raising `FileExistsError` rather than overwriting),
   `list_specs(specs_dir)` classifies every spec as `OK` / `UNREADABLE` /
@@ -56,16 +58,18 @@ disk. **No Textual, no UI.**
   isn't a map of objects with string `vtx_grp`s (`armature_name()` /
   `required_bones()` / `bone_name_inverses()` / `parenting_map()` /
   `mesh_roles()` default them for older specs). A role may lack `mesh_regex`,
-  but one that holds a non-string is rejected. `update_armature(path,
+  but one that holds a non-string is rejected; likewise `count`, which must be
+  an `int` (never a `bool`) when present. `update_armature(path,
   add_bones=, set_inverses=, drop_inverses=, object_name=, add_parenting=)`
   re-reads, patches **only**
   those keys (bones deduped, drops before sets, `object_name=None` leaves the
   name alone, parenting merged via `parenting.merge`), and writes
   atomically — hand edits to anything else survive.
-  `add_mesh_role(path, name, vtx_grp, mesh_regex)` re-reads, raises
+  `add_mesh_role(path, name, vtx_grp, mesh_regex, count)` re-reads, raises
   `ValueError` on a taken name, and writes only
-  `mesh_roles[name] = {"mesh_regex": …, "vtx_grp": …}` the same way.
-  `update_mesh_role(path, name, new_name, vtx_grp=None, *, mesh_regex=None)`
+  `mesh_roles[name] = {"mesh_regex": …, "vtx_grp": …, "count": …}` the same way.
+  `update_mesh_role(path, name, new_name, vtx_grp=None, *, mesh_regex=None,
+  count=None)`
   re-reads, raises `ValueError` when `name` is gone or `new_name` is another
   role, and rewrites that one role in place — same position, other fields
   kept; a `None` field is kept as is (or left absent), so each editor writes
