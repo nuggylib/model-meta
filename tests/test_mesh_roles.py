@@ -43,6 +43,33 @@ def test_validate_mesh_regex_rejects(pattern, message):
     assert mesh_roles.validate_mesh_regex(pattern) == message
 
 
+# --- parse_count -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(("text", "count"), [("4", 4), ("004", 4), ("1", 1)])
+def test_parse_count_accepts_whole_numbers(text, count):
+    assert mesh_roles.parse_count(text) == count
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("", "Enter a count."),
+        ("0", "The count must be at least 1."),
+        ("-1", "The count must be a whole number."),
+        ("+4", "The count must be a whole number."),
+        ("4.0", "The count must be a whole number."),
+        ("1e2", "The count must be a whole number."),
+        ("1_000", "The count must be a whole number."),
+        ("４", "The count must be a whole number."),
+        ("four", "The count must be a whole number."),
+    ],
+)
+def test_parse_count_rejects(text, message):
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        mesh_roles.parse_count(text)
+
+
 # --- validate_name ---------------------------------------------------------
 
 

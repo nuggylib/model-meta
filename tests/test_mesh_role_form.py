@@ -44,8 +44,8 @@ def _spec(tmp_path, bones=BONES):
     path = specs_store.create(tmp_path / "specs", "vehicle")
     if bones:
         specs_store.update_armature(path, add_bones=bones)
-    specs_store.add_mesh_role(path, "body", "body", "^m$")
-    specs_store.add_mesh_role(path, "wheel", "wheel.{1}", "^m$")
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
+    specs_store.add_mesh_role(path, "wheel", "wheel.{1}", "^m$", 1)
     return path
 
 
@@ -129,6 +129,7 @@ async def test_shows_only_the_role_with_focus_on_its_fields(tmp_path, monkeypatc
             "mesh_regex: ^m$",
             "vtx_grp: wheel.{1}",
             "matches wheel.L, wheel.R",
+            "count: 1",
         ]
         description = app.screen.query("#role-fields .field-list-row")[2]
         assert description.has_class("field-list-child")
@@ -158,8 +159,8 @@ async def test_hand_written_fields_are_listed_but_not_editable(tmp_path, monkeyp
         ]
 
         before = path.read_bytes()
-        await _select(pilot, app, "role-fields", 2)
-        assert _status(app) == "'count' can't be edited here yet."
+        await _select(pilot, app, "role-fields", 3)
+        assert _status(app) == "'texture_maps' can't be edited here yet."
         assert not app.screen.query_one("#vtx-grp-editor").display
         assert path.read_bytes() == before
 
@@ -183,7 +184,7 @@ async def test_rename_writes_the_name_alone(tmp_path, monkeypatch):
         await pilot.pause()
 
         assert _roles(path) == {
-            "body": {"mesh_regex": "^m$", "vtx_grp": "body"},
+            "body": {"mesh_regex": "^m$", "vtx_grp": "body", "count": 1},
             "tyre": {"vtx_grp": "wheel.{1}", "weight": 1.0},
         }
         assert _status(app) == "Mesh role 'tyre' saved."
@@ -263,6 +264,8 @@ async def test_vtx_grp_editor_prefills_and_saves_the_pattern_alone(
             "required: the meshes in this role",
             "vtx_grp: wheel.L",
             "matches wheel.L",
+            "count: not set",
+            "required: how many meshes mesh_regex matches",
             "weight: 1.0",
         ]
         assert _focused_id(app) == "role-fields"
@@ -300,6 +303,7 @@ async def test_vtx_grp_needs_required_bones(tmp_path, monkeypatch):
             "mesh_regex: ^m$",
             "vtx_grp: wheel.{1}",
             "matches no required bone",
+            "count: 1",
         ]
         await _select(pilot, app, "role-fields", 1)
         assert _status(app) == "Add required bones first."
@@ -343,7 +347,7 @@ def _marked(app):
 
 async def test_a_role_without_a_mesh_regex_is_marked(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}"})
+    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}", "count": 4})
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
@@ -360,7 +364,11 @@ async def test_a_role_without_a_mesh_regex_is_marked(tmp_path, monkeypatch):
         await pilot.press("enter")
         await pilot.pause()
         assert _marked(app) == []
-        assert _roles(path)["wheel"] == {"vtx_grp": "wheel.{1}", "mesh_regex": "^wheel"}
+        assert _roles(path)["wheel"] == {
+            "vtx_grp": "wheel.{1}",
+            "count": 4,
+            "mesh_regex": "^wheel",
+        }
 
 
 async def test_mesh_regex_editor_prefills_and_saves_it_alone(tmp_path, monkeypatch):
@@ -453,6 +461,142 @@ async def test_opening_another_editor_discards_the_mesh_regex(tmp_path, monkeypa
         assert path.read_bytes() == before
 
 
+# --- count -----------------------------------------------------------------
+
+
+async def test_a_role_without_a_count_is_marked(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {"mesh_regex": "^w", "vtx_grp": "wheel.{1}"})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert _marked(app) == [
+            "count: not set",
+            "required: how many meshes mesh_regex matches",
+        ]
+
+        await _select(pilot, app, "role-fields", 2)
+        count = app.screen.query_one("#count", Input)
+        assert count.display
+        assert count.value == ""
+        assert _focused_id(app) == "count"
+        count.value = " 004 "
+        await pilot.press("enter")
+        await pilot.pause()
+        assert _marked(app) == []
+        assert _roles(path)["wheel"] == {
+            "mesh_regex": "^w",
+            "vtx_grp": "wheel.{1}",
+            "count": 4,
+        }
+
+
+async def test_a_role_missing_both_marks_both(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}"})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert _marked(app) == [
+            "mesh_regex: not set",
+            "required: the meshes in this role",
+            "count: not set",
+            "required: how many meshes mesh_regex matches",
+        ]
+
+
+async def test_count_editor_prefills_and_saves_it_alone(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(
+        path,
+        "wheel",
+        {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "weight": 1.0, "count": 2},
+    )
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await _select(pilot, app, "role-fields", 2)
+        count = app.screen.query_one("#count", Input)
+        assert count.value == "2"
+
+        count.value = "4"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert list(_roles(path)) == ["body", "wheel"]
+        assert _roles(path)["wheel"] == {
+            "mesh_regex": "^w",
+            "vtx_grp": "wheel.{1}",
+            "weight": 1.0,
+            "count": 4,
+        }
+        assert _status(app) == "Mesh role 'wheel' saved."
+        assert not count.display
+        assert "count: 4" in _lines(app, "role-fields")
+        assert _focused_id(app) == "role-fields"
+        assert app.screen.query_one("#role-fields").highlighted == 2
+
+
+async def test_a_bad_count_is_rejected(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 0})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert "count: 0" in _lines(app, "role-fields")
+        assert _marked(app) == []
+        before = path.read_bytes()
+        await _select(pilot, app, "role-fields", 2)
+        count = app.screen.query_one("#count", Input)
+        assert count.value == "0"
+
+        cases = [
+            ("0", "The count must be at least 1."),
+            ("  ", "Enter a count."),
+            ("-1", "The count must be a whole number."),
+            ("4.0", "The count must be a whole number."),
+        ]
+        for text, message in cases:
+            count.value = text
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert _status(app) == message
+            assert count.display
+            assert count.value == text
+        assert path.read_bytes() == before
+
+        await pilot.press("1")
+        await pilot.pause()
+        assert _status(app) == ""
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not count.display
+        assert _focused_id(app) == "role-fields"
+        assert isinstance(app.screen, MeshRoleFormScreen)
+        assert path.read_bytes() == before
+
+
+async def test_opening_another_editor_discards_the_count(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        before = path.read_bytes()
+        await _select(pilot, app, "role-fields", 2)
+        app.screen.query_one("#count", Input).value = "9"
+
+        await _select(pilot, app, "role-fields", 0)
+        assert not app.screen.query_one("#count").display
+        assert app.screen.query_one("#mesh-regex").display
+
+        await _select(pilot, app, "role-fields", 2)
+        assert app.screen.query_one("#count", Input).value == "1"
+        assert not app.screen.query_one("#mesh-regex").display
+        assert path.read_bytes() == before
+
+
 async def test_one_editor_at_a_time_and_escape_steps_out(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     results = []
@@ -513,7 +657,7 @@ async def test_q_does_not_quit(tmp_path, monkeypatch):
 
 async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "arm[L]", "arm[L]", "^m$")
+    specs_store.add_mesh_role(path, "arm[L]", "arm[L]", "^m$", 1)
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "arm[L]")
@@ -523,6 +667,7 @@ async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
             "mesh_regex: ^m$",
             "vtx_grp: arm[L]",
             "matches arm[L]",
+            "count: 1",
         ]
         await _select(pilot, app, "role-fields", 1)
         assert _text(app, "#role-bones-label") == "Bones for 'arm[L]'"

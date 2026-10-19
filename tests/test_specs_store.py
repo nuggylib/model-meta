@@ -402,6 +402,24 @@ def test_read_accepts_a_role_without_a_mesh_regex(tmp_path):
     assert store.mesh_roles(store.read(path)) == {"body": {"vtx_grp": "body"}}
 
 
+@pytest.mark.parametrize("count", ["4", 4.0, True])
+def test_read_rejects_a_non_integer_count(tmp_path, count):
+    document = schema.skeleton("vehicle")
+    document["mesh_roles"] = {"body": {"vtx_grp": "body", "count": count}}
+    path = _write(tmp_path, "vehicle", document)
+
+    with pytest.raises(ValueError, match="`count` is not a whole number"):
+        store.read(path)
+
+
+def test_read_accepts_an_integer_count_and_a_role_without_one(tmp_path):
+    document = schema.skeleton("vehicle")
+    document["mesh_roles"] = {"body": {"count": 4}, "glass": {}}
+    path = _write(tmp_path, "vehicle", document)
+
+    assert store.mesh_roles(store.read(path)) == {"body": {"count": 4}, "glass": {}}
+
+
 # --- update_armature -------------------------------------------------------
 
 
@@ -503,15 +521,19 @@ def test_update_armature_refuses_a_malformed_spec_and_writes_nothing(tmp_path):
 
 def test_add_mesh_role_writes_the_role(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.add_mesh_role(path, "susarm_upper", "susarm.{1}.top.{2}", SUSARM_REGEX)
-    store.add_mesh_role(path, "body", "body", "^body$")
+    store.add_mesh_role(path, "susarm_upper", "susarm.{1}.top.{2}", SUSARM_REGEX, 4)
+    store.add_mesh_role(path, "body", "body", "^body$", 1)
 
     after = json.loads(path.read_text(encoding="utf-8"))["mesh_roles"]
     assert after == {
-        "susarm_upper": {"mesh_regex": SUSARM_REGEX, "vtx_grp": "susarm.{1}.top.{2}"},
-        "body": {"mesh_regex": "^body$", "vtx_grp": "body"},
+        "susarm_upper": {
+            "mesh_regex": SUSARM_REGEX,
+            "vtx_grp": "susarm.{1}.top.{2}",
+            "count": 4,
+        },
+        "body": {"mesh_regex": "^body$", "vtx_grp": "body", "count": 1},
     }
-    assert list(after["body"]) == ["mesh_regex", "vtx_grp"]
+    assert list(after["body"]) == ["mesh_regex", "vtx_grp", "count"]
 
 
 def test_add_mesh_role_preserves_every_other_key(tmp_path):
@@ -521,36 +543,40 @@ def test_add_mesh_role_preserves_every_other_key(tmp_path):
     document["hand_added"] = True
     path = _write(tmp_path, "vehicle", document)
 
-    store.add_mesh_role(path, "body", "body", "^body$")
+    store.add_mesh_role(path, "body", "body", "^body$", 1)
 
     after = json.loads(path.read_text(encoding="utf-8"))
-    document["mesh_roles"]["body"] = {"mesh_regex": "^body$", "vtx_grp": "body"}
+    document["mesh_roles"]["body"] = {
+        "mesh_regex": "^body$",
+        "vtx_grp": "body",
+        "count": 1,
+    }
     assert after == document
 
 
 def test_add_mesh_role_rejects_a_duplicate_and_writes_nothing(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.add_mesh_role(path, "body", "body", "^body$")
+    store.add_mesh_role(path, "body", "body", "^body$", 1)
     before = path.read_bytes()
 
     with pytest.raises(ValueError):
-        store.add_mesh_role(path, "body", "root", "^root$")
+        store.add_mesh_role(path, "body", "root", "^root$", 1)
 
     assert path.read_bytes() == before
 
 
 def test_add_mesh_role_adds_the_key_to_an_older_spec(tmp_path):
     path = _write(tmp_path, "vehicle", {"model_type": "vehicle"})
-    store.add_mesh_role(path, "body", "body", "^body$")
+    store.add_mesh_role(path, "body", "body", "^body$", 1)
 
     assert json.loads(path.read_text(encoding="utf-8"))["mesh_roles"] == {
-        "body": {"mesh_regex": "^body$", "vtx_grp": "body"}
+        "body": {"mesh_regex": "^body$", "vtx_grp": "body", "count": 1}
     }
 
 
 def test_add_mesh_role_leaves_no_tmp_behind(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.add_mesh_role(path, "body", "body", "^body$")
+    store.add_mesh_role(path, "body", "body", "^body$", 1)
 
     assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]
 
@@ -630,6 +656,34 @@ def test_update_mesh_role_rename_and_re_pattern_keep_the_mesh_regex(tmp_path):
     assert store.mesh_roles(store.read(path))["tyre"] == {
         "vtx_grp": "wheel.front",
         "weight": 1.0,
+        "mesh_regex": "^wheel",
+    }
+
+
+def test_update_mesh_role_writes_the_count_alone(tmp_path):
+    path, document = _three_roles(tmp_path)
+    store.update_mesh_role(path, "wheel", "wheel", count=4)
+    store.update_mesh_role(path, "glass", "glass", count=2)
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    document["mesh_roles"]["wheel"]["count"] = 4
+    document["mesh_roles"]["glass"] = {"count": 2}
+    assert after == document
+    assert list(after["mesh_roles"]) == ["body", "wheel", "glass"]
+    assert list(after["mesh_roles"]["wheel"]) == ["vtx_grp", "weight", "count"]
+
+
+def test_update_mesh_role_other_edits_keep_the_count(tmp_path):
+    path, _ = _three_roles(tmp_path)
+    store.update_mesh_role(path, "wheel", "wheel", count=4)
+    store.update_mesh_role(path, "wheel", "tyre")
+    store.update_mesh_role(path, "tyre", "tyre", "wheel.front")
+    store.update_mesh_role(path, "tyre", "tyre", mesh_regex="^wheel")
+
+    assert store.mesh_roles(store.read(path))["tyre"] == {
+        "vtx_grp": "wheel.front",
+        "weight": 1.0,
+        "count": 4,
         "mesh_regex": "^wheel",
     }
 

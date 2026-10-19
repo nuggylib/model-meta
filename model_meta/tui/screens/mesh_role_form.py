@@ -4,10 +4,11 @@ Pushed from the mesh roles list for one role, and dismissed with the role's
 current name. The name shows read-only at the top; Enter swaps in an Input whose
 Enter renames the role alone. Every other field the role holds is listed below
 as `key: value`, with a muted description beneath where one helps (the bones a
-`vtx_grp` matches), the required `mesh_regex` and `vtx_grp` first. Enter on
-`mesh_regex` opens a prefilled Input whose Enter writes it alone; a role
-without one is marked. Enter on `vtx_grp` opens the required-bones checklist
-with its matches pre-checked, and **Save** writes the inferred pattern alone.
+`vtx_grp` matches), the required `mesh_regex`, `vtx_grp` and `count` first.
+Enter on `mesh_regex` or `count` opens a prefilled Input whose Enter writes it
+alone; a role without one is marked. Enter on `vtx_grp` opens the
+required-bones checklist with its matches pre-checked, and **Save** writes the
+inferred pattern alone.
 Other fields show but can't be edited yet.
 The rules live in `specs.mesh_roles`; writes go through
 `specs.store.update_mesh_role`.
@@ -32,7 +33,8 @@ from model_meta.specs import mesh_roles, store
 from model_meta.tui.widgets.field_list import FieldList
 
 _NO_BONES = "Add required bones first."
-_REQUIRED = ("mesh_regex", "vtx_grp")
+_REQUIRED = ("mesh_regex", "vtx_grp", "count")
+_INPUTS = {"mesh_regex": "#mesh-regex", "count": "#count"}
 
 
 class MeshRoleFormScreen(Screen[str]):
@@ -81,7 +83,7 @@ class MeshRoleFormScreen(Screen[str]):
         super().__init__()
         self.path = path
         self.role = name
-        self._editing: Literal["name", "vtx_grp", "mesh_regex"] | None = None
+        self._editing: Literal["name", "vtx_grp", "mesh_regex", "count"] | None = None
         self._field_names: list[str] = []
 
     def compose(self) -> ComposeResult:
@@ -99,6 +101,9 @@ class MeshRoleFormScreen(Screen[str]):
             mesh_regex = Input(id="mesh-regex", classes="editor")
             mesh_regex.border_title = "mesh_regex"
             yield mesh_regex
+            count = Input(id="count", classes="editor")
+            count.border_title = "count"
+            yield count
             with Vertical(id="vtx-grp-editor", classes="editor"):
                 yield Static(
                     "", id="role-bones-label", classes="config-detail", markup=False
@@ -154,8 +159,8 @@ class MeshRoleFormScreen(Screen[str]):
         field = self._field_names[event.index]
         if field == "vtx_grp":
             self._edit_vtx_grp()
-        elif field == "mesh_regex":
-            self._edit_mesh_regex()
+        elif field in _INPUTS:
+            self._edit_input(field)
         else:
             self._status(f"'{field}' can't be edited here yet.")
 
@@ -182,7 +187,7 @@ class MeshRoleFormScreen(Screen[str]):
         if pattern and not checked:
             self._status(f"Its vtx_grp '{pattern}' matches no required bone.")
 
-    def _edit_mesh_regex(self) -> None:
+    def _edit_input(self, field: Literal["mesh_regex", "count"]) -> None:
         document = self._read()
         if document is None:
             return
@@ -191,11 +196,12 @@ class MeshRoleFormScreen(Screen[str]):
             self._status(f"'{self.role}' is no longer a mesh role.")
             return
         self._close()
-        self._editing = "mesh_regex"
-        mesh_regex = self.query_one("#mesh-regex", Input)
-        mesh_regex.value = role.get("mesh_regex", "")
-        mesh_regex.display = True
-        mesh_regex.focus()
+        self._editing = field
+        editor = self.query_one(_INPUTS[field], Input)
+        value = role.get(field)
+        editor.value = "" if value is None else str(value)
+        editor.display = True
+        editor.focus()
 
     def _close(self) -> None:
         """Hide the open editor, dropping its in-progress state unwritten."""
@@ -204,8 +210,8 @@ class MeshRoleFormScreen(Screen[str]):
             view = self.query_one("#role-name-view", FieldList)
             view.display = True
             view.focus()
-        elif self._editing == "mesh_regex":
-            self.query_one("#mesh-regex", Input).display = False
+        elif self._editing in _INPUTS:
+            self.query_one(_INPUTS[self._editing], Input).display = False
             self.query_one("#role-fields", FieldList).focus()
         elif self._editing == "vtx_grp":
             self.query_one("#role-bones", SelectionList).clear_options()
@@ -246,8 +252,21 @@ class MeshRoleFormScreen(Screen[str]):
             return
         self._saved("mesh_regex")
 
+    @on(Input.Submitted, "#count")
+    def _on_count(self, event: Input.Submitted) -> None:
+        self._status("")
+        try:
+            count = mesh_roles.parse_count(event.value.strip())
+        except ValueError as error:
+            self._status(str(error))
+            return
+        if not self._write(self.role, count=count):
+            return
+        self._saved("count")
+
     @on(Input.Changed, "#mesh-regex")
-    def _on_mesh_regex_changed(self) -> None:
+    @on(Input.Changed, "#count")
+    def _on_input_changed(self) -> None:
         self._status("")
 
     @on(SelectionList.SelectedChanged, "#role-bones")
@@ -281,10 +300,16 @@ class MeshRoleFormScreen(Screen[str]):
         vtx_grp: str | None = None,
         *,
         mesh_regex: str | None = None,
+        count: int | None = None,
     ) -> bool:
         try:
             store.update_mesh_role(
-                self.path, self.role, new_name, vtx_grp, mesh_regex=mesh_regex
+                self.path,
+                self.role,
+                new_name,
+                vtx_grp,
+                mesh_regex=mesh_regex,
+                count=count,
             )
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
@@ -342,9 +367,12 @@ class MeshRoleFormScreen(Screen[str]):
         self.query_one("#role-name-view", FieldList).lines = ((self.role, 0),)
         self._field_names, lines = _field_lines(role, store.required_bones(document))
         fields.lines = tuple(lines)
-        if not role.get("mesh_regex"):
-            start = lines.index(("mesh_regex: not set", 0))
-            fields.marked = frozenset({start, start + 1})
+        marked: set[int] = set()
+        for field in _INPUTS:
+            if role.get(field) in (None, ""):
+                start = lines.index((f"{field}: not set", 0))
+                marked |= {start, start + 1}
+        fields.marked = frozenset(marked)
 
     def _read(self) -> dict | None:
         try:
@@ -377,6 +405,11 @@ def _field_lines(
             lines.append((f"vtx_grp: {pattern or 'not set'}", 0))
             if pattern:
                 lines.append((_matches(pattern, required), 1))
+        elif key == "count":
+            count = role.get("count")
+            lines.append((f"count: {'not set' if count is None else count}", 0))
+            if count is None:
+                lines.append(("required: how many meshes mesh_regex matches", 1))
         else:
             lines.append((f"{key}: {_value(role[key])}", 0))
     return keys, lines
