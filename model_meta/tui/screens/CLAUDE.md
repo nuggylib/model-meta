@@ -211,8 +211,12 @@ in the app (analogous to a route in a web app).
   `#count`, one `_edit_input` keyed by `_INPUTS`) whose Enter writes it
   alone (`validate_mesh_regex` / `parse_count`, trimmed). Enter on `vtx_grp` opens
   `#vtx-grp-editor`: required bones pre-checked with its matches, live
-  preview, **Save** writes the pattern alone. Other fields say they can't be
-  edited yet. One editor at a time;
+  preview, **Save** writes the pattern alone. `texture_maps` is always listed
+  after them (`none` when absent or `[]`, never marked). Enter opens
+  `#texture-maps-editor`, a checklist of `schema.TEXTURE_MAPS` plus any
+  unknown names the role holds (pre-checked, labelled `(not a Godot map)`).
+  **Save** writes the checked names alone, in `order_texture_maps` order.
+  Other fields say they can't be edited yet. One editor at a time;
   `escape` closes it unsaved, else leaves. Failures keep text and checks and
   write nothing. `q` shadowed.
 - `blender_detail.py`, `godot_detail.py` — the other two detail screens

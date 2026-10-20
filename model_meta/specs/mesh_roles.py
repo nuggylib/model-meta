@@ -6,7 +6,7 @@ dot-segments may be `{n}` placeholders — inferred from checked
 Its `mesh_regex`, required on new roles, is a Python regex naming the mesh
 objects in the role; nothing ties its groups to the `vtx_grp`. Its `count`,
 also required on new roles, is exactly how many mesh objects that regex must
-match. Its `texture_maps` draws from `schema.TEXTURE_MAPS`; unknown names are kept.
+match.
 
 Pure functions over strings, like `bones`.
 """
