@@ -171,7 +171,8 @@ in the app (analogous to a route in a web app).
   Never name an attribute `_parent` here — it shadows Textual's `DOMNode._parent`.
 - `mesh_roles_form.py` — `MeshRolesFormScreen(path)`, the form for adding
   mesh roles and opening one. Read-only `#role-list` (a `FieldList` with
-  `cursor=True`: each role, its `mesh_regex`, `vtx_grp` and `count` indented). With no `required_bones`
+  `cursor=True`: each role, its `mesh_regex`, `vtx_grp`, `count` and
+  `texture_maps` indented; `texture_maps: none` is never marked). With no `required_bones`
   Add doesn't open, and `#role-status` says why.
   **Add** (`a`, or Enter on an empty list): Enter in `#role-name` validates
   the name and reveals `#role-bones-question` — a `#role-bones` checklist

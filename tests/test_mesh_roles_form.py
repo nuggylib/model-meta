@@ -159,19 +159,42 @@ async def test_lists_existing_roles_with_their_vtx_grp(tmp_path, monkeypatch):
             "mesh_regex: ^m$",
             "vtx_grp: body",
             "count: 1",
+            "texture_maps: none",
             "glass",
             "mesh_regex: not set",
             "count: not set",
+            "texture_maps: none",
         ]
         children = app.screen.query("#role-list .field-list-child")
         assert [str(row.render()) for row in children] == [
             "mesh_regex: ^m$",
             "vtx_grp: body",
             "count: 1",
+            "texture_maps: none",
             "mesh_regex: not set",
             "count: not set",
+            "texture_maps: none",
         ]
         assert _marked(app) == ["mesh_regex: not set", "count: not set"]
+
+
+async def test_lists_each_roles_texture_maps(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
+    specs_store.update_mesh_role(
+        path, "body", "body", texture_maps=["albedo", "albedo_tex"]
+    )
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test() as pilot:
+        await _open(pilot, app, path)
+        assert _lines(app) == [
+            "body",
+            "mesh_regex: ^m$",
+            "vtx_grp: body",
+            "count: 1",
+            "texture_maps: albedo, albedo_tex",
+        ]
+        assert _marked(app) == []
 
 
 async def test_no_required_bones_opens_nothing(tmp_path, monkeypatch):
@@ -228,10 +251,12 @@ async def test_roles_are_added_one_after_another(tmp_path, monkeypatch):
             f"mesh_regex: {SUSARM_REGEX}",
             "vtx_grp: susarm.front.top.{1}",
             "count: 2",
+            "texture_maps: none",
             "body",
             "mesh_regex: ^body$",
             "vtx_grp: body",
             "count: 1",
+            "texture_maps: none",
         ]
         assert _marked(app) == []
 
@@ -452,6 +477,7 @@ async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
             "mesh_regex: ^m$",
             "vtx_grp: arm[L]",
             "count: 1",
+            "texture_maps: none",
         ]
         assert _status(app) == "Mesh role '[b]arm' added."
 
@@ -548,7 +574,7 @@ async def test_clicking_a_role_opens_it(tmp_path, monkeypatch):
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path)
-        child = app.screen.query("#role-list .field-list-child")[3]
+        child = app.screen.query("#role-list .field-list-child")[4]
         await pilot.click(child)
         assert await _wait_for(
             pilot, lambda: isinstance(app.screen, MeshRoleFormScreen)
