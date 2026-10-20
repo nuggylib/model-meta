@@ -2,7 +2,7 @@
 
 import pytest
 
-from model_meta.specs import bones, mesh_roles
+from model_meta.specs import bones, mesh_roles, schema
 
 REQUIRED = [
     "root",
@@ -68,6 +68,37 @@ def test_parse_count_accepts_whole_numbers(text, count):
 def test_parse_count_rejects(text, message):
     with pytest.raises(ValueError, match=f"^{message}$"):
         mesh_roles.parse_count(text)
+
+
+# --- texture_choices / order_texture_maps --------------------------------
+
+
+def test_texture_choices_without_extras_is_the_schema():
+    assert mesh_roles.texture_choices(["normal", "albedo"]) == list(schema.TEXTURE_MAPS)
+
+
+def test_texture_choices_appends_unknown_names_once_in_order():
+    current = ["albedo_tex", "albedo", "Albedo", "albedo_tex"]
+    assert mesh_roles.texture_choices(current) == [
+        *schema.TEXTURE_MAPS,
+        "albedo_tex",
+        "Albedo",
+    ]
+
+
+def test_order_texture_maps_follows_the_schema_then_extras():
+    current = ["zzz", "normal"]
+    checked = ["orm", "zzz", "albedo", "normal"]
+    assert mesh_roles.order_texture_maps(checked, current) == [
+        "albedo",
+        "normal",
+        "orm",
+        "zzz",
+    ]
+
+
+def test_order_texture_maps_of_nothing_is_empty():
+    assert mesh_roles.order_texture_maps([], ["albedo"]) == []
 
 
 # --- validate_name ---------------------------------------------------------

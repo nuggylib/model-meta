@@ -420,6 +420,24 @@ def test_read_accepts_an_integer_count_and_a_role_without_one(tmp_path):
     assert store.mesh_roles(store.read(path)) == {"body": {"count": 4}, "glass": {}}
 
 
+@pytest.mark.parametrize("maps", ["albedo", [1], None])
+def test_read_rejects_texture_maps_that_are_not_a_string_list(tmp_path, maps):
+    document = schema.skeleton("vehicle")
+    document["mesh_roles"] = {"body": {"texture_maps": maps}}
+    path = _write(tmp_path, "vehicle", document)
+
+    with pytest.raises(ValueError, match="`texture_maps` is not a list of strings"):
+        store.read(path)
+
+
+def test_read_accepts_any_string_texture_maps_and_a_role_without_them(tmp_path):
+    document = schema.skeleton("vehicle")
+    document["mesh_roles"] = {"body": {"texture_maps": ["albedo_tex"]}, "glass": {}}
+    path = _write(tmp_path, "vehicle", document)
+
+    assert store.mesh_roles(store.read(path)) == document["mesh_roles"]
+
+
 # --- update_armature -------------------------------------------------------
 
 
@@ -685,6 +703,32 @@ def test_update_mesh_role_other_edits_keep_the_count(tmp_path):
         "weight": 1.0,
         "count": 4,
         "mesh_regex": "^wheel",
+    }
+
+
+def test_update_mesh_role_writes_the_texture_maps_alone(tmp_path):
+    path, document = _three_roles(tmp_path)
+    store.update_mesh_role(path, "wheel", "wheel", texture_maps=("albedo", "normal"))
+    store.update_mesh_role(path, "glass", "glass", texture_maps=[])
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    document["mesh_roles"]["wheel"]["texture_maps"] = ["albedo", "normal"]
+    document["mesh_roles"]["glass"] = {"texture_maps": []}
+    assert after == document
+    assert list(after["mesh_roles"]) == ["body", "wheel", "glass"]
+
+
+def test_update_mesh_role_other_edits_keep_the_texture_maps(tmp_path):
+    path, _ = _three_roles(tmp_path)
+    store.update_mesh_role(path, "wheel", "wheel", texture_maps=["orm"])
+    store.update_mesh_role(path, "wheel", "tyre")
+    store.update_mesh_role(path, "tyre", "tyre", "wheel.front", count=2)
+
+    assert store.mesh_roles(store.read(path))["tyre"] == {
+        "vtx_grp": "wheel.front",
+        "weight": 1.0,
+        "texture_maps": ["orm"],
+        "count": 2,
     }
 
 
