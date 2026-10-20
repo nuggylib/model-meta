@@ -363,6 +363,8 @@ class MeshRolesFormScreen(Screen):
             if "count" not in role:
                 marked.add(len(lines))
             lines.append((f"count: {role.get('count', 'not set')}", 1))
+            maps = role.get("texture_maps")
+            lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 1))
         role_list = self.query_one("#role-list", FieldList)
         role_list.lines = tuple(lines)
         role_list.marked = frozenset(marked)

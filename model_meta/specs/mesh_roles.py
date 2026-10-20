@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from collections.abc import Collection, Mapping, Sequence
 
-from model_meta.specs import bones, parenting
+from model_meta.specs import bones, parenting, schema
 
 
 def validate_name(name: str, existing: Collection[str]) -> str | None:
@@ -53,6 +53,15 @@ def parse_count(text: str) -> int:
     if count < 1:
         raise ValueError("The count must be at least 1.")
     return count
+
+
+def texture_choices(current: Sequence[str]) -> list[str]:
+    """`TEXTURE_MAPS`, then `current`'s unknown names in first-seen order."""
+    return list(dict.fromkeys([*schema.TEXTURE_MAPS, *current]))
+
+
+def order_texture_maps(checked: Collection[str], current: Sequence[str]) -> list[str]:
+    return [name for name in texture_choices(current) if name in checked]
 
 
 def matches(pattern: str, required: Sequence[str]) -> list[str]:

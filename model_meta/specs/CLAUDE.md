@@ -47,7 +47,9 @@ disk. **No Textual, no UI.**
   else `None`. A role's `mesh_regex` names its mesh objects; nothing ties its
   groups to `vtx_grp`. `parse_count(text)`: the `count` (how many meshes the
   regex must match, exactly) — ASCII digits only, at least 1, else
-  `ValueError` naming why.
+  `ValueError` naming why. `texture_choices(current)`: `TEXTURE_MAPS` and then
+  `current`'s unknown names, deduped. `order_texture_maps(checked, current)`:
+  the checked names in that order (`SelectionList.selected` is click order).
 - `store.py` — the filesystem: `create(specs_dir, model_type)` writes a new
   skeleton (raising `FileExistsError` rather than overwriting),
   `list_specs(specs_dir)` classifies every spec as `OK` / `UNREADABLE` /
@@ -59,7 +61,8 @@ disk. **No Textual, no UI.**
   `required_bones()` / `bone_name_inverses()` / `parenting_map()` /
   `mesh_roles()` default them for older specs). A role may lack `mesh_regex`,
   but one that holds a non-string is rejected; likewise `count`, which must be
-  an `int` (never a `bool`) when present. `update_armature(path,
+  an `int` (never a `bool`) when present, and `texture_maps`, which must be a
+  list of strings (any names). `update_armature(path,
   add_bones=, set_inverses=, drop_inverses=, object_name=, add_parenting=)`
   re-reads, patches **only**
   those keys (bones deduped, drops before sets, `object_name=None` leaves the
@@ -69,7 +72,7 @@ disk. **No Textual, no UI.**
   `ValueError` on a taken name, and writes only
   `mesh_roles[name] = {"mesh_regex": …, "vtx_grp": …, "count": …}` the same way.
   `update_mesh_role(path, name, new_name, vtx_grp=None, *, mesh_regex=None,
-  count=None)`
+  count=None, texture_maps=None)`
   re-reads, raises `ValueError` when `name` is gone or `new_name` is another
   role, and rewrites that one role in place — same position, other fields
   kept; a `None` field is kept as is (or left absent), so each editor writes
@@ -115,7 +118,8 @@ without the `TEXTURE_` prefix) and `MODIFIERS` (a curated 20 Blender modifier
 identifiers, not Blender's full ~55, which drifts every release) are the schema
 *definition*. **Nothing validates against them.** A spec written today can hold
 any string in those arrays and no code objects. They exist so the skeleton and a
-later validator key off one list instead of two. Do not describe them as
+later validator key off one list instead of two. The role view's texture
+checklist offers `TEXTURE_MAPS` but keeps unknown names. Do not describe them as
 shipped validation.
 
 ## Conventions

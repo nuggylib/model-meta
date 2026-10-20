@@ -27,6 +27,8 @@ _from_ it, but it is not part of the shipped package.
 3. **Keep `CLAUDE.md` files current as the project evolves.** When a directory's contents change
    meaningfully (new files, changed responsibilities, new patterns), make a genuine attempt to update
    that directory's `CLAUDE.md` so the documentation stays accurate.
+4. **Follow the `code-conventions` skill** (`.claude/skills/code-conventions/SKILL.md`). Its main
+   rule is that comments and docstrings are off by default.
 
 ### Feature Development Practices
 

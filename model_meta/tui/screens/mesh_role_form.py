@@ -1,18 +1,4 @@
-"""The mesh role form — one role's name and fields, each edited on its own.
-
-Pushed from the mesh roles list for one role, and dismissed with the role's
-current name. The name shows read-only at the top; Enter swaps in an Input whose
-Enter renames the role alone. Every other field the role holds is listed below
-as `key: value`, with a muted description beneath where one helps (the bones a
-`vtx_grp` matches), the required `mesh_regex`, `vtx_grp` and `count` first.
-Enter on `mesh_regex` or `count` opens a prefilled Input whose Enter writes it
-alone; a role without one is marked. Enter on `vtx_grp` opens the
-required-bones checklist with its matches pre-checked, and **Save** writes the
-inferred pattern alone.
-Other fields show but can't be edited yet.
-The rules live in `specs.mesh_roles`; writes go through
-`specs.store.update_mesh_role`.
-"""
+"""The mesh role form — one role's name and fields, each edited on its own."""
 
 from __future__ import annotations
 
@@ -29,12 +15,13 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, SelectionList, Static
 
-from model_meta.specs import mesh_roles, store
+from model_meta.specs import mesh_roles, schema, store
 from model_meta.tui.widgets.field_list import FieldList
 
 _NO_BONES = "Add required bones first."
 _REQUIRED = ("mesh_regex", "vtx_grp", "count")
 _INPUTS = {"mesh_regex": "#mesh-regex", "count": "#count"}
+_LISTED = (*_REQUIRED, "texture_maps")
 
 
 class MeshRoleFormScreen(Screen[str]):
@@ -58,7 +45,7 @@ class MeshRoleFormScreen(Screen[str]):
     MeshRoleFormScreen #role-status, MeshRoleFormScreen #role-name-view {
         height: auto;
     }
-    MeshRoleFormScreen #role-bones {
+    MeshRoleFormScreen #role-bones, MeshRoleFormScreen #role-textures {
         height: auto;
         max-height: 8;
     }
@@ -83,8 +70,11 @@ class MeshRoleFormScreen(Screen[str]):
         super().__init__()
         self.path = path
         self.role = name
-        self._editing: Literal["name", "vtx_grp", "mesh_regex", "count"] | None = None
+        self._editing: (
+            Literal["name", "vtx_grp", "mesh_regex", "count", "texture_maps"] | None
+        ) = None
         self._field_names: list[str] = []
+        self._texture_choices: list[str] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -113,6 +103,12 @@ class MeshRoleFormScreen(Screen[str]):
                     "", id="role-preview", classes="config-detail", markup=False
                 )
                 yield Button("Save", id="save-vtx-grp", variant="primary")
+            with Vertical(id="texture-maps-editor", classes="editor"):
+                yield Static(
+                    "", id="role-textures-label", classes="config-detail", markup=False
+                )
+                yield SelectionList[str](id="role-textures")
+                yield Button("Save", id="save-texture-maps", variant="primary")
             yield FieldList(
                 "Fields",
                 "No fields.",
@@ -159,6 +155,8 @@ class MeshRoleFormScreen(Screen[str]):
         field = self._field_names[event.index]
         if field == "vtx_grp":
             self._edit_vtx_grp()
+        elif field == "texture_maps":
+            self._edit_texture_maps()
         elif field in _INPUTS:
             self._edit_input(field)
         else:
@@ -186,6 +184,36 @@ class MeshRoleFormScreen(Screen[str]):
         self._ask(required, checked)
         if pattern and not checked:
             self._status(f"Its vtx_grp '{pattern}' matches no required bone.")
+
+    def _edit_texture_maps(self) -> None:
+        if self._editing == "texture_maps":
+            self.query_one("#role-textures").focus()
+            return
+        document = self._read()
+        if document is None:
+            return
+        role = store.mesh_roles(document).get(self.role)
+        if role is None:
+            self._status(f"'{self.role}' is no longer a mesh role.")
+            return
+        self._close()
+        self._editing = "texture_maps"
+        current = role.get("texture_maps", [])
+        self._texture_choices = mesh_roles.texture_choices(current)
+        self.query_one("#role-textures-label", Static).update(
+            f"Texture maps for '{self.role}'"
+        )
+        checklist = self.query_one("#role-textures", SelectionList)
+        checklist.clear_options()
+        checklist.add_options(
+            [
+                (Text(_texture_label(name)), name, name in current)
+                for name in self._texture_choices
+            ]
+        )
+        checklist.highlighted = 0
+        self.query_one("#texture-maps-editor").display = True
+        checklist.focus()
 
     def _edit_input(self, field: Literal["mesh_regex", "count"]) -> None:
         document = self._read()
@@ -217,6 +245,10 @@ class MeshRoleFormScreen(Screen[str]):
             self.query_one("#role-bones", SelectionList).clear_options()
             self.query_one("#role-preview", Static).update("")
             self.query_one("#vtx-grp-editor").display = False
+            self.query_one("#role-fields", FieldList).focus()
+        elif self._editing == "texture_maps":
+            self.query_one("#role-textures", SelectionList).clear_options()
+            self.query_one("#texture-maps-editor").display = False
             self.query_one("#role-fields", FieldList).focus()
         self._editing = None
 
@@ -285,6 +317,15 @@ class MeshRoleFormScreen(Screen[str]):
             return
         self._saved("vtx_grp")
 
+    @on(Button.Pressed, "#save-texture-maps")
+    def _on_save_texture_maps(self) -> None:
+        self._status("")
+        checked = self.query_one("#role-textures", SelectionList).selected
+        maps = mesh_roles.order_texture_maps(checked, self._texture_choices)
+        if not self._write(self.role, texture_maps=maps):
+            return
+        self._saved("texture_maps")
+
     def _saved(self, field: str) -> None:
         """Close the editor and re-render with the cursor on `field`."""
         self._close()
@@ -301,6 +342,7 @@ class MeshRoleFormScreen(Screen[str]):
         *,
         mesh_regex: str | None = None,
         count: int | None = None,
+        texture_maps: Sequence[str] | None = None,
     ) -> bool:
         try:
             store.update_mesh_role(
@@ -310,6 +352,7 @@ class MeshRoleFormScreen(Screen[str]):
                 vtx_grp,
                 mesh_regex=mesh_regex,
                 count=count,
+                texture_maps=texture_maps,
             )
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
@@ -392,7 +435,7 @@ def _field_lines(
     role: dict, required: Sequence[str]
 ) -> tuple[list[str], list[tuple[str, int]]]:
     """`key: value` per field, any description beneath; required fields first."""
-    keys = [*_REQUIRED, *(key for key in role if key not in _REQUIRED)]
+    keys = [*_LISTED, *(key for key in role if key not in _LISTED)]
     lines: list[tuple[str, int]] = []
     for key in keys:
         if key == "mesh_regex":
@@ -410,6 +453,9 @@ def _field_lines(
             lines.append((f"count: {'not set' if count is None else count}", 0))
             if count is None:
                 lines.append(("required: how many meshes mesh_regex matches", 1))
+        elif key == "texture_maps":
+            maps = role.get("texture_maps")
+            lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 0))
         else:
             lines.append((f"{key}: {_value(role[key])}", 0))
     return keys, lines
@@ -418,6 +464,10 @@ def _field_lines(
 def _matches(pattern: str, required: Sequence[str]) -> str:
     matched = mesh_roles.matches(pattern, required)
     return f"matches {', '.join(matched)}" if matched else "matches no required bone"
+
+
+def _texture_label(name: str) -> str:
+    return name if name in schema.TEXTURE_MAPS else f"{name} (not a Godot map)"
 
 
 def _value(value: object) -> str:

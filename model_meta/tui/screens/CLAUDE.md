@@ -171,7 +171,8 @@ in the app (analogous to a route in a web app).
   Never name an attribute `_parent` here — it shadows Textual's `DOMNode._parent`.
 - `mesh_roles_form.py` — `MeshRolesFormScreen(path)`, the form for adding
   mesh roles and opening one. Read-only `#role-list` (a `FieldList` with
-  `cursor=True`: each role, its `mesh_regex`, `vtx_grp` and `count` indented). With no `required_bones`
+  `cursor=True`: each role, its `mesh_regex`, `vtx_grp`, `count` and
+  `texture_maps` indented; `texture_maps: none` is never marked). With no `required_bones`
   Add doesn't open, and `#role-status` says why.
   **Add** (`a`, or Enter on an empty list): Enter in `#role-name` validates
   the name and reveals `#role-bones-question` — a `#role-bones` checklist
@@ -211,8 +212,12 @@ in the app (analogous to a route in a web app).
   `#count`, one `_edit_input` keyed by `_INPUTS`) whose Enter writes it
   alone (`validate_mesh_regex` / `parse_count`, trimmed). Enter on `vtx_grp` opens
   `#vtx-grp-editor`: required bones pre-checked with its matches, live
-  preview, **Save** writes the pattern alone. Other fields say they can't be
-  edited yet. One editor at a time;
+  preview, **Save** writes the pattern alone. `texture_maps` is always listed
+  after them (`none` when absent or `[]`, never marked). Enter opens
+  `#texture-maps-editor`, a checklist of `schema.TEXTURE_MAPS` plus any
+  unknown names the role holds (pre-checked, labelled `(not a Godot map)`).
+  **Save** writes the checked names alone, in `order_texture_maps` order.
+  Other fields say they can't be edited yet. One editor at a time;
   `escape` closes it unsaved, else leaves. Failures keep text and checks and
   write nothing. `q` shadowed.
 - `blender_detail.py`, `godot_detail.py` — the other two detail screens
