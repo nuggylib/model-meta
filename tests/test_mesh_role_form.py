@@ -8,6 +8,7 @@ from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
 from model_meta.godot import discovery
+from model_meta.specs import schema
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.mesh_role_form import MeshRoleFormScreen
@@ -117,6 +118,20 @@ async def _save(pilot, app):
     await pilot.pause()
 
 
+def _textures(app):
+    return app.screen.query_one("#role-textures", SelectionList)
+
+
+async def _save_textures(pilot, app):
+    if _focused_id(app) == "role-textures":
+        await pilot.press("tab")
+    assert _focused_id(app) == "save-texture-maps"
+    while app.screen.focused.has_class("-active"):
+        await pilot.pause(0.05)
+    await pilot.press("enter")
+    await pilot.pause()
+
+
 async def test_shows_only_the_role_with_focus_on_its_fields(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     app = _app(tmp_path, monkeypatch)
@@ -130,6 +145,7 @@ async def test_shows_only_the_role_with_focus_on_its_fields(tmp_path, monkeypatc
             "vtx_grp: wheel.{1}",
             "matches wheel.L, wheel.R",
             "count: 1",
+            "texture_maps: none",
         ]
         description = app.screen.query("#role-fields .field-list-row")[2]
         assert description.has_class("field-list-child")
@@ -159,8 +175,9 @@ async def test_hand_written_fields_are_listed_but_not_editable(tmp_path, monkeyp
         ]
 
         before = path.read_bytes()
-        await _select(pilot, app, "role-fields", 3)
-        assert _status(app) == "'texture_maps' can't be edited here yet."
+        await _select(pilot, app, "role-fields", 4)
+        assert _status(app) == "'x' can't be edited here yet."
+        assert not app.screen.query_one("#texture-maps-editor").display
         assert not app.screen.query_one("#vtx-grp-editor").display
         assert path.read_bytes() == before
 
@@ -266,6 +283,7 @@ async def test_vtx_grp_editor_prefills_and_saves_the_pattern_alone(
             "matches wheel.L",
             "count: not set",
             "required: how many meshes mesh_regex matches",
+            "texture_maps: none",
             "weight: 1.0",
         ]
         assert _focused_id(app) == "role-fields"
@@ -304,6 +322,7 @@ async def test_vtx_grp_needs_required_bones(tmp_path, monkeypatch):
             "vtx_grp: wheel.{1}",
             "matches no required bone",
             "count: 1",
+            "texture_maps: none",
         ]
         await _select(pilot, app, "role-fields", 1)
         assert _status(app) == "Add required bones first."
@@ -645,6 +664,111 @@ async def test_a_role_removed_by_hand_is_reported(tmp_path, monkeypatch):
         assert not app.screen.query_one("#vtx-grp-editor").display
 
 
+async def test_texture_maps_editor_prefills_with_extras_after_the_schema(
+    tmp_path, monkeypatch
+):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}", "texture_maps": ["zzz", "orm"]})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert "texture_maps: zzz, orm" in _lines(app, "role-fields")
+        await _select(pilot, app, "role-fields", 3)
+
+        checklist = _textures(app)
+        assert app.screen.query_one("#texture-maps-editor").display
+        assert _focused_id(app) == "role-textures"
+        assert _text(app, "#role-textures-label") == "Texture maps for 'wheel'"
+        values = [
+            checklist.get_option_at_index(i).value
+            for i in range(checklist.option_count)
+        ]
+        assert values == [*schema.TEXTURE_MAPS, "zzz"]
+        assert str(checklist.get_option_at_index(19).prompt) == "zzz (not a Godot map)"
+        assert sorted(checklist.selected) == ["orm", "zzz"]
+
+
+async def test_texture_maps_save_writes_schema_order_alone(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}", "weight": 1.0})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await _select(pilot, app, "role-fields", 3)
+        _textures(app).select("orm")
+        _textures(app).select("albedo")
+        await pilot.pause()
+        await _save_textures(pilot, app)
+
+        assert _roles(path)["wheel"] == {
+            "vtx_grp": "wheel.{1}",
+            "weight": 1.0,
+            "texture_maps": ["albedo", "orm"],
+        }
+        assert list(_roles(path)) == ["body", "wheel"]
+        assert _status(app) == "Mesh role 'wheel' saved."
+        assert not app.screen.query_one("#texture-maps-editor").display
+        assert "texture_maps: albedo, orm" in _lines(app, "role-fields")
+        assert _focused_id(app) == "role-fields"
+        assert app.screen.query_one("#role-fields").highlighted == 3
+
+
+async def test_texture_maps_unchecking_everything_writes_empty(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}", "texture_maps": ["albedo"]})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await _select(pilot, app, "role-fields", 3)
+        _textures(app).deselect_all()
+        await pilot.pause()
+        await _save_textures(pilot, app)
+
+        assert _roles(path)["wheel"]["texture_maps"] == []
+        assert "texture_maps: none" in _lines(app, "role-fields")
+
+
+async def test_texture_maps_escape_and_other_editors_discard(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        before = path.read_bytes()
+        await _select(pilot, app, "role-fields", 3)
+        _textures(app).select("albedo")
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not app.screen.query_one("#texture-maps-editor").display
+        assert _focused_id(app) == "role-fields"
+        assert isinstance(app.screen, MeshRoleFormScreen)
+
+        await _select(pilot, app, "role-fields", 3)
+        assert _textures(app).selected == []
+        _textures(app).select("albedo")
+        await _select(pilot, app, "role-fields", 1)
+        assert not app.screen.query_one("#texture-maps-editor").display
+        assert app.screen.query_one("#vtx-grp-editor").display
+        assert path.read_bytes() == before
+
+
+async def test_texture_maps_on_a_role_removed_by_hand(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await _select(pilot, app, "role-fields", 3)
+        document = json.loads(path.read_text(encoding="utf-8"))
+        del document["mesh_roles"]["wheel"]
+        path.write_text(json.dumps(document), encoding="utf-8")
+
+        await _save_textures(pilot, app)
+        assert _status(app) == (
+            "Could not write the spec: 'wheel' is no longer a mesh role."
+        )
+        assert app.screen.query_one("#texture-maps-editor").display
+        assert list(_roles(path)) == ["body"]
+
+
 async def test_q_does_not_quit(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     app = _app(tmp_path, monkeypatch)
@@ -668,6 +792,7 @@ async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
             "vtx_grp: arm[L]",
             "matches arm[L]",
             "count: 1",
+            "texture_maps: none",
         ]
         await _select(pilot, app, "role-fields", 1)
         assert _text(app, "#role-bones-label") == "Bones for 'arm[L]'"
