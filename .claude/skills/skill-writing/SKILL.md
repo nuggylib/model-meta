@@ -18,14 +18,30 @@ Use this skill any time a developer requests you to add or edit an AI Skill.
 3. If you deem the requested AI Skill to be too opinionated, suggest that the developer keep the AI Skill as a user-level setting
    - Cite your rationale with links to sources so the developer can review the concerns before agreeing or rejecting
 4. If the user still decides to proceed (or, if the AI Skill was deemed appropriate for a repo level change), add a new folder: `.claude/skills/<skill_name>/`
-5. Create a `SKILL.md` file within the new directory and ensure it has AT LEAST the following sections:
+5. Create a `SKILL.md` file within the new directory. Start it with YAML frontmatter so Claude Code can
+   discover the skill:
+   - `name`: `<skill_name>`, matching the folder name
+   - `description`: one line saying when to use the skill (e.g. "Use whenever you are about to ...")
+6. Ensure the `SKILL.md` has AT LEAST the following sections:
    - H1 - **Skill title**
    - H2 - **Trigger** - _A clear, concise description of when the agent should use this skill_
    - H2 - **Pre-requisites** - _State the required context and exact inputs needed for the skill to be implemented_
    - H2 - **Steps**
    - H2 - **Verification process**
    - H2 - **Example output**
-6. Be conservative when adding additional sections from the ones stated above, including nested sections
-7. Update the root `CLAUDE.md` file and add a line to the Skills section with the format:
-   * "Before `<skill_target_or_purpose>`, read `.claude/skills/<skill_target_or_purpose>/SKILL.md`
+7. Be conservative when adding additional sections from the ones stated above, including nested sections
+8. Update the root `CLAUDE.md` file and add a line to the Skills section with the format:
+   * Before `<skill_target_or_purpose>`, read `.claude/skills/<skill_name>/SKILL.md`
+
+## Verification process
+- `.claude/skills/<skill_name>/SKILL.md` exists.
+- It opens with a `---` frontmatter block whose `name` matches the folder and whose `description` is set.
+- `grep -E '^#{1,2} ' .claude/skills/<skill_name>/SKILL.md` lists one H1 followed by, in order, the H2s
+  Trigger, Pre-requisites, Steps, Verification process, and Example output.
+- The root `CLAUDE.md` Skills section has a line pointing to the new `SKILL.md` path.
+
+## Example output
+Request: "Add a skill for naming branches."
+
+The result is `.claude/skills/branch-naming/SKILL.md`.
 

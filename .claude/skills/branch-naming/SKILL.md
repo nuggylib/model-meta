@@ -1,3 +1,8 @@
+---
+name: branch-naming
+description: Use whenever you are about to create a new git branch in this repo.
+---
+
 # Name and create a new branch
 
 ## Trigger
