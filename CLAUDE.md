@@ -4,6 +4,11 @@ Model Meta is a Python-based TUI for creating Godot-compatible 3D model specs an
 currently-open modeling scene against them. Blender is the only supported modeling tool today; Godot
 is the focus, so the app is not named after Blender.
 
+## Skills
+* Before writing a new skill, read `.claude/skills/skill-writing/SKILL.md`
+* Before creating a new branch, read `.claude/skills/branch-naming/SKILL.md`
+* Before committing changes, read `.claude/skills/committing/SKILL.md`
+
 ## Project Structure
 
 Although Python does not enforce any sort of hard-and-fast project structure, this project uses a
@@ -27,8 +32,45 @@ _from_ it, but it is not part of the shipped package.
 3. **Keep `CLAUDE.md` files current as the project evolves.** When a directory's contents change
    meaningfully (new files, changed responsibilities, new patterns), make a genuine attempt to update
    that directory's `CLAUDE.md` so the documentation stays accurate.
-4. **Follow the `code-conventions` skill** (`.claude/skills/code-conventions/SKILL.md`). Its main
-   rule is that comments and docstrings are off by default.
+
+### Code Conventions
+
+#### Comments and docstrings
+
+Default: **none**. The assumed reader knows Python, Textual, and this codebase, including every
+directory's `CLAUDE.md`. Write one only when that reader would still be stuck. This applies equally
+to `#` comments, function and class docstrings, and module docstrings, and takes precedence over any
+global comment skill.
+
+**Keep:**
+- A reason that isn't visible in the code: an outside constraint, an order that matters, a library
+  quirk, a deliberate deviation.
+  ```python
+  # "x" is O_EXCL: a replace would overwrite the file this exists to protect.
+  with path.open("x", encoding="utf-8") as f:
+  ```
+  ```python
+  if not isinstance(count, int) or isinstance(count, bool):  # bool is an int
+  ```
+- A one-line docstring for a contract the signature can't show: what it raises, what the caller
+  must do first ("Pass it trimmed."), what `None` means.
+
+**Cut:**
+- What a line does, or a name restated in prose.
+- Narration of UI flow or behavior the directory's `CLAUDE.md` already covers.
+- Multi-paragraph module docstrings. Use one line, or nothing.
+- `Args:`/`Returns:` sections that repeat type hints.
+- Dates and authors.
+- New section banners. The existing `# -- name ---` dividers in `tui/screens/` can stay, but don't
+  add banners of any other kind.
+
+**Existing code:** older comments and docstrings were written before these rules, so don't copy
+their length. Trim one only when you're already editing that code. Don't do standalone cleanups.
+
+**Check** each comment or docstring with two questions:
+1. Would a senior dev who knows this repo be stuck without it? If not, delete it.
+2. Does it refer to something that isn't in the repo, like a conversation, plan, review, or ticket?
+   If so, replace the comment with a link or reference to that source so there's a breadcrumb trail.
 
 ### Feature Development Practices
 
