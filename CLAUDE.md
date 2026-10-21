@@ -4,6 +4,9 @@ Model Meta is a Python-based TUI for creating Godot-compatible 3D model specs an
 currently-open modeling scene against them. Blender is the only supported modeling tool today; Godot
 is the focus, so the app is not named after Blender.
 
+## Skills
+* Before writing a new skill, read `.claude/skills/skill-writing/SKILL.md`
+
 ## Project Structure
 
 Although Python does not enforce any sort of hard-and-fast project structure, this project uses a
