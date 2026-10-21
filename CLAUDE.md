@@ -7,6 +7,7 @@ is the focus, so the app is not named after Blender.
 ## Skills
 * Before writing a new skill, read `.claude/skills/skill-writing/SKILL.md`
 * Before creating a new branch, read `.claude/skills/branch-naming/SKILL.md`
+* Before committing changes, read `.claude/skills/committing/SKILL.md`
 
 ## Project Structure
 
