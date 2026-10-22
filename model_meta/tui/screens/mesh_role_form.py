@@ -19,8 +19,8 @@ from model_meta.specs import mesh_roles, schema, store
 from model_meta.tui.widgets.field_list import FieldList
 
 _NO_BONES = "Add required bones first."
-_REQUIRED = ("mesh_regex", "vtx_grp", "count")
-_INPUTS = {"mesh_regex": "#mesh-regex", "count": "#count"}
+_REQUIRED = ("mesh_regex", "vtx_grp", "count", "weight")
+_INPUTS = {"mesh_regex": "#mesh-regex", "count": "#count", "weight": "#weight"}
 _LISTED = (*_REQUIRED, "texture_maps")
 
 
@@ -71,7 +71,8 @@ class MeshRoleFormScreen(Screen[str]):
         self.path = path
         self.role = name
         self._editing: (
-            Literal["name", "vtx_grp", "mesh_regex", "count", "texture_maps"] | None
+            Literal["name", "vtx_grp", "mesh_regex", "count", "weight", "texture_maps"]
+            | None
         ) = None
         self._field_names: list[str] = []
         self._texture_choices: list[str] = []
@@ -94,6 +95,9 @@ class MeshRoleFormScreen(Screen[str]):
             count = Input(id="count", classes="editor")
             count.border_title = "count"
             yield count
+            weight = Input(id="weight", classes="editor")
+            weight.border_title = "weight"
+            yield weight
             with Vertical(id="vtx-grp-editor", classes="editor"):
                 yield Static(
                     "", id="role-bones-label", classes="config-detail", markup=False
@@ -215,7 +219,7 @@ class MeshRoleFormScreen(Screen[str]):
         self.query_one("#texture-maps-editor").display = True
         checklist.focus()
 
-    def _edit_input(self, field: Literal["mesh_regex", "count"]) -> None:
+    def _edit_input(self, field: Literal["mesh_regex", "count", "weight"]) -> None:
         document = self._read()
         if document is None:
             return
@@ -227,7 +231,12 @@ class MeshRoleFormScreen(Screen[str]):
         self._editing = field
         editor = self.query_one(_INPUTS[field], Input)
         value = role.get(field)
-        editor.value = "" if value is None else str(value)
+        if value is None:
+            editor.value = ""
+        elif field == "weight":
+            editor.value = mesh_roles.format_weight(value)
+        else:
+            editor.value = str(value)
         editor.display = True
         editor.focus()
 
@@ -296,8 +305,21 @@ class MeshRoleFormScreen(Screen[str]):
             return
         self._saved("count")
 
+    @on(Input.Submitted, "#weight")
+    def _on_weight(self, event: Input.Submitted) -> None:
+        self._status("")
+        try:
+            weight = mesh_roles.parse_weight(event.value.strip())
+        except ValueError as error:
+            self._status(str(error))
+            return
+        if not self._write(self.role, weight=weight):
+            return
+        self._saved("weight")
+
     @on(Input.Changed, "#mesh-regex")
     @on(Input.Changed, "#count")
+    @on(Input.Changed, "#weight")
     def _on_input_changed(self) -> None:
         self._status("")
 
@@ -342,6 +364,7 @@ class MeshRoleFormScreen(Screen[str]):
         *,
         mesh_regex: str | None = None,
         count: int | None = None,
+        weight: float | None = None,
         texture_maps: Sequence[str] | None = None,
     ) -> bool:
         try:
@@ -352,6 +375,7 @@ class MeshRoleFormScreen(Screen[str]):
                 vtx_grp,
                 mesh_regex=mesh_regex,
                 count=count,
+                weight=weight,
                 texture_maps=texture_maps,
             )
         except (OSError, ValueError) as error:
@@ -453,6 +477,13 @@ def _field_lines(
             lines.append((f"count: {'not set' if count is None else count}", 0))
             if count is None:
                 lines.append(("required: how many meshes mesh_regex matches", 1))
+        elif key == "weight":
+            weight = role.get("weight")
+            if weight is None:
+                lines.append(("weight: not set", 0))
+                lines.append(("required: the weight its meshes carry on vtx_grp", 1))
+            else:
+                lines.append((f"weight: {mesh_roles.format_weight(weight)}", 0))
         elif key == "texture_maps":
             maps = role.get("texture_maps")
             lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 0))

@@ -803,8 +803,8 @@ def _arms(tmp_path):
     specs_store.update_armature(
         path, add_bones=["root", "arm.L", "arm.R"], add_parenting={"root": ["arm.{1}"]}
     )
-    specs_store.add_mesh_role(path, "arm", "arm.{1}", "^m$", 1)
-    specs_store.add_mesh_role(path, "base", "root", "^m$", 1)
+    specs_store.add_mesh_role(path, "arm", "arm.{1}", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "base", "root", "^m$", 1, 1.0)
     return path
 
 

@@ -45,8 +45,8 @@ def _spec(tmp_path, bones=BONES):
     path = specs_store.create(tmp_path / "specs", "vehicle")
     if bones:
         specs_store.update_armature(path, add_bones=bones)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1)
-    specs_store.add_mesh_role(path, "wheel", "wheel.{1}", "^m$", 1)
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "wheel", "wheel.{1}", "^m$", 1, 1.0)
     return path
 
 
@@ -145,6 +145,7 @@ async def test_shows_only_the_role_with_focus_on_its_fields(tmp_path, monkeypatc
             "vtx_grp: wheel.{1}",
             "matches wheel.L, wheel.R",
             "count: 1",
+            "weight: 1.0",
             "texture_maps: none",
         ]
         description = app.screen.query("#role-fields .field-list-row")[2]
@@ -170,12 +171,14 @@ async def test_hand_written_fields_are_listed_but_not_editable(tmp_path, monkeyp
             "mesh_regex: ^w",
             "vtx_grp: not set",
             "count: 2",
+            "weight: not set",
+            "required: the weight its meshes carry on vtx_grp",
             "texture_maps: albedo, normal",
             "x: (empty)",
         ]
 
         before = path.read_bytes()
-        await _select(pilot, app, "role-fields", 4)
+        await _select(pilot, app, "role-fields", 5)
         assert _status(app) == "'x' can't be edited here yet."
         assert not app.screen.query_one("#texture-maps-editor").display
         assert not app.screen.query_one("#vtx-grp-editor").display
@@ -201,7 +204,12 @@ async def test_rename_writes_the_name_alone(tmp_path, monkeypatch):
         await pilot.pause()
 
         assert _roles(path) == {
-            "body": {"mesh_regex": "^m$", "vtx_grp": "body", "count": 1},
+            "body": {
+                "mesh_regex": "^m$",
+                "vtx_grp": "body",
+                "count": 1,
+                "weight": 1.0,
+            },
             "tyre": {"vtx_grp": "wheel.{1}", "weight": 1.0},
         }
         assert _status(app) == "Mesh role 'tyre' saved."
@@ -283,8 +291,8 @@ async def test_vtx_grp_editor_prefills_and_saves_the_pattern_alone(
             "matches wheel.L",
             "count: not set",
             "required: how many meshes mesh_regex matches",
-            "texture_maps: none",
             "weight: 1.0",
+            "texture_maps: none",
         ]
         assert _focused_id(app) == "role-fields"
         assert app.screen.query_one("#role-fields").highlighted == 1
@@ -322,6 +330,7 @@ async def test_vtx_grp_needs_required_bones(tmp_path, monkeypatch):
             "vtx_grp: wheel.{1}",
             "matches no required bone",
             "count: 1",
+            "weight: 1.0",
             "texture_maps: none",
         ]
         await _select(pilot, app, "role-fields", 1)
@@ -366,7 +375,7 @@ def _marked(app):
 
 async def test_a_role_without_a_mesh_regex_is_marked(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}", "count": 4})
+    _set_role(path, "wheel", {"vtx_grp": "wheel.{1}", "count": 4, "weight": 1.0})
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
@@ -386,6 +395,7 @@ async def test_a_role_without_a_mesh_regex_is_marked(tmp_path, monkeypatch):
         assert _roles(path)["wheel"] == {
             "vtx_grp": "wheel.{1}",
             "count": 4,
+            "weight": 1.0,
             "mesh_regex": "^wheel",
         }
 
@@ -485,7 +495,8 @@ async def test_opening_another_editor_discards_the_mesh_regex(tmp_path, monkeypa
 
 async def test_a_role_without_a_count_is_marked(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    _set_role(path, "wheel", {"mesh_regex": "^w", "vtx_grp": "wheel.{1}"})
+    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "weight": 1.0}
+    _set_role(path, "wheel", role)
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
@@ -506,11 +517,12 @@ async def test_a_role_without_a_count_is_marked(tmp_path, monkeypatch):
         assert _roles(path)["wheel"] == {
             "mesh_regex": "^w",
             "vtx_grp": "wheel.{1}",
+            "weight": 1.0,
             "count": 4,
         }
 
 
-async def test_a_role_missing_both_marks_both(tmp_path, monkeypatch):
+async def test_a_role_missing_every_input_field_marks_each(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     _set_role(path, "wheel", {"vtx_grp": "wheel.{1}"})
     app = _app(tmp_path, monkeypatch)
@@ -521,6 +533,8 @@ async def test_a_role_missing_both_marks_both(tmp_path, monkeypatch):
             "required: the meshes in this role",
             "count: not set",
             "required: how many meshes mesh_regex matches",
+            "weight: not set",
+            "required: the weight its meshes carry on vtx_grp",
         ]
 
 
@@ -558,7 +572,8 @@ async def test_count_editor_prefills_and_saves_it_alone(tmp_path, monkeypatch):
 
 async def test_a_bad_count_is_rejected(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    _set_role(path, "wheel", {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 0})
+    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 0, "weight": 1.0}
+    _set_role(path, "wheel", role)
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
@@ -613,6 +628,139 @@ async def test_opening_another_editor_discards_the_count(tmp_path, monkeypatch):
         await _select(pilot, app, "role-fields", 2)
         assert app.screen.query_one("#count", Input).value == "1"
         assert not app.screen.query_one("#mesh-regex").display
+        assert path.read_bytes() == before
+
+
+# --- weight ----------------------------------------------------------------
+
+
+async def test_a_role_without_a_weight_is_marked(tmp_path, monkeypatch):
+    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 2}
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", role)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert _marked(app) == [
+            "weight: not set",
+            "required: the weight its meshes carry on vtx_grp",
+        ]
+
+        await _select(pilot, app, "role-fields", 3)
+        weight = app.screen.query_one("#weight", Input)
+        assert weight.display
+        assert weight.value == ""
+        assert _focused_id(app) == "weight"
+        weight.value = " 0 "
+        await pilot.press("enter")
+        await pilot.pause()
+        assert _marked(app) == []
+        assert _roles(path)["wheel"] == {**role, "weight": 0.0}
+        assert "weight: 0.0" in _lines(app, "role-fields")
+
+
+async def test_a_zero_weight_is_set_not_missing(tmp_path, monkeypatch):
+    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 2, "weight": 0.0}
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", role)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert "weight: 0.0" in _lines(app, "role-fields")
+        assert _marked(app) == []
+        await _select(pilot, app, "role-fields", 3)
+        assert app.screen.query_one("#weight", Input).value == "0.0"
+
+
+async def test_weight_editor_prefills_and_saves_it_alone(tmp_path, monkeypatch):
+    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "weight": 1e-07, "count": 2}
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", role)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert "weight: 0.0000001" in _lines(app, "role-fields")
+        await _select(pilot, app, "role-fields", 3)
+        weight = app.screen.query_one("#weight", Input)
+        assert weight.value == "0.0000001"
+
+        await pilot.press("enter")  # an unchanged re-save round-trips
+        await pilot.pause()
+        assert _roles(path)["wheel"] == role
+
+        await _select(pilot, app, "role-fields", 3)
+        weight.value = ".25"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert list(_roles(path)) == ["body", "wheel"]
+        assert _roles(path)["wheel"] == {**role, "weight": 0.25}
+        assert list(_roles(path)["wheel"]) == list(role)
+        assert _status(app) == "Mesh role 'wheel' saved."
+        assert not weight.display
+        assert "weight: 0.25" in _lines(app, "role-fields")
+        assert _focused_id(app) == "role-fields"
+        assert app.screen.query_one("#role-fields").highlighted == 3
+
+
+async def test_a_bad_weight_is_rejected(tmp_path, monkeypatch):
+    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 2, "weight": 1.5}
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", role)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert "weight: 1.5" in _lines(app, "role-fields")
+        assert _marked(app) == []
+        before = path.read_bytes()
+        await _select(pilot, app, "role-fields", 3)
+        weight = app.screen.query_one("#weight", Input)
+        assert weight.value == "1.5"
+
+        cases = [
+            ("1.5", "The weight must be between 0 and 1."),
+            ("  ", "Enter a weight."),
+            ("-0.1", "The weight must be a decimal number."),
+            ("1e-1", "The weight must be a decimal number."),
+        ]
+        for text, message in cases:
+            weight.value = text
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert _status(app) == message
+            assert weight.display
+            assert weight.value == text
+        assert path.read_bytes() == before
+
+        await pilot.press("1")
+        await pilot.pause()
+        assert _status(app) == ""
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not weight.display
+        assert _focused_id(app) == "role-fields"
+        assert isinstance(app.screen, MeshRoleFormScreen)
+        assert path.read_bytes() == before
+
+
+async def test_opening_another_editor_discards_the_weight(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        before = path.read_bytes()
+        await _select(pilot, app, "role-fields", 3)
+        app.screen.query_one("#weight", Input).value = "0.5"
+
+        await _select(pilot, app, "role-fields", 2)
+        assert not app.screen.query_one("#weight").display
+        assert app.screen.query_one("#count").display
+
+        await _select(pilot, app, "role-fields", 3)
+        assert app.screen.query_one("#weight", Input).value == "1.0"
+        assert not app.screen.query_one("#count").display
         assert path.read_bytes() == before
 
 
@@ -673,7 +821,7 @@ async def test_texture_maps_editor_prefills_with_extras_after_the_schema(
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
         assert "texture_maps: zzz, orm" in _lines(app, "role-fields")
-        await _select(pilot, app, "role-fields", 3)
+        await _select(pilot, app, "role-fields", 4)
 
         checklist = _textures(app)
         assert app.screen.query_one("#texture-maps-editor").display
@@ -694,7 +842,7 @@ async def test_texture_maps_save_writes_schema_order_alone(tmp_path, monkeypatch
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
-        await _select(pilot, app, "role-fields", 3)
+        await _select(pilot, app, "role-fields", 4)
         _textures(app).select("orm")
         _textures(app).select("albedo")
         await pilot.pause()
@@ -710,7 +858,7 @@ async def test_texture_maps_save_writes_schema_order_alone(tmp_path, monkeypatch
         assert not app.screen.query_one("#texture-maps-editor").display
         assert "texture_maps: albedo, orm" in _lines(app, "role-fields")
         assert _focused_id(app) == "role-fields"
-        assert app.screen.query_one("#role-fields").highlighted == 3
+        assert app.screen.query_one("#role-fields").highlighted == 4
 
 
 async def test_texture_maps_unchecking_everything_writes_empty(tmp_path, monkeypatch):
@@ -719,7 +867,7 @@ async def test_texture_maps_unchecking_everything_writes_empty(tmp_path, monkeyp
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
-        await _select(pilot, app, "role-fields", 3)
+        await _select(pilot, app, "role-fields", 4)
         _textures(app).deselect_all()
         await pilot.pause()
         await _save_textures(pilot, app)
@@ -734,7 +882,7 @@ async def test_texture_maps_escape_and_other_editors_discard(tmp_path, monkeypat
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
         before = path.read_bytes()
-        await _select(pilot, app, "role-fields", 3)
+        await _select(pilot, app, "role-fields", 4)
         _textures(app).select("albedo")
         await pilot.press("escape")
         await pilot.pause()
@@ -742,7 +890,7 @@ async def test_texture_maps_escape_and_other_editors_discard(tmp_path, monkeypat
         assert _focused_id(app) == "role-fields"
         assert isinstance(app.screen, MeshRoleFormScreen)
 
-        await _select(pilot, app, "role-fields", 3)
+        await _select(pilot, app, "role-fields", 4)
         assert _textures(app).selected == []
         _textures(app).select("albedo")
         await _select(pilot, app, "role-fields", 1)
@@ -756,7 +904,7 @@ async def test_texture_maps_on_a_role_removed_by_hand(tmp_path, monkeypatch):
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
-        await _select(pilot, app, "role-fields", 3)
+        await _select(pilot, app, "role-fields", 4)
         document = json.loads(path.read_text(encoding="utf-8"))
         del document["mesh_roles"]["wheel"]
         path.write_text(json.dumps(document), encoding="utf-8")
@@ -781,7 +929,7 @@ async def test_q_does_not_quit(tmp_path, monkeypatch):
 
 async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "arm[L]", "arm[L]", "^m$", 1)
+    specs_store.add_mesh_role(path, "arm[L]", "arm[L]", "^m$", 1, 1.0)
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "arm[L]")
@@ -792,6 +940,7 @@ async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
             "vtx_grp: arm[L]",
             "matches arm[L]",
             "count: 1",
+            "weight: 1.0",
             "texture_maps: none",
         ]
         await _select(pilot, app, "role-fields", 1)
