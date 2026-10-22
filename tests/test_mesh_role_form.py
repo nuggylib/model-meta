@@ -199,7 +199,7 @@ async def test_rename_writes_the_name_alone(tmp_path, monkeypatch):
         assert role_name.value == "wheel"
         assert _focused_id(app) == "role-name"
 
-        role_name.value = "  tyre "
+        role_name.value = "  tire "
         await pilot.press("enter")
         await pilot.pause()
 
@@ -210,17 +210,17 @@ async def test_rename_writes_the_name_alone(tmp_path, monkeypatch):
                 "count": 1,
                 "weight": 1.0,
             },
-            "tyre": {"vtx_grp": "wheel.{1}", "weight": 1.0},
+            "tire": {"vtx_grp": "wheel.{1}", "weight": 1.0},
         }
-        assert _status(app) == "Mesh role 'tyre' saved."
-        assert _text(app, "#role-title") == "Mesh role — tyre"
-        assert _lines(app, "role-name-view") == ["tyre"]
+        assert _status(app) == "Mesh role 'tire' saved."
+        assert _text(app, "#role-title") == "Mesh role — tire"
+        assert _lines(app, "role-name-view") == ["tire"]
         assert not role_name.display
         assert _focused_id(app) == "role-name-view"
 
         await pilot.press("escape")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, DashboardScreen))
-        assert results == ["tyre"]
+        assert results == ["tire"]
 
 
 async def test_rename_follows_the_name_rules(tmp_path, monkeypatch):
@@ -249,7 +249,7 @@ async def test_escape_closes_the_name_editor_unsaved(tmp_path, monkeypatch):
         await _open(pilot, app, path, "wheel")
         before = path.read_bytes()
         await _select(pilot, app, "role-name-view")
-        app.screen.query_one("#role-name", Input).value = "tyre"
+        app.screen.query_one("#role-name", Input).value = "tire"
         await pilot.press("escape")
         await pilot.pause()
 
@@ -340,13 +340,13 @@ async def test_vtx_grp_needs_required_bones(tmp_path, monkeypatch):
 
 async def test_a_pattern_matching_no_bone_says_so(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    _set_role(path, "wheel", {"vtx_grp": "tyre.{1}"})
+    _set_role(path, "wheel", {"vtx_grp": "tire.{1}"})
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "wheel")
         await _select(pilot, app, "role-fields", 1)
         assert _selected(app) == []
-        assert _status(app) == "Its vtx_grp 'tyre.{1}' matches no required bone."
+        assert _status(app) == "Its vtx_grp 'tire.{1}' matches no required bone."
 
 
 async def test_a_role_without_vtx_grp_gets_one_on_save(tmp_path, monkeypatch):
@@ -477,7 +477,7 @@ async def test_opening_another_editor_discards_the_mesh_regex(tmp_path, monkeypa
         await _open(pilot, app, path, "wheel")
         before = path.read_bytes()
         await _select(pilot, app, "role-fields", 0)
-        app.screen.query_one("#mesh-regex", Input).value = "^tyre"
+        app.screen.query_one("#mesh-regex", Input).value = "^tire"
 
         await _select(pilot, app, "role-fields", 1)
         assert not app.screen.query_one("#mesh-regex").display
@@ -799,7 +799,7 @@ async def test_a_role_removed_by_hand_is_reported(tmp_path, monkeypatch):
         del document["mesh_roles"]["wheel"]
         path.write_text(json.dumps(document), encoding="utf-8")
 
-        await _rename(pilot, app, "tyre")
+        await _rename(pilot, app, "tire")
         assert _status(app) == (
             "Could not write the spec: 'wheel' is no longer a mesh role."
         )

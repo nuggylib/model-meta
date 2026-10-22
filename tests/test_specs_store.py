@@ -647,11 +647,11 @@ def test_update_mesh_role_replaces_the_vtx_grp_in_place(tmp_path):
 
 def test_update_mesh_role_renames_keeping_position_and_fields(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "tyre", "wheel.{1}")
+    store.update_mesh_role(path, "wheel", "tire", "wheel.{1}")
 
     after = json.loads(path.read_text(encoding="utf-8"))
-    assert list(after["mesh_roles"]) == ["body", "tyre", "glass"]
-    assert after["mesh_roles"]["tyre"] == {"vtx_grp": "wheel.{1}", "weight": 1.0}
+    assert list(after["mesh_roles"]) == ["body", "tire", "glass"]
+    assert after["mesh_roles"]["tire"] == {"vtx_grp": "wheel.{1}", "weight": 1.0}
     assert after["hand_added"] is True
 
 
@@ -664,13 +664,13 @@ def test_update_mesh_role_adds_a_vtx_grp_to_a_role_without_one(tmp_path):
 
 def test_update_mesh_role_without_a_vtx_grp_only_renames(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "tyre")
+    store.update_mesh_role(path, "wheel", "tire")
     store.update_mesh_role(path, "glass", "window")
 
     after = json.loads(path.read_text(encoding="utf-8"))
     assert after["mesh_roles"] == {
         "body": {"vtx_grp": "body"},
-        "tyre": {"vtx_grp": "wheel.{1}", "weight": 1.0},
+        "tire": {"vtx_grp": "wheel.{1}", "weight": 1.0},
         "window": {},
     }
     assert after["hand_added"] is True
@@ -691,10 +691,10 @@ def test_update_mesh_role_writes_the_mesh_regex_alone(tmp_path):
 def test_update_mesh_role_rename_and_re_pattern_keep_the_mesh_regex(tmp_path):
     path, _ = _three_roles(tmp_path)
     store.update_mesh_role(path, "wheel", "wheel", mesh_regex="^wheel")
-    store.update_mesh_role(path, "wheel", "tyre")
-    store.update_mesh_role(path, "tyre", "tyre", "wheel.front")
+    store.update_mesh_role(path, "wheel", "tire")
+    store.update_mesh_role(path, "tire", "tire", "wheel.front")
 
-    assert store.mesh_roles(store.read(path))["tyre"] == {
+    assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
         "weight": 1.0,
         "mesh_regex": "^wheel",
@@ -717,11 +717,11 @@ def test_update_mesh_role_writes_the_count_alone(tmp_path):
 def test_update_mesh_role_other_edits_keep_the_count(tmp_path):
     path, _ = _three_roles(tmp_path)
     store.update_mesh_role(path, "wheel", "wheel", count=4)
-    store.update_mesh_role(path, "wheel", "tyre")
-    store.update_mesh_role(path, "tyre", "tyre", "wheel.front")
-    store.update_mesh_role(path, "tyre", "tyre", mesh_regex="^wheel")
+    store.update_mesh_role(path, "wheel", "tire")
+    store.update_mesh_role(path, "tire", "tire", "wheel.front")
+    store.update_mesh_role(path, "tire", "tire", mesh_regex="^wheel")
 
-    assert store.mesh_roles(store.read(path))["tyre"] == {
+    assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
         "weight": 1.0,
         "count": 4,
@@ -783,10 +783,10 @@ def test_update_mesh_role_writes_the_texture_maps_alone(tmp_path):
 def test_update_mesh_role_other_edits_keep_the_texture_maps(tmp_path):
     path, _ = _three_roles(tmp_path)
     store.update_mesh_role(path, "wheel", "wheel", texture_maps=["orm"])
-    store.update_mesh_role(path, "wheel", "tyre")
-    store.update_mesh_role(path, "tyre", "tyre", "wheel.front", count=2)
+    store.update_mesh_role(path, "wheel", "tire")
+    store.update_mesh_role(path, "tire", "tire", "wheel.front", count=2)
 
-    assert store.mesh_roles(store.read(path))["tyre"] == {
+    assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
         "weight": 1.0,
         "texture_maps": ["orm"],
