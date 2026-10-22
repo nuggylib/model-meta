@@ -171,18 +171,20 @@ in the app (analogous to a route in a web app).
   Never name an attribute `_parent` here — it shadows Textual's `DOMNode._parent`.
 - `mesh_roles_form.py` — `MeshRolesFormScreen(path)`, the form for adding
   mesh roles and opening one. Read-only `#role-list` (a `FieldList` with
-  `cursor=True`: each role, its `mesh_regex`, `vtx_grp`, `count` and
-  `texture_maps` indented; `texture_maps: none` is never marked). With no `required_bones`
+  `cursor=True`: each role, its `mesh_regex`, `vtx_grp`, `count`, `weight`
+  and `texture_maps` indented; `texture_maps: none` is never marked). With no `required_bones`
   Add doesn't open, and `#role-status` says why.
   **Add** (`a`, or Enter on an empty list): Enter in `#role-name` validates
   the name and reveals `#role-bones-question` — a `#role-bones` checklist
   refilled from a fresh read, a live `#role-preview` of
   `mesh_roles.infer_vtx_grp` (or why none fits), a required `#role-regex`
   Input (`validate_mesh_regex`, trimmed), a required `#role-count` Input
-  (`parse_count`), and `#confirm-role` (**Add**, or Enter in either Input),
-  which writes all three via `add_mesh_role` and returns to an empty
-  `#role-name`. Checks run bones → regex → count; the first failure gets the
-  status and focus. A missing `mesh_regex` or `count` line is `marked`.
+  (`parse_count`), a required `#role-weight` Input (`parse_weight`; blank is
+  an error, never `0`), and `#confirm-role` (**Add**, or Enter in any of the
+  three Inputs), which writes all four via `add_mesh_role` and returns to an
+  empty `#role-name`. Checks run bones → regex → count → weight; the first
+  failure gets the status and focus. A missing `mesh_regex`, `count` or
+  `weight` line is `marked`; `weight: 0.0` is set, never marked.
   `escape`: hide the question → clear the name → close → leave.
   **Open** (Enter or a click on a role): a fresh read (a role gone by hand is
   reported, nothing pushed), any Add is discarded unwritten, then
@@ -205,12 +207,15 @@ in the app (analogous to a route in a web app).
   every field the role holds as one `key: value` line, with a muted
   description line beneath where one helps (`_field_lines`; the depth-1
   `.field-list-child` row, `$text-muted`). The required `mesh_regex`,
-  `vtx_grp` and `count` are always listed first (`not set` when absent);
-  `vtx_grp` is described by the bones it `matches`, and a missing
-  `mesh_regex` or `count` is `marked` red with a `required` line. Enter on
-  `mesh_regex` or `count` opens its prefilled Input (`#mesh-regex` /
-  `#count`, one `_edit_input` keyed by `_INPUTS`) whose Enter writes it
-  alone (`validate_mesh_regex` / `parse_count`, trimmed). Enter on `vtx_grp` opens
+  `vtx_grp`, `count` and `weight` are always listed first (`not set` when
+  absent); `vtx_grp` is described by the bones it `matches`, and a missing
+  `mesh_regex`, `count` or `weight` is `marked` red with a `required` line.
+  `weight` `0.0` is set, not missing: test `is None`, never truthiness.
+  Enter on `mesh_regex`, `count` or `weight` opens its prefilled Input
+  (`#mesh-regex` / `#count` / `#weight`, one `_edit_input` keyed by
+  `_INPUTS`; weight is shown and prefilled via `format_weight`) whose Enter
+  writes it alone (`validate_mesh_regex` / `parse_count` / `parse_weight`,
+  trimmed). Enter on `vtx_grp` opens
   `#vtx-grp-editor`: required bones pre-checked with its matches, live
   preview, **Save** writes the pattern alone. `texture_maps` is always listed
   after them (`none` when absent or `[]`, never marked). Enter opens
