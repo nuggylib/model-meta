@@ -166,7 +166,7 @@ def delete_bone(path: Path, name: str) -> None:
 
 
 def add_mesh_role(
-    path: Path, name: str, vtx_grp: str, mesh_regex: str, count: int
+    path: Path, name: str, vtx_grp: str, mesh_regex: str, count: int, weight: float
 ) -> None:
     """Re-read the spec and add one mesh role, touching nothing else.
 
@@ -177,7 +177,12 @@ def add_mesh_role(
     roles = document.setdefault("mesh_roles", {})
     if name in roles:
         raise ValueError(f"'{name}' is already a mesh role.")
-    roles[name] = {"mesh_regex": mesh_regex, "vtx_grp": vtx_grp, "count": count}
+    roles[name] = {
+        "mesh_regex": mesh_regex,
+        "vtx_grp": vtx_grp,
+        "count": count,
+        "weight": weight,
+    }
     _replace(path, document)
 
 
@@ -189,6 +194,7 @@ def update_mesh_role(
     *,
     mesh_regex: str | None = None,
     count: int | None = None,
+    weight: float | None = None,
     texture_maps: Sequence[str] | None = None,
 ) -> None:
     """Re-read the spec and rename and re-pattern one role, touching nothing else.
@@ -210,6 +216,7 @@ def update_mesh_role(
             ("vtx_grp", vtx_grp),
             ("mesh_regex", mesh_regex),
             ("count", count),
+            ("weight", weight),
             ("texture_maps", None if texture_maps is None else list(texture_maps)),
         )
         if value is not None
@@ -294,7 +301,7 @@ def _check_armature(armature: object) -> None:
 
 def _check_mesh_roles(roles: object) -> None:
     """Raise `ValueError` unless every role is an object with string patterns,
-    integer counts and string-list texture maps."""
+    integer counts, numeric weights and string-list texture maps."""
     if not (
         isinstance(roles, dict) and all(isinstance(r, dict) for r in roles.values())
     ):
@@ -306,6 +313,9 @@ def _check_mesh_roles(roles: object) -> None:
         count = role.get("count", 1)
         if not isinstance(count, int) or isinstance(count, bool):
             raise ValueError("A mesh role's `count` is not a whole number.")
+        weight = role.get("weight", 0.0)
+        if not isinstance(weight, (int, float)) or isinstance(weight, bool):
+            raise ValueError("A mesh role's `weight` is not a number.")
         maps = role.get("texture_maps", [])
         if not (isinstance(maps, list) and all(isinstance(m, str) for m in maps)):
             raise ValueError("A mesh role's `texture_maps` is not a list of strings.")

@@ -1,16 +1,4 @@
-"""The mesh roles form — add mesh role after mesh role, or open one.
-
-The role list shows read-only, with a cursor. `a` adds: type the role's name,
-then check the required bones its vertex group covers, type the regex naming
-its meshes and how many it must match; **Add** writes the inferred `vtx_grp`,
-the `mesh_regex` and the `count` and returns to an empty name for the next one.
-A role without a `mesh_regex` or `count` is marked in the list. Enter on a
-role pushes `MeshRoleFormScreen`, where that one role's fields are edited; on
-return the cursor follows the role's current name. `x` asks Yes/No, then
-deletes only the highlighted role; nothing else names a role, so there is
-nothing to warn about. The rules live in
-`specs.mesh_roles`; this screen only sequences them.
-"""
+"""The mesh roles form — add mesh role after mesh role, or open one."""
 
 from __future__ import annotations
 
@@ -111,6 +99,9 @@ class MeshRolesFormScreen(Screen):
                     role_count = Input(id="role-count")
                     role_count.border_title = "Count"
                     yield role_count
+                    role_weight = Input(id="role-weight")
+                    role_weight.border_title = "Weight"
+                    yield role_weight
                     yield Button("Add", id="confirm-role", variant="primary")
             yield FieldList(
                 "Mesh roles", _EMPTY, cursor=True, id="role-list", classes="field-list"
@@ -246,6 +237,7 @@ class MeshRolesFormScreen(Screen):
     @on(Button.Pressed, "#confirm-role")
     @on(Input.Submitted, "#role-regex")
     @on(Input.Submitted, "#role-count")
+    @on(Input.Submitted, "#role-weight")
     def _on_confirm(self) -> None:
         self._status("")
         name = self._name
@@ -267,8 +259,15 @@ class MeshRolesFormScreen(Screen):
             self._status(str(error))
             role_count.focus()
             return
+        role_weight = self.query_one("#role-weight", Input)
         try:
-            store.add_mesh_role(self.path, name, pattern, regex, count)
+            weight = mesh_roles.parse_weight(role_weight.value.strip())
+        except ValueError as error:
+            self._status(str(error))
+            role_weight.focus()
+            return
+        try:
+            store.add_mesh_role(self.path, name, pattern, regex, count, weight)
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
             return
@@ -342,6 +341,7 @@ class MeshRolesFormScreen(Screen):
         self.query_one("#role-preview", Static).update("")
         self.query_one("#role-regex", Input).value = ""
         self.query_one("#role-count", Input).value = ""
+        self.query_one("#role-weight", Input).value = ""
         self.query_one("#role-bones-question").display = False
 
     def _show_roles(self) -> None:
@@ -363,6 +363,12 @@ class MeshRolesFormScreen(Screen):
             if "count" not in role:
                 marked.add(len(lines))
             lines.append((f"count: {role.get('count', 'not set')}", 1))
+            if "weight" in role:
+                weight = mesh_roles.format_weight(role["weight"])
+            else:
+                marked.add(len(lines))
+                weight = "not set"
+            lines.append((f"weight: {weight}", 1))
             maps = role.get("texture_maps")
             lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 1))
         role_list = self.query_one("#role-list", FieldList)

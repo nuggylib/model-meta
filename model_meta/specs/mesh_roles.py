@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection, Mapping, Sequence
+from decimal import Decimal
 
 from model_meta.specs import bones, parenting, schema
 
@@ -53,6 +54,23 @@ def parse_count(text: str) -> int:
     if count < 1:
         raise ValueError("The count must be at least 1.")
     return count
+
+
+def parse_weight(text: str) -> float:
+    """The `weight` that `text` names, else `ValueError`. Pass it trimmed."""
+    if not text:
+        raise ValueError("Enter a weight.")
+    if not re.fullmatch(r"[0-9]+\.?[0-9]*|\.[0-9]+", text):
+        raise ValueError("The weight must be a decimal number.")
+    weight = float(text)
+    if not 0 <= weight <= 1:
+        raise ValueError("The weight must be between 0 and 1.")
+    return weight
+
+
+def format_weight(value: float) -> str:
+    # str() would give "1e-07", which parse_weight rejects on an unchanged re-save.
+    return format(Decimal(repr(value)), "f")
 
 
 def texture_choices(current: Sequence[str]) -> list[str]:

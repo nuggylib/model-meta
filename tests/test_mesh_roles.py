@@ -70,6 +70,51 @@ def test_parse_count_rejects(text, message):
         mesh_roles.parse_count(text)
 
 
+# --- parse_weight / format_weight -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "weight"),
+    [("0", 0.0), ("1", 1.0), ("0.5", 0.5), (".5", 0.5), ("1.", 1.0), ("00.5", 0.5)],
+)
+def test_parse_weight_accepts_decimals_from_0_to_1(text, weight):
+    assert mesh_roles.parse_weight(text) == weight
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("", "Enter a weight."),
+        ("1.5", "The weight must be between 0 and 1."),
+        ("1.0001", "The weight must be between 0 and 1."),
+        ("-0", "The weight must be a decimal number."),
+        ("+0.5", "The weight must be a decimal number."),
+        ("1e-1", "The weight must be a decimal number."),
+        ("nan", "The weight must be a decimal number."),
+        ("inf", "The weight must be a decimal number."),
+        ("1_0", "The weight must be a decimal number."),
+        ("０.５", "The weight must be a decimal number."),
+        ("half", "The weight must be a decimal number."),
+    ],
+)
+def test_parse_weight_rejects(text, message):
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        mesh_roles.parse_weight(text)
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [(1.0, "1.0"), (0.0, "0.0"), (0.25, "0.25"), (1e-07, "0.0000001"), (1, "1")],
+)
+def test_format_weight_never_uses_an_exponent(value, text):
+    assert mesh_roles.format_weight(value) == text
+
+
+@pytest.mark.parametrize("weight", [0.0, 1.0, 0.1, 1e-07, 0.12345678901234568])
+def test_format_weight_round_trips_through_parse_weight(weight):
+    assert mesh_roles.parse_weight(mesh_roles.format_weight(weight)) == weight
+
+
 # --- texture_choices / order_texture_maps --------------------------------
 
 
