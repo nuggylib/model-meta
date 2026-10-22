@@ -371,6 +371,9 @@ class MeshRolesFormScreen(Screen):
             lines.append((f"weight: {weight}", 1))
             maps = role.get("texture_maps")
             lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 1))
+            if slots := role.get("material_slots"):
+                slots_text = mesh_roles.format_material_slots(slots)
+                lines.append((f"material_slots: {slots_text}", 1))
         role_list = self.query_one("#role-list", FieldList)
         role_list.lines = tuple(lines)
         role_list.marked = frozenset(marked)

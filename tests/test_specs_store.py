@@ -457,6 +457,28 @@ def test_read_accepts_any_string_texture_maps_and_a_role_without_them(tmp_path):
     assert store.mesh_roles(store.read(path)) == document["mesh_roles"]
 
 
+@pytest.mark.parametrize("slots", ["paint", [1], None])
+def test_read_rejects_material_slots_that_are_not_a_string_list(tmp_path, slots):
+    document = schema.skeleton("vehicle")
+    document["mesh_roles"] = {"body": {"material_slots": slots}}
+    path = _write(tmp_path, "vehicle", document)
+
+    with pytest.raises(ValueError, match="`material_slots` is not a list of strings"):
+        store.read(path)
+
+
+def test_read_accepts_string_material_slots_empty_ones_and_none(tmp_path):
+    document = schema.skeleton("vehicle")
+    document["mesh_roles"] = {
+        "body": {"material_slots": ["paint"]},
+        "wheel": {"material_slots": []},
+        "glass": {},
+    }
+    path = _write(tmp_path, "vehicle", document)
+
+    assert store.mesh_roles(store.read(path)) == document["mesh_roles"]
+
+
 # --- update_armature -------------------------------------------------------
 
 
@@ -778,6 +800,45 @@ def test_update_mesh_role_writes_the_texture_maps_alone(tmp_path):
     document["mesh_roles"]["glass"] = {"texture_maps": []}
     assert after == document
     assert list(after["mesh_roles"]) == ["body", "wheel", "glass"]
+
+
+def test_update_mesh_role_writes_the_material_slots_alone(tmp_path):
+    path, document = _three_roles(tmp_path)
+    store.update_mesh_role(path, "wheel", "wheel", material_slots=("paint", "trim"))
+    store.update_mesh_role(path, "glass", "glass", material_slots=["tint"])
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    document["mesh_roles"]["wheel"]["material_slots"] = ["paint", "trim"]
+    document["mesh_roles"]["glass"] = {"material_slots": ["tint"]}
+    assert after == document
+    assert list(after["mesh_roles"]) == ["body", "wheel", "glass"]
+
+
+def test_update_mesh_role_empty_material_slots_removes_the_key(tmp_path):
+    path, document = _three_roles(tmp_path)
+    store.update_mesh_role(path, "wheel", "wheel", material_slots=["paint"])
+    store.update_mesh_role(path, "wheel", "wheel", material_slots=[])
+    store.update_mesh_role(path, "body", "body", material_slots=[])
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert after == document
+    assert list(after["mesh_roles"]) == ["body", "wheel", "glass"]
+
+
+def test_update_mesh_role_other_edits_keep_the_material_slots(tmp_path):
+    path, _ = _three_roles(tmp_path)
+    store.update_mesh_role(path, "wheel", "wheel", material_slots=["paint"])
+    store.update_mesh_role(path, "wheel", "tire")
+    store.update_mesh_role(path, "tire", "tire", "wheel.front", count=2)
+    store.update_mesh_role(path, "tire", "tire", texture_maps=[])
+
+    assert store.mesh_roles(store.read(path))["tire"] == {
+        "vtx_grp": "wheel.front",
+        "weight": 1.0,
+        "material_slots": ["paint"],
+        "count": 2,
+        "texture_maps": [],
+    }
 
 
 def test_update_mesh_role_other_edits_keep_the_texture_maps(tmp_path):

@@ -208,6 +208,35 @@ async def test_lists_each_roles_texture_maps(tmp_path, monkeypatch):
         assert _marked(app) == []
 
 
+async def test_lists_material_slots_only_when_set(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "glass", "body", "^g$", 1, 1.0)
+    specs_store.update_mesh_role(path, "body", "body", material_slots=["paint", "trim"])
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["mesh_roles"]["glass"]["material_slots"] = []
+    path.write_text(json.dumps(document), encoding="utf-8")
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test() as pilot:
+        await _open(pilot, app, path)
+        assert _lines(app) == [
+            "body",
+            "mesh_regex: ^m$",
+            "vtx_grp: body",
+            "count: 1",
+            "weight: 1.0",
+            "texture_maps: none",
+            "material_slots: paint, trim",
+            "glass",
+            "mesh_regex: ^g$",
+            "vtx_grp: body",
+            "count: 1",
+            "weight: 1.0",
+            "texture_maps: none",
+        ]
+        assert _marked(app) == []
+
+
 async def test_no_required_bones_opens_nothing(tmp_path, monkeypatch):
     path = _spec(tmp_path, bones=[])
     app = _app(tmp_path, monkeypatch)

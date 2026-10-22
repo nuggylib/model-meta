@@ -917,6 +917,158 @@ async def test_texture_maps_on_a_role_removed_by_hand(tmp_path, monkeypatch):
         assert list(_roles(path)) == ["body"]
 
 
+# --- material_slots --------------------------------------------------------
+
+ROLE = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 2, "weight": 1.0}
+
+
+async def test_unset_material_slots_are_hidden(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {**ROLE, "material_slots": []})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert not any("material_slots" in line for line in _lines(app, "role-fields"))
+        assert _marked(app) == []
+
+
+async def test_set_material_slots_follow_texture_maps(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {"x": 1, **ROLE, "material_slots": ["paint", "trim"]})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        assert _lines(app, "role-fields")[-3:] == [
+            "texture_maps: none",
+            "material_slots: paint, trim",
+            "x: 1",
+        ]
+        assert _marked(app) == []
+
+        await _select(pilot, app, "role-fields", 5)
+        editor = app.screen.query_one("#material-slots", Input)
+        assert editor.display
+        assert editor.value == "paint, trim"
+
+
+async def test_m_adds_material_slots_to_an_unset_role(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", ROLE)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await pilot.press("m")
+        await pilot.pause()
+        editor = app.screen.query_one("#material-slots", Input)
+        assert editor.display
+        assert editor.value == ""
+        assert _focused_id(app) == "material-slots"
+
+        await pilot.press("m")  # typed, not the binding
+        await pilot.pause()
+        assert editor.value == "m"
+
+        editor.value = " paint ,trim, Paint "
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert _roles(path)["wheel"] == {
+            **ROLE,
+            "material_slots": ["paint", "trim", "Paint"],
+        }
+        assert not editor.display
+        assert _status(app) == "Mesh role 'wheel' saved."
+        assert "material_slots: paint, trim, Paint" in _lines(app, "role-fields")
+        assert _focused_id(app) == "role-fields"
+        assert app.screen.query_one("#role-fields").highlighted == 5
+
+
+async def test_saving_blank_material_slots_removes_them(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {**ROLE, "material_slots": ["paint"], "x": 1})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await pilot.press("m")
+        await pilot.pause()
+        editor = app.screen.query_one("#material-slots", Input)
+        assert editor.value == "paint"
+        editor.value = "  "
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert _roles(path)["wheel"] == {**ROLE, "x": 1}
+        assert not any("material_slots" in line for line in _lines(app, "role-fields"))
+        assert app.screen.query_one("#role-fields").highlighted == 4
+
+
+async def test_bad_material_slots_are_rejected(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    _set_role(path, "wheel", {**ROLE, "material_slots": ["a", "a"]})
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        before = path.read_bytes()
+        await pilot.press("m")
+        await pilot.pause()
+        editor = app.screen.query_one("#material-slots", Input)
+        assert editor.value == "a, a"
+
+        cases = [
+            ("a, a", "'a' is listed twice."),
+            ("a,,b", "A material slot name is blank."),
+            ("a,", "A material slot name is blank."),
+        ]
+        for text, message in cases:
+            editor.value = text
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert _status(app) == message
+            assert editor.display
+            assert editor.value == text
+        assert path.read_bytes() == before
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not editor.display
+        assert _focused_id(app) == "role-fields"
+        assert path.read_bytes() == before
+
+
+async def test_m_closes_another_editor(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await _select(pilot, app, "role-fields", 4)
+        assert app.screen.query_one("#texture-maps-editor").display
+        await pilot.press("m")
+        await pilot.pause()
+        assert not app.screen.query_one("#texture-maps-editor").display
+        assert app.screen.query_one("#material-slots").display
+
+
+async def test_material_slots_on_a_role_removed_by_hand(tmp_path, monkeypatch):
+    path = _spec(tmp_path)
+    app = _app(tmp_path, monkeypatch)
+    async with app.run_test(size=(100, 40)) as pilot:
+        await _open(pilot, app, path, "wheel")
+        await pilot.press("m")
+        await pilot.pause()
+        document = json.loads(path.read_text(encoding="utf-8"))
+        del document["mesh_roles"]["wheel"]
+        path.write_text(json.dumps(document), encoding="utf-8")
+
+        app.screen.query_one("#material-slots", Input).value = "paint"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert _status(app) == (
+            "Could not write the spec: 'wheel' is no longer a mesh role."
+        )
+        assert list(_roles(path)) == ["body"]
+
+
 async def test_q_does_not_quit(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     app = _app(tmp_path, monkeypatch)

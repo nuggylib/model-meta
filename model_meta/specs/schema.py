@@ -11,7 +11,7 @@ The document has four top-level sections:
   bone-name segment inverses (`.front` ↔ `.rear`), and a parent-pattern →
   child-patterns map using `{n}` placeholders (see `parenting.py`).
 - `mesh_roles` — role name → `mesh_regex`, `vtx_grp`, `count`, `texture_maps`,
-  `weight`.
+  `weight`, and an optional `material_slots`.
 - `modifiers` — which modifier types are required on skinned meshes, allowed
   anywhere, worth warning about, and outright failures.
 """

@@ -196,11 +196,13 @@ def update_mesh_role(
     count: int | None = None,
     weight: float | None = None,
     texture_maps: Sequence[str] | None = None,
+    material_slots: Sequence[str] | None = None,
 ) -> None:
     """Re-read the spec and rename and re-pattern one role, touching nothing else.
 
     The role keeps its position and its other fields; a field passed as `None`
-    keeps its value, or its lack of one. Raises
+    keeps its value, or its lack of one. An empty `material_slots` removes the
+    key. Raises
     `ValueError` if `name` is gone or `new_name` is another role, or like
     `read`, or `OSError` on write.
     """
@@ -218,13 +220,15 @@ def update_mesh_role(
             ("count", count),
             ("weight", weight),
             ("texture_maps", None if texture_maps is None else list(texture_maps)),
+            ("material_slots", list(material_slots) if material_slots else None),
         )
         if value is not None
     }
+    updated = {**roles[name], **changes}
+    if material_slots is not None and not material_slots:
+        updated.pop("material_slots", None)
     document["mesh_roles"] = {
-        (new_name if key == name else key): (
-            {**role, **changes} if key == name else role
-        )
+        (new_name if key == name else key): (updated if key == name else role)
         for key, role in roles.items()
     }
     _replace(path, document)
@@ -301,7 +305,7 @@ def _check_armature(armature: object) -> None:
 
 def _check_mesh_roles(roles: object) -> None:
     """Raise `ValueError` unless every role is an object with string patterns,
-    integer counts, numeric weights and string-list texture maps."""
+    integer counts, numeric weights, and string-list texture maps and material slots."""
     if not (
         isinstance(roles, dict) and all(isinstance(r, dict) for r in roles.values())
     ):
@@ -316,9 +320,10 @@ def _check_mesh_roles(roles: object) -> None:
         weight = role.get("weight", 0.0)
         if not isinstance(weight, (int, float)) or isinstance(weight, bool):
             raise ValueError("A mesh role's `weight` is not a number.")
-        maps = role.get("texture_maps", [])
-        if not (isinstance(maps, list) and all(isinstance(m, str) for m in maps)):
-            raise ValueError("A mesh role's `texture_maps` is not a list of strings.")
+        for key in ("texture_maps", "material_slots"):
+            names = role.get(key, [])
+            if not (isinstance(names, list) and all(isinstance(n, str) for n in names)):
+                raise ValueError(f"A mesh role's `{key}` is not a list of strings.")
 
 
 def _replace(path: Path, document: dict) -> None:
