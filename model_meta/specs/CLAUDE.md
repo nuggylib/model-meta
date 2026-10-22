@@ -71,8 +71,8 @@ disk. **No Textual, no UI.**
   `mesh_roles()` default them for older specs). A role may lack `mesh_regex`,
   but one that holds a non-string is rejected; likewise `count`, which must be
   an `int` (never a `bool`) when present, `weight`, which must be an `int` or
-  `float` (never a `bool`) when present, and `texture_maps`, which must be a
-  list of strings (any names). `update_armature(path,
+  `float` (never a `bool`) when present, and `texture_maps` and
+  `material_slots`, which must be lists of strings (any names). `update_armature(path,
   add_bones=, set_inverses=, drop_inverses=, object_name=, add_parenting=)`
   re-reads, patches **only**
   those keys (bones deduped, drops before sets, `object_name=None` leaves the
