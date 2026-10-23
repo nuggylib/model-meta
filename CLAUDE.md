@@ -72,6 +72,12 @@ their length. Trim one only when you're already editing that code. Don't do stan
 2. Does it refer to something that isn't in the repo, like a conversation, plan, review, or ticket?
    If so, replace the comment with a link or reference to that source so there's a breadcrumb trail.
 
+#### Dict merges
+
+Merge dicts with unpacking (`{**a, **b}`), never `|` or `|=`. Unpacking also covers literal keys
+(`{**role, "count": 2}`), three or more sources, and non-`dict` mappings, so one form works
+everywhere. `|` and `|=` on sets are fine.
+
 ### Feature Development Practices
 
 Keep PRs as small as possible by ensuring each branch is purpose-built for a specific sub-task of a feature.

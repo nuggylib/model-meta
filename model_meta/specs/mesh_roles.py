@@ -73,6 +73,23 @@ def format_weight(value: float) -> str:
     return format(Decimal(repr(value)), "f")
 
 
+def parse_material_slots(text: str) -> list[str]:
+    """The slot names `text` lists, `[]` when blank, else `ValueError`. Pass it trimmed."""
+    if not text:
+        return []
+    slots = [name.strip() for name in text.split(",")]
+    if "" in slots:
+        raise ValueError("A material slot name is blank.")
+    for index, name in enumerate(slots):
+        if name in slots[:index]:
+            raise ValueError(f"'{name}' is listed twice.")
+    return slots
+
+
+def format_material_slots(slots: Sequence[str]) -> str:
+    return ", ".join(slots)
+
+
 def texture_choices(current: Sequence[str]) -> list[str]:
     """`TEXTURE_MAPS`, then `current`'s unknown names in first-seen order."""
     return list(dict.fromkeys([*schema.TEXTURE_MAPS, *current]))

@@ -115,6 +115,44 @@ def test_format_weight_round_trips_through_parse_weight(weight):
     assert mesh_roles.parse_weight(mesh_roles.format_weight(weight)) == weight
 
 
+# --- parse_material_slots / format_material_slots ---------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "slots"),
+    [
+        ("", []),
+        ("paint", ["paint"]),
+        (" paint , trim ", ["paint", "trim"]),
+        ("trim, paint", ["trim", "paint"]),
+        ("paint, Paint", ["paint", "Paint"]),
+    ],
+)
+def test_parse_material_slots_keeps_typed_order(text, slots):
+    assert mesh_roles.parse_material_slots(text) == slots
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("a,,b", "A material slot name is blank."),
+        ("a,", "A material slot name is blank."),
+        (",a", "A material slot name is blank."),
+        (",", "A material slot name is blank."),
+        ("a, b, a", "'a' is listed twice."),
+    ],
+)
+def test_parse_material_slots_rejects(text, message):
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        mesh_roles.parse_material_slots(text)
+
+
+@pytest.mark.parametrize("slots", [["paint"], ["paint", "trim", "glass"]])
+def test_format_material_slots_round_trips(slots):
+    text = mesh_roles.format_material_slots(slots)
+    assert mesh_roles.parse_material_slots(text) == slots
+
+
 # --- texture_choices / order_texture_maps --------------------------------
 
 

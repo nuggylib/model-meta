@@ -172,7 +172,8 @@ in the app (analogous to a route in a web app).
 - `mesh_roles_form.py` — `MeshRolesFormScreen(path)`, the form for adding
   mesh roles and opening one. Read-only `#role-list` (a `FieldList` with
   `cursor=True`: each role, its `mesh_regex`, `vtx_grp`, `count`, `weight`
-  and `texture_maps` indented; `texture_maps: none` is never marked). With no `required_bones`
+  and `texture_maps` indented, then `material_slots` only when non-empty;
+  `texture_maps: none` and `material_slots` are never marked). With no `required_bones`
   Add doesn't open, and `#role-status` says why.
   **Add** (`a`, or Enter on an empty list): Enter in `#role-name` validates
   the name and reveals `#role-bones-question` — a `#role-bones` checklist
@@ -222,6 +223,14 @@ in the app (analogous to a route in a web app).
   `#texture-maps-editor`, a checklist of `schema.TEXTURE_MAPS` plus any
   unknown names the role holds (pre-checked, labelled `(not a Godot map)`).
   **Save** writes the checked names alone, in `order_texture_maps` order.
+  `material_slots` is **optional and hidden until set**: listed after
+  `texture_maps` only when non-empty (absent and `[]` both hide it, and it is
+  never an "other" field), never marked. `m` (footer **Material slots**)
+  opens `#material-slots` from any focus but an Input, which takes `m` as
+  text; Enter on its row does too once set. It's a comma-separated Input
+  (`format_material_slots` prefill, `parse_material_slots` on Enter); saving
+  blank removes the key and drops the cursor to `texture_maps`. `_show` marks
+  only the required `_INPUTS`.
   Other fields say they can't be edited yet. One editor at a time;
   `escape` closes it unsaved, else leaves. Failures keep text and checks and
   write nothing. `q` shadowed.

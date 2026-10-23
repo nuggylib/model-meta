@@ -20,7 +20,12 @@ from model_meta.tui.widgets.field_list import FieldList
 
 _NO_BONES = "Add required bones first."
 _REQUIRED = ("mesh_regex", "vtx_grp", "count", "weight")
-_INPUTS = {"mesh_regex": "#mesh-regex", "count": "#count", "weight": "#weight"}
+_INPUTS = {
+    "mesh_regex": "#mesh-regex",
+    "count": "#count",
+    "weight": "#weight",
+    "material_slots": "#material-slots",
+}
 _LISTED = (*_REQUIRED, "texture_maps")
 
 
@@ -34,6 +39,7 @@ class MeshRoleFormScreen(Screen[str]):
 
     BINDINGS = [
         Binding("escape", "back", "Back"),
+        Binding("m", "material_slots", "Material slots"),
         Binding("q", "noop", show=False),
     ]
 
@@ -71,7 +77,15 @@ class MeshRoleFormScreen(Screen[str]):
         self.path = path
         self.role = name
         self._editing: (
-            Literal["name", "vtx_grp", "mesh_regex", "count", "weight", "texture_maps"]
+            Literal[
+                "name",
+                "vtx_grp",
+                "mesh_regex",
+                "count",
+                "weight",
+                "texture_maps",
+                "material_slots",
+            ]
             | None
         ) = None
         self._field_names: list[str] = []
@@ -98,6 +112,9 @@ class MeshRoleFormScreen(Screen[str]):
             weight = Input(id="weight", classes="editor")
             weight.border_title = "weight"
             yield weight
+            material_slots = Input(id="material-slots", classes="editor")
+            material_slots.border_title = "material_slots"
+            yield material_slots
             with Vertical(id="vtx-grp-editor", classes="editor"):
                 yield Static(
                     "", id="role-bones-label", classes="config-detail", markup=False
@@ -137,6 +154,13 @@ class MeshRoleFormScreen(Screen[str]):
 
     def action_noop(self) -> None:
         """Absorb `q` so the app's global quit can't fire from the form."""
+
+    def action_material_slots(self) -> None:
+        self._status("")
+        if self._editing == "material_slots":
+            self.query_one("#material-slots").focus()
+            return
+        self._edit_input("material_slots")
 
     # -- editors -----------------------------------------------------------
 
@@ -219,7 +243,9 @@ class MeshRoleFormScreen(Screen[str]):
         self.query_one("#texture-maps-editor").display = True
         checklist.focus()
 
-    def _edit_input(self, field: Literal["mesh_regex", "count", "weight"]) -> None:
+    def _edit_input(
+        self, field: Literal["mesh_regex", "count", "weight", "material_slots"]
+    ) -> None:
         document = self._read()
         if document is None:
             return
@@ -235,6 +261,8 @@ class MeshRoleFormScreen(Screen[str]):
             editor.value = ""
         elif field == "weight":
             editor.value = mesh_roles.format_weight(value)
+        elif field == "material_slots":
+            editor.value = mesh_roles.format_material_slots(value)
         else:
             editor.value = str(value)
         editor.display = True
@@ -317,9 +345,22 @@ class MeshRoleFormScreen(Screen[str]):
             return
         self._saved("weight")
 
+    @on(Input.Submitted, "#material-slots")
+    def _on_material_slots(self, event: Input.Submitted) -> None:
+        self._status("")
+        try:
+            slots = mesh_roles.parse_material_slots(event.value.strip())
+        except ValueError as error:
+            self._status(str(error))
+            return
+        if not self._write(self.role, material_slots=slots):
+            return
+        self._saved("material_slots" if slots else "texture_maps")
+
     @on(Input.Changed, "#mesh-regex")
     @on(Input.Changed, "#count")
     @on(Input.Changed, "#weight")
+    @on(Input.Changed, "#material-slots")
     def _on_input_changed(self) -> None:
         self._status("")
 
@@ -366,6 +407,7 @@ class MeshRoleFormScreen(Screen[str]):
         count: int | None = None,
         weight: float | None = None,
         texture_maps: Sequence[str] | None = None,
+        material_slots: Sequence[str] | None = None,
     ) -> bool:
         try:
             store.update_mesh_role(
@@ -377,6 +419,7 @@ class MeshRoleFormScreen(Screen[str]):
                 count=count,
                 weight=weight,
                 texture_maps=texture_maps,
+                material_slots=material_slots,
             )
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
@@ -435,7 +478,7 @@ class MeshRoleFormScreen(Screen[str]):
         self._field_names, lines = _field_lines(role, store.required_bones(document))
         fields.lines = tuple(lines)
         marked: set[int] = set()
-        for field in _INPUTS:
+        for field in _INPUTS.keys() & _REQUIRED:
             if role.get(field) in (None, ""):
                 start = lines.index((f"{field}: not set", 0))
                 marked |= {start, start + 1}
@@ -459,7 +502,9 @@ def _field_lines(
     role: dict, required: Sequence[str]
 ) -> tuple[list[str], list[tuple[str, int]]]:
     """`key: value` per field, any description beneath; required fields first."""
-    keys = [*_LISTED, *(key for key in role if key not in _LISTED)]
+    slots = ["material_slots"] if role.get("material_slots") else []
+    others = (key for key in role if key not in (*_LISTED, "material_slots"))
+    keys = [*_LISTED, *slots, *others]
     lines: list[tuple[str, int]] = []
     for key in keys:
         if key == "mesh_regex":
@@ -487,6 +532,9 @@ def _field_lines(
         elif key == "texture_maps":
             maps = role.get("texture_maps")
             lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 0))
+        elif key == "material_slots":
+            slots_text = mesh_roles.format_material_slots(role["material_slots"])
+            lines.append((f"material_slots: {slots_text}", 0))
         else:
             lines.append((f"{key}: {_value(role[key])}", 0))
     return keys, lines

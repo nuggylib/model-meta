@@ -52,7 +52,11 @@ disk. **No Textual, no UI.**
   only (no sign, exponent, `nan`/`inf`), 0 to 1 inclusive, else `ValueError`.
   `0` is a real weight, so a missing one is absent, never defaulted.
   `format_weight(value)`: never an exponent, so it round-trips through
-  `parse_weight`. `texture_choices(current)`: `TEXTURE_MAPS` and then
+  `parse_weight`. `parse_material_slots(text)`: the optional `material_slots`
+  (free-form names that become Godot groups for runtime recoloring) —
+  comma-separated, each trimmed, typed order kept, no blank or repeated name
+  (exact compare), blank → `[]`, else `ValueError`. `format_material_slots`
+  joins them back with `", "`. `texture_choices(current)`: `TEXTURE_MAPS` and then
   `current`'s unknown names, deduped. `order_texture_maps(checked, current)`:
   the checked names in that order (`SelectionList.selected` is click order).
 - `store.py` — the filesystem: `create(specs_dir, model_type)` writes a new
@@ -67,8 +71,8 @@ disk. **No Textual, no UI.**
   `mesh_roles()` default them for older specs). A role may lack `mesh_regex`,
   but one that holds a non-string is rejected; likewise `count`, which must be
   an `int` (never a `bool`) when present, `weight`, which must be an `int` or
-  `float` (never a `bool`) when present, and `texture_maps`, which must be a
-  list of strings (any names). `update_armature(path,
+  `float` (never a `bool`) when present, and `texture_maps` and
+  `material_slots`, which must be lists of strings (any names). `update_armature(path,
   add_bones=, set_inverses=, drop_inverses=, object_name=, add_parenting=)`
   re-reads, patches **only**
   those keys (bones deduped, drops before sets, `object_name=None` leaves the
@@ -79,11 +83,12 @@ disk. **No Textual, no UI.**
   `mesh_roles[name] = {"mesh_regex": …, "vtx_grp": …, "count": …, "weight": …}`
   the same way.
   `update_mesh_role(path, name, new_name, vtx_grp=None, *, mesh_regex=None,
-  count=None, weight=None, texture_maps=None)`
+  count=None, weight=None, texture_maps=None, material_slots=None)`
   re-reads, raises `ValueError` when `name` is gone or `new_name` is another
   role, and rewrites that one role in place — same position, other fields
   kept; a `None` field is kept as is (or left absent), so each editor writes
-  only its own field.
+  only its own field. An empty `material_slots` removes the key: `[]` is never
+  written for it.
   `delete_mesh_role(path, name)` re-reads, raises `ValueError` when `name` is
   gone, and removes that one role, keeping the others' order. Nothing else in
   a spec names a role, so nothing is stranded.
