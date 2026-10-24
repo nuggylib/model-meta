@@ -1,23 +1,15 @@
-"""Read and write the spec files in a specs directory.
-
-`create` writes a new spec and refuses to overwrite; `update_armature`,
-`rename_bone`, `delete_bone` and the mesh role writes patch an existing one
-with an atomic replace. `read`,
-`list_specs` and `count` are read-only and never create the directory — a fresh
-install has no empty `specs/` folder sitting in its config directory until the
-user makes a spec.
-"""
+"""Spec operations on disk; the file I/O and validation live in `core.spec_file`."""
 
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 
-from model_meta.specs import naming, parenting, schema
+from model_meta.core.spec_file import SpecFile
+from model_meta.specs import naming, parenting
 
 SPEC_GLOB = f"*{naming.SUFFIX}"
 
@@ -41,28 +33,14 @@ class SpecEntry:
 
 def create(specs_dir: Path, model_type: str) -> Path:
     """Write a new skeleton spec. Raises `FileExistsError` / `OSError`."""
-    specs_dir.mkdir(parents=True, exist_ok=True)
     path = specs_dir / f"{model_type}{naming.SUFFIX}"
-    # "x" is O_EXCL: the collision check and the create are one atomic step, so
-    # two creates racing can never clobber. Deliberately *not* the temp-file +
-    # os.replace dance `config/store.py` uses — a replace would overwrite the
-    # existing file, defeating exactly the guarantee we want here. A crash
-    # mid-write can only leave a malformed *new* file, which `list_specs`
-    # already reports as UNREADABLE.
-    with path.open("x", encoding="utf-8") as f:
-        json.dump(schema.skeleton(model_type), f, indent=2)
-        f.write("\n")
+    SpecFile(path).create()
     return path
 
 
 def read(path: Path) -> dict:
     """One spec document. Raises `OSError`, or `ValueError` for a malformed one."""
-    document = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(document, dict):
-        raise ValueError("The spec is not a JSON object.")
-    _check_armature(document.get("armature", {}))
-    _check_mesh_roles(document.get("mesh_roles", {}))
-    return document
+    return SpecFile(path).read()
 
 
 def required_bones(document: dict) -> list[str]:
@@ -106,23 +84,22 @@ def update_armature(
     `object_name` is left alone when `None`. Raises like `read`, or
     `OSError` on write.
     """
-    document = read(path)
-    armature = document.setdefault("armature", {})
-    if object_name is not None:
-        armature["object_name"] = object_name
-    bones = armature.setdefault("required_bones", [])
-    for bone in add_bones:
-        if bone not in bones:
-            bones.append(bone)
-    inverses = armature.setdefault("bone_name_inverses", {})
-    for segment in drop_inverses:
-        inverses.pop(segment, None)
-    inverses.update(set_inverses or {})
-    if add_parenting:
-        armature["parenting"] = parenting.merge(
-            armature.get("parenting", {}), add_parenting
-        )
-    _replace(path, document)
+    with SpecFile(path).edit() as document:
+        armature = document.setdefault("armature", {})
+        if object_name is not None:
+            armature["object_name"] = object_name
+        bones = armature.setdefault("required_bones", [])
+        for bone in add_bones:
+            if bone not in bones:
+                bones.append(bone)
+        inverses = armature.setdefault("bone_name_inverses", {})
+        for segment in drop_inverses:
+            inverses.pop(segment, None)
+        inverses.update(set_inverses or {})
+        if add_parenting:
+            armature["parenting"] = parenting.merge(
+                armature.get("parenting", {}), add_parenting
+            )
 
 
 def rename_bone(
@@ -138,16 +115,15 @@ def rename_bone(
     `name` is gone or `new_name` is another required bone, or like `read`, or
     `OSError` on write.
     """
-    document = read(path)
-    bones = required_bones(document)
-    if name not in bones:
-        raise ValueError(f"'{name}' is no longer a required bone.")
-    if new_name != name and new_name in bones:
-        raise ValueError(f"'{new_name}' is already required.")
-    armature = document["armature"]
-    armature["required_bones"] = [new_name if b == name else b for b in bones]
-    armature.setdefault("bone_name_inverses", {}).update(set_inverses or {})
-    _replace(path, document)
+    with SpecFile(path).edit() as document:
+        bones = required_bones(document)
+        if name not in bones:
+            raise ValueError(f"'{name}' is no longer a required bone.")
+        if new_name != name and new_name in bones:
+            raise ValueError(f"'{new_name}' is already required.")
+        armature = document["armature"]
+        armature["required_bones"] = [new_name if b == name else b for b in bones]
+        armature.setdefault("bone_name_inverses", {}).update(set_inverses or {})
 
 
 def delete_bone(path: Path, name: str) -> None:
@@ -157,12 +133,11 @@ def delete_bone(path: Path, name: str) -> None:
     matching it. Raises `ValueError` if `name` is gone, or like `read`, or
     `OSError` on write.
     """
-    document = read(path)
-    bones = required_bones(document)
-    if name not in bones:
-        raise ValueError(f"'{name}' is no longer a required bone.")
-    document["armature"]["required_bones"] = [b for b in bones if b != name]
-    _replace(path, document)
+    with SpecFile(path).edit() as document:
+        bones = required_bones(document)
+        if name not in bones:
+            raise ValueError(f"'{name}' is no longer a required bone.")
+        document["armature"]["required_bones"] = [b for b in bones if b != name]
 
 
 def add_mesh_role(
@@ -173,17 +148,16 @@ def add_mesh_role(
     Raises `ValueError` if `name` is already a role, or like `read`, or
     `OSError` on write.
     """
-    document = read(path)
-    roles = document.setdefault("mesh_roles", {})
-    if name in roles:
-        raise ValueError(f"'{name}' is already a mesh role.")
-    roles[name] = {
-        "mesh_regex": mesh_regex,
-        "vtx_grp": vtx_grp,
-        "count": count,
-        "weight": weight,
-    }
-    _replace(path, document)
+    with SpecFile(path).edit() as document:
+        roles = document.setdefault("mesh_roles", {})
+        if name in roles:
+            raise ValueError(f"'{name}' is already a mesh role.")
+        roles[name] = {
+            "mesh_regex": mesh_regex,
+            "vtx_grp": vtx_grp,
+            "count": count,
+            "weight": weight,
+        }
 
 
 def update_mesh_role(
@@ -206,32 +180,31 @@ def update_mesh_role(
     `ValueError` if `name` is gone or `new_name` is another role, or like
     `read`, or `OSError` on write.
     """
-    document = read(path)
-    roles = mesh_roles(document)
-    if name not in roles:
-        raise ValueError(f"'{name}' is no longer a mesh role.")
-    if new_name != name and new_name in roles:
-        raise ValueError(f"'{new_name}' is already a mesh role.")
-    changes = {
-        key: value
-        for key, value in (
-            ("vtx_grp", vtx_grp),
-            ("mesh_regex", mesh_regex),
-            ("count", count),
-            ("weight", weight),
-            ("texture_maps", None if texture_maps is None else list(texture_maps)),
-            ("material_slots", list(material_slots) if material_slots else None),
-        )
-        if value is not None
-    }
-    updated = {**roles[name], **changes}
-    if material_slots is not None and not material_slots:
-        updated.pop("material_slots", None)
-    document["mesh_roles"] = {
-        (new_name if key == name else key): (updated if key == name else role)
-        for key, role in roles.items()
-    }
-    _replace(path, document)
+    with SpecFile(path).edit() as document:
+        roles = mesh_roles(document)
+        if name not in roles:
+            raise ValueError(f"'{name}' is no longer a mesh role.")
+        if new_name != name and new_name in roles:
+            raise ValueError(f"'{new_name}' is already a mesh role.")
+        changes = {
+            key: value
+            for key, value in (
+                ("vtx_grp", vtx_grp),
+                ("mesh_regex", mesh_regex),
+                ("count", count),
+                ("weight", weight),
+                ("texture_maps", None if texture_maps is None else list(texture_maps)),
+                ("material_slots", list(material_slots) if material_slots else None),
+            )
+            if value is not None
+        }
+        updated = {**roles[name], **changes}
+        if material_slots is not None and not material_slots:
+            updated.pop("material_slots", None)
+        document["mesh_roles"] = {
+            (new_name if key == name else key): (updated if key == name else role)
+            for key, role in roles.items()
+        }
 
 
 def delete_mesh_role(path: Path, name: str) -> None:
@@ -240,12 +213,13 @@ def delete_mesh_role(path: Path, name: str) -> None:
     Raises `ValueError` if `name` is gone, or like `read`, or `OSError` on
     write.
     """
-    document = read(path)
-    roles = mesh_roles(document)
-    if name not in roles:
-        raise ValueError(f"'{name}' is no longer a mesh role.")
-    document["mesh_roles"] = {key: role for key, role in roles.items() if key != name}
-    _replace(path, document)
+    with SpecFile(path).edit() as document:
+        roles = mesh_roles(document)
+        if name not in roles:
+            raise ValueError(f"'{name}' is no longer a mesh role.")
+        document["mesh_roles"] = {
+            key: role for key, role in roles.items() if key != name
+        }
 
 
 def list_specs(specs_dir: Path) -> list[SpecEntry]:
@@ -275,68 +249,6 @@ def _spec_paths(specs_dir: Path) -> list[Path]:
     except OSError:
         return []
     return sorted(paths, key=lambda path: path.stem)
-
-
-def _check_armature(armature: object) -> None:
-    """Raise `ValueError` unless the armature keys this module reads are well-formed."""
-    if not isinstance(armature, dict):
-        raise ValueError("`armature` is not an object.")
-    if not isinstance(armature.get("object_name", ""), str):
-        raise ValueError("`armature.object_name` is not a string.")
-    bones = armature.get("required_bones", [])
-    if not (isinstance(bones, list) and all(isinstance(b, str) for b in bones)):
-        raise ValueError("`armature.required_bones` is not a list of strings.")
-    inverses = armature.get("bone_name_inverses", {})
-    if not (
-        isinstance(inverses, dict)
-        and all(isinstance(v, str) for v in inverses.values())
-    ):
-        raise ValueError("`armature.bone_name_inverses` is not a string map.")
-    entries = armature.get("parenting", {})
-    if not (
-        isinstance(entries, dict)
-        and all(
-            isinstance(v, list) and all(isinstance(p, str) for p in v)
-            for v in entries.values()
-        )
-    ):
-        raise ValueError("`armature.parenting` is not a map of string lists.")
-
-
-def _check_mesh_roles(roles: object) -> None:
-    """Raise `ValueError` unless every role is an object with string patterns,
-    integer counts, numeric weights, and string-list texture maps and material slots."""
-    if not (
-        isinstance(roles, dict) and all(isinstance(r, dict) for r in roles.values())
-    ):
-        raise ValueError("`mesh_roles` is not a map of objects.")
-    for key in ("vtx_grp", "mesh_regex"):
-        if not all(isinstance(r.get(key, ""), str) for r in roles.values()):
-            raise ValueError(f"A mesh role's `{key}` is not a string.")
-    for role in roles.values():
-        count = role.get("count", 1)
-        if not isinstance(count, int) or isinstance(count, bool):
-            raise ValueError("A mesh role's `count` is not a whole number.")
-        weight = role.get("weight", 0.0)
-        if not isinstance(weight, (int, float)) or isinstance(weight, bool):
-            raise ValueError("A mesh role's `weight` is not a number.")
-        for key in ("texture_maps", "material_slots"):
-            names = role.get(key, [])
-            if not (isinstance(names, list) and all(isinstance(n, str) for n in names)):
-                raise ValueError(f"A mesh role's `{key}` is not a list of strings.")
-
-
-def _replace(path: Path, document: dict) -> None:
-    """Write via a sibling temp file + `os.replace`; no `.tmp` survives a failure."""
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    try:
-        with tmp.open("w", encoding="utf-8") as f:
-            json.dump(document, f, indent=2)
-            f.write("\n")
-        os.replace(tmp, path)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
 
 
 def _read(path: Path) -> SpecEntry:
