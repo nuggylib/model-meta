@@ -54,6 +54,9 @@ resolved canary/dev string there before freezing a binary; it never exists in a
 normal checkout. Do not commit or hand-edit it.
 
 ## Subpackages (categories)
+- `core/` — core app business logic shared across categories: `JsonFile`, the
+  validated, atomically-written JSON document base, and `SpecFile`, the spec
+  document built on it. No Textual, no UI.
 - `tui/` — Textual screens (`tui/screens/`) and the reusable widgets they are
   assembled from (`tui/widgets/`).
 - `config/` — persistence: the on-disk config first-time setup writes and every

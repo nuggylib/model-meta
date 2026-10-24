@@ -101,16 +101,21 @@ disk. **No Textual, no UI.**
   rewritten; callers find the ones it stranded with `unmatched_keys` /
   `unmatched_roles`.
 
-## Updates replace atomically; `create` uses O_EXCL
-`update_armature`, `rename_bone`, `delete_bone`, `add_mesh_role`, `update_mesh_role` and `delete_mesh_role` write a sibling `.tmp` and `os.replace`
-it, like `config/store.py`: replacing *is* the point of an update, and a crash never
-leaves a half-written spec. `create` deliberately does not: a replace would
-*overwrite* the existing file, defeating
-the one guarantee this function exists to make. `open(path, "x")` makes "reject
-if it exists" the filesystem's job and closes the TOCTOU window an `exists()`
-check would leave open. The cost is that a crash mid-write can leave a
-truncated **new** file — which `list_specs` already reports as `UNREADABLE`
-with a fix step, a visible and fixable state rather than silent corruption.
+## I/O and validation live in `core/spec_file.py`
+`store.py` holds no file mechanics and no document checks. `read` and `create`
+call `SpecFile(path).read()` / `.create()`, and every mutator wraps its body in
+`with SpecFile(path).edit() as document:`. `SpecFile` (a `core.json_file.JsonFile`)
+owns the spec validators and runs them on every read **and** write, so a mutator
+that produces a malformed spec raises `ValueError` and writes nothing.
+
+Updates replace atomically (sibling `.tmp` + `os.replace`): replacing *is* the
+point of an update, and a crash never leaves a half-written spec. `create`
+deliberately does not: a replace would *overwrite* the existing file, defeating
+the one guarantee it exists to make. `open(path, "x")` makes "reject if it
+exists" the filesystem's job and closes the TOCTOU window an `exists()` check
+would leave open. The cost is that a crash mid-write can leave a truncated
+**new** file — which `list_specs` already reports as `UNREADABLE` with a fix
+step, a visible and fixable state rather than silent corruption.
 
 `list_specs` and `count` are read-only and **never create the directory**; only
 `create` does, lazily, so a fresh install has no empty `specs/` folder sitting
