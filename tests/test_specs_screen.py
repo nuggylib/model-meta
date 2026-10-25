@@ -7,7 +7,9 @@ behavior is unit-tested in ``test_specs_store.py``; these tests exercise the
 wiring (worker → rows → fix steps) and the navigation.
 """
 
+import asyncio
 import json
+import time
 
 from textual.widgets import Button, Input, Static
 
@@ -585,9 +587,6 @@ async def test_specs_screen_quit_still_works(tmp_path, monkeypatch):
 
 async def test_specs_screen_survives_being_closed_mid_load(tmp_path, monkeypatch):
     """Popping the screen while the worker is in flight must not crash it."""
-    import asyncio
-    import time
-
     app = _app(tmp_path, monkeypatch, specs=("vehicle",))
 
     def slow_list(specs_dir):

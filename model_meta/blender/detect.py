@@ -121,6 +121,7 @@ def probe_version(exe: str | Path, timeout: float = 10.0) -> ProbeResult:
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,
         )
     except FileNotFoundError:
         return ProbeResult(ProbeOutcome.NOT_FOUND, message="No file at that path.")
@@ -137,8 +138,8 @@ def probe_version(exe: str | Path, timeout: float = 10.0) -> ProbeResult:
     if proc.returncode == 0:
         # Blender prints `Blender X.Y.Z` as a line; scan for it rather than
         # trusting line 0, so a leading banner can't be mistaken for the version.
-        for line in proc.stdout.splitlines():
-            line = line.strip()
+        for raw_line in proc.stdout.splitlines():
+            line = raw_line.strip()
             if line.startswith("Blender "):
                 return ProbeResult(
                     ProbeOutcome.OK, version=line.removeprefix("Blender").strip()

@@ -43,6 +43,24 @@ async def _wait_for(pilot, predicate, tries=100):
     return False
 
 
+def _patch_wizard_probes(monkeypatch):
+    monkeypatch.setattr(
+        detect,
+        "probe_version",
+        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
+    )
+    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+
+
+async def _advance_to_models_step(pilot, wizard):
+    # press(), not pilot.click: a second quick click on the same button is
+    # swallowed by its 0.2s `-active` guard.
+    wizard.query_one("#blender-path", Input).value = "/fake/blender"
+    wizard.query_one("#next", Button).press()
+    switcher = wizard.query_one(ContentSwitcher)
+    return await _wait_for(pilot, lambda: switcher.current == "step-models")
+
+
 def _listed_models(wizard):
     """The directory shown on each row of step 2's list, in displayed order."""
     return [
@@ -130,12 +148,7 @@ async def test_absent_config_shows_wizard(tmp_path):
 async def test_first_run_completes_and_writes_config(tmp_path, monkeypatch):
     """Scenario 1 (part 2) — walking all 3 steps writes a valid config, then the
     dashboard shows. Blender probe and Godot scan are patched to pure functions."""
-    monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
-    )
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    _patch_wizard_probes(monkeypatch)
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -148,12 +161,7 @@ async def test_first_run_completes_and_writes_config(tmp_path, monkeypatch):
         wizard = app.screen
         switcher = wizard.query_one(ContentSwitcher)
 
-        # Button.press() (not pilot.click) is used to drive Next: clicking the
-        # same button twice in quick succession is swallowed by its 0.2s
-        # `-active` guard, whereas press() posts the message deterministically.
-        wizard.query_one("#blender-path", Input).value = "/fake/blender"
-        wizard.query_one("#next", Button).press()
-        assert await _wait_for(pilot, lambda: switcher.current == "step-models")
+        assert await _advance_to_models_step(pilot, wizard)
 
         assert await _add_models_dir(pilot, wizard, models)
         wizard.query_one("#next", Button).press()
@@ -173,12 +181,7 @@ async def test_first_run_completes_and_writes_config(tmp_path, monkeypatch):
 async def test_missing_models_dir_offers_creation(tmp_path, monkeypatch):
     """Step 2 — Adding a missing directory reveals a Create button that makes it
     and adds it to the list."""
-    monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
-    )
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    _patch_wizard_probes(monkeypatch)
     new_models = tmp_path / "does-not-exist-yet"
 
     app = ModelMetaApp(config_path=tmp_path / "config.toml")
@@ -188,9 +191,7 @@ async def test_missing_models_dir_offers_creation(tmp_path, monkeypatch):
         switcher = wizard.query_one(ContentSwitcher)
         create_button = wizard.query_one("#create-models", Button)
 
-        wizard.query_one("#blender-path", Input).value = "/fake/blender"
-        wizard.query_one("#next", Button).press()
-        assert await _wait_for(pilot, lambda: switcher.current == "step-models")
+        assert await _advance_to_models_step(pilot, wizard)
 
         listing = wizard.query_one("#models-list", ListView)
         assert "hidden" in create_button.classes  # not offered until we try
@@ -213,12 +214,7 @@ async def test_models_step_add_dedup_remove_and_gating(tmp_path, monkeypatch):
     duplicates are a no-op, a file is rejected, Remove deletes the highlighted
     entry, Next is gated on the list — blocked both when it is empty and when
     text sits unadded — and finishing writes exactly the surviving entries."""
-    monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
-    )
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    _patch_wizard_probes(monkeypatch)
     vehicles = tmp_path / "vehicles"
     vehicles.mkdir()
     props = tmp_path / "props"
@@ -233,9 +229,7 @@ async def test_models_step_add_dedup_remove_and_gating(tmp_path, monkeypatch):
         wizard = app.screen
         switcher = wizard.query_one(ContentSwitcher)
 
-        wizard.query_one("#blender-path", Input).value = "/fake/blender"
-        wizard.query_one("#next", Button).press()
-        assert await _wait_for(pilot, lambda: switcher.current == "step-models")
+        assert await _advance_to_models_step(pilot, wizard)
 
         models_input = wizard.query_one("#models-dir", Input)
         listing = wizard.query_one("#models-list", ListView)
@@ -293,11 +287,7 @@ async def test_models_step_add_dedup_remove_and_gating(tmp_path, monkeypatch):
 
 async def test_removing_last_models_dir_blocks_next(tmp_path, monkeypatch):
     """Removing the last entry returns step 2 to its empty-gated state."""
-    monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
-    )
+    _patch_wizard_probes(monkeypatch)
     models = tmp_path / "models"
     models.mkdir()
 
@@ -307,9 +297,7 @@ async def test_removing_last_models_dir_blocks_next(tmp_path, monkeypatch):
         wizard = app.screen
         switcher = wizard.query_one(ContentSwitcher)
 
-        wizard.query_one("#blender-path", Input).value = "/fake/blender"
-        wizard.query_one("#next", Button).press()
-        assert await _wait_for(pilot, lambda: switcher.current == "step-models")
+        assert await _advance_to_models_step(pilot, wizard)
 
         listing = wizard.query_one("#models-list", ListView)
         assert await _add_models_dir(pilot, wizard, models)
@@ -460,12 +448,7 @@ async def test_setup_flag_with_absent_config_exits_on_cancel(tmp_path):
 async def test_save_failure_still_shows_dashboard(tmp_path, monkeypatch):
     """A `store.save` OSError on the completion path is surfaced, not fatal: the
     dashboard still shows so the worker never dies mid-transition."""
-    monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
-    )
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    _patch_wizard_probes(monkeypatch)
 
     def _boom(path, settings):
         raise OSError("disk full")
@@ -483,9 +466,7 @@ async def test_save_failure_still_shows_dashboard(tmp_path, monkeypatch):
         wizard = app.screen
         switcher = wizard.query_one(ContentSwitcher)
 
-        wizard.query_one("#blender-path", Input).value = "/fake/blender"
-        wizard.query_one("#next", Button).press()
-        assert await _wait_for(pilot, lambda: switcher.current == "step-models")
+        assert await _advance_to_models_step(pilot, wizard)
 
         assert await _add_models_dir(pilot, wizard, models)
         wizard.query_one("#next", Button).press()

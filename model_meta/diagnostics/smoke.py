@@ -9,23 +9,23 @@ uploading anything.
 
 import asyncio
 
+from textual.app import App
+
 # The smoke test's own budget. A mount-and-teardown is near-instant; this only
 # guards against a wedged event loop in a frozen binary, so it belongs to the
 # check rather than to the app.
 _CHECK_TIMEOUT_SECONDS = 30
 
 
-async def run_headless_check(timeout_seconds: float = _CHECK_TIMEOUT_SECONDS) -> None:
-    """Mount the app headlessly and tear it down, raising if it fails to launch.
+async def run_headless_check(
+    app: App, timeout_seconds: float = _CHECK_TIMEOUT_SECONDS
+) -> None:
+    """Mount `app` headlessly and tear it down, raising if it fails to launch.
 
     Kept as an importable coroutine (not reachable only via ``main()``) so tests
     can await it directly under ``asyncio_mode = "auto"`` without nesting
-    ``asyncio.run()``. Imports the app lazily to avoid an import cycle with
-    ``app.main``, which dispatches ``--check`` here.
+    ``asyncio.run()``.
     """
-    from model_meta.app import ModelMetaApp
-
-    app = ModelMetaApp()
     async with asyncio.timeout(timeout_seconds):
         async with app.run_test(size=(80, 24)):
             pass

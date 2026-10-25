@@ -6,6 +6,8 @@ its filesystem behavior is unit-tested in ``test_models_discovery.py``; these
 tests exercise the wiring (worker → four states → rows) and the navigation.
 """
 
+import asyncio
+import time
 from pathlib import Path
 
 from textual.widgets import Static
@@ -450,15 +452,11 @@ async def test_models_screen_survives_being_closed_mid_scan(tmp_path, monkeypatc
 
     The scan is made slow on purpose so `escape` lands before it returns.
     """
-    import asyncio
-
     vehicles = tmp_path / "vehicles"
     vehicles.mkdir()
     app = _app(tmp_path, monkeypatch, [vehicles])
 
     def slow_scan(directory, max_depth=4):
-        import time
-
         time.sleep(0.2)
         return [Path(directory) / "sedan.blend"]
 

@@ -49,7 +49,10 @@ def load(path: Path) -> tuple[str, Settings | None]:
         return ABSENT, None
     except (tomllib.TOMLDecodeError, OSError):
         return CORRUPT, None
+    return _classify(path, raw)
 
+
+def _classify(path: Path, raw: dict) -> tuple[str, Settings | None]:
     if not _shared_keys_present(raw):
         return CORRUPT, None
 

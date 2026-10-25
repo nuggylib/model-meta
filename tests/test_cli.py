@@ -7,7 +7,7 @@ import pytest
 
 import model_meta
 import model_meta.app
-from model_meta.app import main
+from model_meta.app import ModelMetaApp, main
 from model_meta.diagnostics import run_headless_check
 
 
@@ -24,7 +24,7 @@ async def test_check_mounts_headlessly_and_succeeds():
     # Awaited directly (not via main()'s asyncio.run) so it composes with the
     # loop pytest-asyncio already provides. Regression guard for the app.tcss
     # bundling fix: a stylesheet or hidden-import failure raises here.
-    await run_headless_check()
+    await run_headless_check(ModelMetaApp())
 
 
 @pytest.fixture(autouse=True)
@@ -77,9 +77,9 @@ def test_launch_migrates_legacy_config_dir_first(monkeypatch, _no_legacy_migrati
 
 
 def test_check_skips_legacy_migration(monkeypatch, _no_legacy_migration):
-    async def _noop():
+    async def _noop(app):
         return None
 
-    monkeypatch.setattr("model_meta.diagnostics.run_headless_check", _noop)
+    monkeypatch.setattr("model_meta.app.run_headless_check", _noop)
     main(["--check"])
     assert _no_legacy_migration == []

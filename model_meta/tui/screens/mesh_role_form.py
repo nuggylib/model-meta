@@ -494,34 +494,67 @@ def _field_lines(
     keys = [*_LISTED, *slots, *role.extra]
     lines: list[tuple[str, int]] = []
     for key in keys:
-        if key == "mesh_regex":
-            lines.append((f"mesh_regex: {role.mesh_regex or 'not set'}", 0))
-            if not role.mesh_regex:
-                lines.append(("required: the meshes in this role", 1))
-        elif key == "vtx_grp":
-            lines.append((f"vtx_grp: {role.vtx_grp or 'not set'}", 0))
-            if role.vtx_grp:
-                lines.append((_matches(role.vtx_grp, required), 1))
-        elif key == "count":
-            count = role.count
-            lines.append((f"count: {'not set' if count is None else count}", 0))
-            if count is None:
-                lines.append(("required: how many meshes mesh_regex matches", 1))
-        elif key == "weight":
-            if role.weight is None:
-                lines.append(("weight: not set", 0))
-                lines.append(("required: the weight its meshes carry on vtx_grp", 1))
-            else:
-                lines.append((f"weight: {mesh_roles.format_weight(role.weight)}", 0))
-        elif key == "texture_maps":
-            maps = role.texture_maps
-            lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 0))
-        elif key == "material_slots":
-            slots_text = mesh_roles.format_material_slots(role.material_slots)
-            lines.append((f"material_slots: {slots_text}", 0))
-        else:
+        render = _FIELD_RENDERERS.get(key)
+        if render is None:
             lines.append((f"{key}: {_value(role.extra[key])}", 0))
+        else:
+            lines.extend(render(role, required))
     return keys, lines
+
+
+def _mesh_regex_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
+    lines = [(f"mesh_regex: {role.mesh_regex or 'not set'}", 0)]
+    if not role.mesh_regex:
+        lines.append(("required: the meshes in this role", 1))
+    return lines
+
+
+def _vtx_grp_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
+    lines = [(f"vtx_grp: {role.vtx_grp or 'not set'}", 0)]
+    if role.vtx_grp:
+        lines.append((_matches(role.vtx_grp, required), 1))
+    return lines
+
+
+def _count_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
+    count = role.count
+    lines = [(f"count: {'not set' if count is None else count}", 0)]
+    if count is None:
+        lines.append(("required: how many meshes mesh_regex matches", 1))
+    return lines
+
+
+def _weight_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
+    if role.weight is None:
+        return [
+            ("weight: not set", 0),
+            ("required: the weight its meshes carry on vtx_grp", 1),
+        ]
+    return [(f"weight: {mesh_roles.format_weight(role.weight)}", 0)]
+
+
+def _texture_maps_lines(
+    role: MeshRole, required: Sequence[str]
+) -> list[tuple[str, int]]:
+    maps = role.texture_maps
+    return [(f"texture_maps: {', '.join(maps) if maps else 'none'}", 0)]
+
+
+def _material_slots_lines(
+    role: MeshRole, required: Sequence[str]
+) -> list[tuple[str, int]]:
+    slots_text = mesh_roles.format_material_slots(role.material_slots)
+    return [(f"material_slots: {slots_text}", 0)]
+
+
+_FIELD_RENDERERS = {
+    "mesh_regex": _mesh_regex_lines,
+    "vtx_grp": _vtx_grp_lines,
+    "count": _count_lines,
+    "weight": _weight_lines,
+    "texture_maps": _texture_maps_lines,
+    "material_slots": _material_slots_lines,
+}
 
 
 def _matches(pattern: str, required: Sequence[str]) -> str:
