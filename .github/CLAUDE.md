@@ -4,9 +4,11 @@ GitHub-specific configuration for the repository.
 
 ## Contents
 
-- `workflows/lint_and_test.yml` — Continuous integration ("Lint & Test" workflow). Runs the `ruff` lint/format gate and the
-  `pytest` suite on every push to `main` and every pull request, using the project's `uv`
-  toolchain via `astral-sh/setup-uv`.
+- `workflows/ruff_pylint.yml` — "ruff-pylint" workflow. Runs `ruff format --check` and
+  `ruff check` (including ruff's `PL` pylint rules) on every push to `main` and every pull request,
+  using the project's `uv` toolchain via `astral-sh/setup-uv`.
+- `workflows/test.yml` — "Test" workflow. Runs the `pytest` suite on the same triggers, separate
+  from linting so each reports its own status check.
 - `workflows/build.yml` — "Build" workflow. Builds a standalone binary for three targets
   (`macos-14`/arm64, `ubuntu-latest`, `windows-latest`) on every PR and every
   push to `main`. macOS is **Apple Silicon only** — the Intel runner (`macos-13`) is a deprecated,
@@ -69,8 +71,8 @@ GitHub-specific configuration for the repository.
 - **`build.yml` pins every action to a full 40-char commit SHA** with a trailing `# vX.Y.Z`
   comment (a version *tag* is mutable — a compromised action re-tag would then run in CI).
   This is the stronger form of the pinning rule above; prefer it for new workflows and let a
-  Dependabot bump move the SHA. (`lint_and_test.yml`/`qa_signoff.yml` still pin by tag — a safe
-  follow-up is to migrate them to SHAs too.)
+  Dependabot bump move the SHA. (`qa_signoff.yml` still pins by tag — a safe follow-up is to
+  migrate it to SHAs too.)
 - **Artifact naming.** `build.yml` uploads canary artifacts on PRs
   (`model-meta-canary-pr<N>-<shortsha>-<target>`, 14-day retention, so a longer review keeps a
   live link) and stable release-named artifacts on pushes to `main` (`release-<target>`, 1-day

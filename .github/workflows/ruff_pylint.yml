@@ -1,4 +1,4 @@
-name: Lint & Test
+name: ruff-pylint
 
 on:
   push:
@@ -6,21 +6,21 @@ on:
   pull_request:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ruff-pylint-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  lint-and-test:
+  ruff-pylint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
 
@@ -30,10 +30,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --dev
 
-      - name: Lint & format check
-        run: |
-          uv run ruff format --check .
-          uv run ruff check .
+      - name: Format check
+        run: uv run ruff format --check .
 
-      - name: Run tests
-        run: uv run pytest
+      - name: Lint
+        run: uv run ruff check .
