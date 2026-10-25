@@ -7,9 +7,11 @@ from textual.widgets import Input, SelectionList, Static
 from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
+from model_meta.core.spec import MeshRole
 from model_meta.godot import discovery
 from model_meta.specs import schema
 from model_meta.specs import store as specs_store
+from model_meta.specs.store import ArmaturePatch
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.mesh_role_form import MeshRoleFormScreen
 
@@ -44,10 +46,14 @@ def _app(tmp_path, monkeypatch):
 def _spec(tmp_path, bones=BONES):
     path = specs_store.create(tmp_path / "specs", "vehicle")
     if bones:
-        specs_store.update_armature(path, add_bones=bones)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
-    specs_store.add_mesh_role(path, "wheel", "wheel.{1}", "^m$", 1, 1.0)
+        specs_store.update_armature(path, ArmaturePatch(add_bones=bones))
+    specs_store.add_mesh_role(path, "body", _role("body"))
+    specs_store.add_mesh_role(path, "wheel", _role("wheel.{1}"))
     return path
+
+
+def _role(vtx_grp):
+    return MeshRole(vtx_grp=vtx_grp, mesh_regex="^m$", count=1, weight=1.0)
 
 
 def _set_role(path, name, role):
@@ -673,7 +679,7 @@ async def test_a_zero_weight_is_set_not_missing(tmp_path, monkeypatch):
 
 
 async def test_weight_editor_prefills_and_saves_it_alone(tmp_path, monkeypatch):
-    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "weight": 1e-07, "count": 2}
+    role = {"mesh_regex": "^w", "vtx_grp": "wheel.{1}", "count": 2, "weight": 1e-07}
     path = _spec(tmp_path)
     _set_role(path, "wheel", role)
     app = _app(tmp_path, monkeypatch)
@@ -1081,7 +1087,7 @@ async def test_q_does_not_quit(tmp_path, monkeypatch):
 
 async def test_markup_looking_text_renders_literally(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "arm[L]", "arm[L]", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "arm[L]", _role("arm[L]"))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path, "arm[L]")

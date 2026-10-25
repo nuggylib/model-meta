@@ -7,8 +7,10 @@ from textual.widgets import Input, SelectionList, Static
 from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
+from model_meta.core.spec import MeshRole
 from model_meta.godot import discovery
 from model_meta.specs import store as specs_store
+from model_meta.specs.store import ArmaturePatch
 from model_meta.tui.screens.armature_form import ArmatureFormScreen
 from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.dashboard import DashboardScreen
@@ -121,7 +123,7 @@ async def test_form_lists_every_bone_already_in_the_spec(tmp_path, monkeypatch):
     """The full list lives here — the detail page only shows a count."""
     path = _spec(tmp_path)
     bones = [f"bone{i}" for i in range(40)]
-    specs_store.update_armature(path, add_bones=bones)
+    specs_store.update_armature(path, ArmaturePatch(add_bones=bones))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(80, 24)) as pilot:
         await _open(pilot, app, path)
@@ -138,7 +140,7 @@ def _name_view(app):
 
 async def test_armature_name_is_read_only_and_one_shift_tab_away(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.update_armature(path, object_name="Rig")
+    specs_store.update_armature(path, ArmaturePatch(object_name="Rig"))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open(pilot, app, path)
@@ -165,7 +167,7 @@ async def test_unset_armature_name_reads_not_set(tmp_path, monkeypatch):
 
 async def test_armature_name_is_saved_on_enter_and_closes(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.update_armature(path, add_bones=["body"])
+    specs_store.update_armature(path, ArmaturePatch(add_bones=["body"]))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open(pilot, app, path)
@@ -182,7 +184,7 @@ async def test_armature_name_is_saved_on_enter_and_closes(tmp_path, monkeypatch)
 
 async def test_blank_armature_name_clears_it(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.update_armature(path, object_name="Rig")
+    specs_store.update_armature(path, ArmaturePatch(object_name="Rig"))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open(pilot, app, path)
@@ -213,7 +215,7 @@ async def test_over_long_armature_name_is_rejected(tmp_path, monkeypatch):
 
 async def test_escape_closes_the_name_editor_unsaved_then_leaves(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.update_armature(path, object_name="Rig")
+    specs_store.update_armature(path, ArmaturePatch(object_name="Rig"))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open(pilot, app, path)
@@ -368,7 +370,7 @@ async def test_blank_inverse_is_saved_as_a_self_mapping(tmp_path, monkeypatch):
 
 async def test_checklist_skipped_when_every_variant_is_required(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.update_armature(path, add_bones=["arm.R"])
+    specs_store.update_armature(path, ArmaturePatch(add_bones=["arm.R"]))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(80, 40)) as pilot:
         await _open(pilot, app, path)
@@ -438,7 +440,10 @@ async def test_escape_semantics(tmp_path, monkeypatch):
 async def test_failures_keep_text_and_write_nothing(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     specs_store.update_armature(
-        path, add_bones=["body"], set_inverses={".top": ".bottom", ".bottom": ".top"}
+        path,
+        ArmaturePatch(
+            add_bones=["body"], set_inverses={".top": ".bottom", ".bottom": ".top"}
+        ),
     )
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(80, 40)) as pilot:
@@ -511,7 +516,10 @@ RIG_INVERSES = {**FRONT_REAR, ".body": ".wheel", ".wheel": ".body"}
 def _rig(tmp_path, parenting=None):
     path = _spec(tmp_path)
     specs_store.update_armature(
-        path, add_bones=RIG, set_inverses=RIG_INVERSES, add_parenting=parenting
+        path,
+        ArmaturePatch(
+            add_bones=RIG, set_inverses=RIG_INVERSES, add_parenting=parenting
+        ),
     )
     return path
 
@@ -651,7 +659,8 @@ async def test_unpairable_child_is_reported_and_not_written(tmp_path, monkeypatc
 async def test_no_eligible_children_shows_a_status(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     specs_store.update_armature(
-        path, add_bones=["root", "body"], add_parenting={"root": ["body"]}
+        path,
+        ArmaturePatch(add_bones=["root", "body"], add_parenting={"root": ["body"]}),
     )
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
@@ -757,7 +766,7 @@ def _bindings(app):
 
 async def test_bone_list_cursor_moves_without_wrapping(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.update_armature(path, add_bones=["root", "body", "head"])
+    specs_store.update_armature(path, ArmaturePatch(add_bones=["root", "body", "head"]))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path)
@@ -801,10 +810,14 @@ async def test_a_adds_from_the_bone_list_only(tmp_path, monkeypatch):
 def _arms(tmp_path):
     path = _spec(tmp_path)
     specs_store.update_armature(
-        path, add_bones=["root", "arm.L", "arm.R"], add_parenting={"root": ["arm.{1}"]}
+        path,
+        ArmaturePatch(
+            add_bones=["root", "arm.L", "arm.R"], add_parenting={"root": ["arm.{1}"]}
+        ),
     )
-    specs_store.add_mesh_role(path, "arm", "arm.{1}", "^m$", 1, 1.0)
-    specs_store.add_mesh_role(path, "base", "root", "^m$", 1, 1.0)
+    role = {"mesh_regex": "^m$", "count": 1, "weight": 1.0}
+    specs_store.add_mesh_role(path, "arm", MeshRole(vtx_grp="arm.{1}", **role))
+    specs_store.add_mesh_role(path, "base", MeshRole(vtx_grp="root", **role))
     return path
 
 
@@ -1076,7 +1089,7 @@ async def _delete(pilot, app, index, *keys):
 
 async def test_x_deletes_from_a_non_empty_bone_list_only(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.update_armature(path, add_bones=["root"])
+    specs_store.update_armature(path, ArmaturePatch(add_bones=["root"]))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path)
@@ -1193,7 +1206,8 @@ async def test_deleting_a_parent_marks_its_key(tmp_path, monkeypatch):
 async def test_deleting_with_one_reference_says_it(tmp_path, monkeypatch):
     path = _spec(tmp_path)
     specs_store.update_armature(
-        path, add_bones=["root", "spine"], add_parenting={"root": ["spine"]}
+        path,
+        ArmaturePatch(add_bones=["root", "spine"], add_parenting={"root": ["spine"]}),
     )
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:

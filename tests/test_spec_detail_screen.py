@@ -15,15 +15,19 @@ from textual.widgets import Static
 from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
+from model_meta.core.spec import MeshRole
 from model_meta.godot import discovery
 from model_meta.specs import schema
 from model_meta.specs import store as specs_store
+from model_meta.specs.store import ArmaturePatch
 from model_meta.tui.screens.armature_form import ArmatureFormScreen
 from model_meta.tui.screens.edit_data_modal import EditDataModal
 from model_meta.tui.screens.mesh_roles_form import MeshRolesFormScreen
 from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.screens.specs import SpecsScreen
 from model_meta.tui.widgets.spec_row import SpecRow
+
+_BODY_ROLE = MeshRole(vtx_grp="body", mesh_regex="^m$", count=1, weight=1.0)
 
 
 def _text(widget):
@@ -217,7 +221,7 @@ async def test_spec_detail_summarizes_the_armature(tmp_path, monkeypatch):
     """A name and a count, never the bones themselves — those live on the form."""
     app = _app(tmp_path, monkeypatch, specs=("vehicle",))
     specs_store.update_armature(
-        tmp_path / "specs" / "vehicle.json", add_bones=["body", "arm[L]"]
+        tmp_path / "specs" / "vehicle.json", ArmaturePatch(add_bones=["body", "arm[L]"])
     )
     async with app.run_test() as pilot:
         await _open_spec(pilot, app)
@@ -328,8 +332,8 @@ async def test_armature_name_set_on_the_form_shows_on_return(tmp_path, monkeypat
 async def test_spec_detail_lists_the_mesh_role_names(tmp_path, monkeypatch):
     app = _app(tmp_path, monkeypatch, specs=("vehicle",))
     spec = tmp_path / "specs" / "vehicle.json"
-    specs_store.add_mesh_role(spec, "body", "body", "^m$", 1, 1.0)
-    specs_store.add_mesh_role(spec, "arm[L]", "body", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(spec, "body", _BODY_ROLE)
+    specs_store.add_mesh_role(spec, "arm[L]", _BODY_ROLE)
     async with app.run_test() as pilot:
         await _open_spec(pilot, app)
         assert await _wait_for(
@@ -345,7 +349,7 @@ async def test_spec_detail_wraps_mesh_roles_into_columns_of_ten(tmp_path, monkey
     spec = tmp_path / "specs" / "vehicle.json"
     names = [f"role{i:02}" for i in range(23)]
     for name in names:
-        specs_store.add_mesh_role(spec, name, "body", "^m$", 1, 1.0)
+        specs_store.add_mesh_role(spec, name, _BODY_ROLE)
     numbered = [f"{n:>2}). {name}" for n, name in enumerate(names, start=1)]
     async with app.run_test() as pilot:
         await _open_spec(pilot, app)
@@ -372,7 +376,7 @@ async def test_edit_data_opens_the_mesh_roles_form_and_refreshes_on_return(
 ):
     app = _app(tmp_path, monkeypatch, specs=("vehicle",))
     spec = tmp_path / "specs" / "vehicle.json"
-    specs_store.update_armature(spec, add_bones=["body"])
+    specs_store.update_armature(spec, ArmaturePatch(add_bones=["body"]))
     async with app.run_test(size=(80, 40)) as pilot:
         await _open_spec(pilot, app)
         assert await _wait_for(pilot, lambda: _role_columns(app) == [])

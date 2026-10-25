@@ -6,10 +6,13 @@ and create/list behavior against a real directory.
 """
 
 import json
+from dataclasses import replace
 
 import pytest
 
+from model_meta.core.spec import MeshRole
 from model_meta.specs import naming, schema, store
+from model_meta.specs.store import ArmaturePatch
 
 SUSARM_REGEX = r"(?i)^sus\.?arm\.(?P<pos>front|rear)\.top\.(?P<side>[LR])$"
 
@@ -467,7 +470,7 @@ def test_read_rejects_material_slots_that_are_not_a_string_list(tmp_path, slots)
         store.read(path)
 
 
-def test_read_accepts_string_material_slots_empty_ones_and_none(tmp_path):
+def test_read_accepts_string_material_slots_and_drops_empty_ones(tmp_path):
     document = schema.skeleton("vehicle")
     document["mesh_roles"] = {
         "body": {"material_slots": ["paint"]},
@@ -476,7 +479,11 @@ def test_read_accepts_string_material_slots_empty_ones_and_none(tmp_path):
     }
     path = _write(tmp_path, "vehicle", document)
 
-    assert store.mesh_roles(store.read(path)) == document["mesh_roles"]
+    assert store.mesh_roles(store.read(path)) == {
+        "body": {"material_slots": ["paint"]},
+        "wheel": {},
+        "glass": {},
+    }
 
 
 # --- update_armature -------------------------------------------------------
@@ -489,7 +496,9 @@ def test_update_armature_preserves_every_other_key(tmp_path):
     document["hand_added"] = True
     path = _write(tmp_path, "vehicle", document)
 
-    store.update_armature(path, add_bones=["body"], set_inverses={".a": ".b"})
+    store.update_armature(
+        path, ArmaturePatch(add_bones=["body"], set_inverses={".a": ".b"})
+    )
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["armature"]["required_bones"] = ["body"]
@@ -499,19 +508,23 @@ def test_update_armature_preserves_every_other_key(tmp_path):
 
 def test_update_armature_appends_in_order_and_dedups(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.update_armature(path, add_bones=["body", "arm.L"])
-    store.update_armature(path, add_bones=["arm.L", "arm.R", "arm.R"])
+    store.update_armature(path, ArmaturePatch(add_bones=["body", "arm.L"]))
+    store.update_armature(path, ArmaturePatch(add_bones=["arm.L", "arm.R", "arm.R"]))
 
     assert store.required_bones(store.read(path)) == ["body", "arm.L", "arm.R"]
 
 
 def test_update_armature_drops_then_sets(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.update_armature(path, set_inverses={".front": ".rear", ".rear": ".front"})
+    store.update_armature(
+        path, ArmaturePatch(set_inverses={".front": ".rear", ".rear": ".front"})
+    )
     store.update_armature(
         path,
-        drop_inverses=[".front", ".rear"],
-        set_inverses={".front": ".back", ".back": ".front"},
+        ArmaturePatch(
+            drop_inverses=[".front", ".rear"],
+            set_inverses={".front": ".back", ".back": ".front"},
+        ),
     )
 
     assert store.bone_name_inverses(store.read(path)) == {
@@ -522,11 +535,11 @@ def test_update_armature_drops_then_sets(tmp_path):
 
 def test_update_armature_sets_and_clears_the_object_name(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.update_armature(path, add_bones=["body"], object_name="Rig")
-    store.update_armature(path, add_bones=["head"])
+    store.update_armature(path, ArmaturePatch(add_bones=["body"], object_name="Rig"))
+    store.update_armature(path, ArmaturePatch(add_bones=["head"]))
     assert store.armature_name(store.read(path)) == "Rig"
 
-    store.update_armature(path, object_name="")
+    store.update_armature(path, ArmaturePatch(object_name=""))
     document = store.read(path)
     assert store.armature_name(document) == ""
     assert store.required_bones(document) == ["body", "head"]
@@ -534,10 +547,11 @@ def test_update_armature_sets_and_clears_the_object_name(tmp_path):
 
 def test_update_armature_appends_parenting_and_preserves_other_keys(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.update_armature(path, add_bones=["root"], object_name="Rig")
-    store.update_armature(path, add_parenting={"root": ["axle.{1}.{2}"]})
+    store.update_armature(path, ArmaturePatch(add_bones=["root"], object_name="Rig"))
+    store.update_armature(path, ArmaturePatch(add_parenting={"root": ["axle.{1}.{2}"]}))
     store.update_armature(
-        path, add_parenting={"root": ["axle.{1}.{2}", "susarm.{1}.{2}.{3}"]}
+        path,
+        ArmaturePatch(add_parenting={"root": ["axle.{1}.{2}", "susarm.{1}.{2}.{3}"]}),
     )
 
     document = store.read(path)
@@ -550,17 +564,23 @@ def test_update_armature_appends_parenting_and_preserves_other_keys(tmp_path):
 
 def test_update_armature_adds_the_key_to_an_older_spec(tmp_path):
     path = _write(tmp_path, "vehicle", {"model_type": "vehicle"})
-    store.update_armature(path, add_bones=["body"])
+    store.update_armature(path, ArmaturePatch(add_bones=["body"]))
 
-    assert json.loads(path.read_text(encoding="utf-8"))["armature"] == {
-        "required_bones": ["body"],
-        "bone_name_inverses": {},
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "model_type": "vehicle",
+        "armature": {
+            "object_name": "",
+            "required_bones": ["body"],
+            "bone_name_inverses": {},
+            "parenting": {},
+        },
+        "mesh_roles": {},
     }
 
 
 def test_update_armature_leaves_no_tmp_behind(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.update_armature(path, add_bones=["body"])
+    store.update_armature(path, ArmaturePatch(add_bones=["body"]))
 
     assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]
 
@@ -570,7 +590,7 @@ def test_update_armature_refuses_a_malformed_spec_and_writes_nothing(tmp_path):
     before = path.read_bytes()
 
     with pytest.raises(ValueError):
-        store.update_armature(path, add_bones=["arm.L"])
+        store.update_armature(path, ArmaturePatch(add_bones=["arm.L"]))
 
     assert path.read_bytes() == before
 
@@ -578,12 +598,16 @@ def test_update_armature_refuses_a_malformed_spec_and_writes_nothing(tmp_path):
 # --- add_mesh_role ---------------------------------------------------------
 
 
+def _role(vtx_grp, mesh_regex, count=1, weight=1.0):
+    return MeshRole(vtx_grp=vtx_grp, mesh_regex=mesh_regex, count=count, weight=weight)
+
+
 def test_add_mesh_role_writes_the_role(tmp_path):
     path = store.create(tmp_path, "vehicle")
     store.add_mesh_role(
-        path, "susarm_upper", "susarm.{1}.top.{2}", SUSARM_REGEX, 4, 1.0
+        path, "susarm_upper", _role("susarm.{1}.top.{2}", SUSARM_REGEX, count=4)
     )
-    store.add_mesh_role(path, "body", "body", "^body$", 1, 0.0)
+    store.add_mesh_role(path, "body", _role("body", "^body$", weight=0.0))
 
     after = json.loads(path.read_text(encoding="utf-8"))["mesh_roles"]
     assert after == {
@@ -605,7 +629,7 @@ def test_add_mesh_role_preserves_every_other_key(tmp_path):
     document["hand_added"] = True
     path = _write(tmp_path, "vehicle", document)
 
-    store.add_mesh_role(path, "body", "body", "^body$", 1, 1.0)
+    store.add_mesh_role(path, "body", _role("body", "^body$"))
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["body"] = {
@@ -619,18 +643,18 @@ def test_add_mesh_role_preserves_every_other_key(tmp_path):
 
 def test_add_mesh_role_rejects_a_duplicate_and_writes_nothing(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.add_mesh_role(path, "body", "body", "^body$", 1, 1.0)
+    store.add_mesh_role(path, "body", _role("body", "^body$"))
     before = path.read_bytes()
 
     with pytest.raises(ValueError):
-        store.add_mesh_role(path, "body", "root", "^root$", 1, 1.0)
+        store.add_mesh_role(path, "body", _role("root", "^root$"))
 
     assert path.read_bytes() == before
 
 
 def test_add_mesh_role_adds_the_key_to_an_older_spec(tmp_path):
     path = _write(tmp_path, "vehicle", {"model_type": "vehicle"})
-    store.add_mesh_role(path, "body", "body", "^body$", 1, 1.0)
+    store.add_mesh_role(path, "body", _role("body", "^body$"))
 
     assert json.loads(path.read_text(encoding="utf-8"))["mesh_roles"] == {
         "body": {"mesh_regex": "^body$", "vtx_grp": "body", "count": 1, "weight": 1.0}
@@ -639,7 +663,7 @@ def test_add_mesh_role_adds_the_key_to_an_older_spec(tmp_path):
 
 def test_add_mesh_role_leaves_no_tmp_behind(tmp_path):
     path = store.create(tmp_path, "vehicle")
-    store.add_mesh_role(path, "body", "body", "^body$", 1, 1.0)
+    store.add_mesh_role(path, "body", _role("body", "^body$"))
 
     assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]
 
@@ -658,9 +682,26 @@ def _three_roles(tmp_path):
     return _write(tmp_path, "vehicle", document), document
 
 
+def _update(path, name, new_name, **changes):
+    store.update_mesh_role(path, name, new_name, lambda role: replace(role, **changes))
+
+
+def test_update_mesh_role_passes_the_role_as_just_read(tmp_path):
+    path, _ = _three_roles(tmp_path)
+    seen = []
+
+    def edit(role):
+        seen.append(role)
+        return role
+
+    store.update_mesh_role(path, "wheel", "wheel", edit)
+
+    assert seen == [MeshRole(vtx_grp="wheel.{1}", weight=1.0)]
+
+
 def test_update_mesh_role_replaces_the_vtx_grp_in_place(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", "wheel.front")
+    _update(path, "wheel", "wheel", vtx_grp="wheel.front")
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["wheel"]["vtx_grp"] = "wheel.front"
@@ -669,7 +710,7 @@ def test_update_mesh_role_replaces_the_vtx_grp_in_place(tmp_path):
 
 def test_update_mesh_role_renames_keeping_position_and_fields(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "tire", "wheel.{1}")
+    _update(path, "wheel", "tire", vtx_grp="wheel.{1}")
 
     after = json.loads(path.read_text(encoding="utf-8"))
     assert list(after["mesh_roles"]) == ["body", "tire", "glass"]
@@ -679,15 +720,15 @@ def test_update_mesh_role_renames_keeping_position_and_fields(tmp_path):
 
 def test_update_mesh_role_adds_a_vtx_grp_to_a_role_without_one(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "glass", "glass", "body")
+    _update(path, "glass", "glass", vtx_grp="body")
 
     assert store.mesh_roles(store.read(path))["glass"] == {"vtx_grp": "body"}
 
 
-def test_update_mesh_role_without_a_vtx_grp_only_renames(tmp_path):
+def test_update_mesh_role_without_changes_only_renames(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "tire")
-    store.update_mesh_role(path, "glass", "window")
+    _update(path, "wheel", "tire")
+    _update(path, "glass", "window")
 
     after = json.loads(path.read_text(encoding="utf-8"))
     assert after["mesh_roles"] == {
@@ -700,8 +741,8 @@ def test_update_mesh_role_without_a_vtx_grp_only_renames(tmp_path):
 
 def test_update_mesh_role_writes_the_mesh_regex_alone(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", mesh_regex="^wheel")
-    store.update_mesh_role(path, "glass", "glass", mesh_regex="^glass$")
+    _update(path, "wheel", "wheel", mesh_regex="^wheel")
+    _update(path, "glass", "glass", mesh_regex="^glass$")
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["wheel"]["mesh_regex"] = "^wheel"
@@ -712,9 +753,9 @@ def test_update_mesh_role_writes_the_mesh_regex_alone(tmp_path):
 
 def test_update_mesh_role_rename_and_re_pattern_keep_the_mesh_regex(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", mesh_regex="^wheel")
-    store.update_mesh_role(path, "wheel", "tire")
-    store.update_mesh_role(path, "tire", "tire", "wheel.front")
+    _update(path, "wheel", "wheel", mesh_regex="^wheel")
+    _update(path, "wheel", "tire")
+    _update(path, "tire", "tire", vtx_grp="wheel.front")
 
     assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
@@ -725,23 +766,23 @@ def test_update_mesh_role_rename_and_re_pattern_keep_the_mesh_regex(tmp_path):
 
 def test_update_mesh_role_writes_the_count_alone(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", count=4)
-    store.update_mesh_role(path, "glass", "glass", count=2)
+    _update(path, "wheel", "wheel", count=4)
+    _update(path, "glass", "glass", count=2)
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["wheel"]["count"] = 4
     document["mesh_roles"]["glass"] = {"count": 2}
     assert after == document
     assert list(after["mesh_roles"]) == ["body", "wheel", "glass"]
-    assert list(after["mesh_roles"]["wheel"]) == ["vtx_grp", "weight", "count"]
+    assert list(after["mesh_roles"]["wheel"]) == ["vtx_grp", "count", "weight"]
 
 
 def test_update_mesh_role_other_edits_keep_the_count(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", count=4)
-    store.update_mesh_role(path, "wheel", "tire")
-    store.update_mesh_role(path, "tire", "tire", "wheel.front")
-    store.update_mesh_role(path, "tire", "tire", mesh_regex="^wheel")
+    _update(path, "wheel", "wheel", count=4)
+    _update(path, "wheel", "tire")
+    _update(path, "tire", "tire", vtx_grp="wheel.front")
+    _update(path, "tire", "tire", mesh_regex="^wheel")
 
     assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
@@ -753,8 +794,8 @@ def test_update_mesh_role_other_edits_keep_the_count(tmp_path):
 
 def test_update_mesh_role_writes_the_weight_alone(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", weight=0.0)
-    store.update_mesh_role(path, "glass", "glass", weight=0.5)
+    _update(path, "wheel", "wheel", weight=0.0)
+    _update(path, "glass", "glass", weight=0.5)
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["wheel"]["weight"] = 0.0
@@ -765,7 +806,7 @@ def test_update_mesh_role_writes_the_weight_alone(tmp_path):
 
 def test_update_mesh_role_appends_a_weight_to_a_role_without_one(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "body", "body", weight=1.0)
+    _update(path, "body", "body", weight=1.0)
 
     assert store.mesh_roles(store.read(path))["body"] == {
         "vtx_grp": "body",
@@ -775,11 +816,11 @@ def test_update_mesh_role_appends_a_weight_to_a_role_without_one(tmp_path):
 
 def test_update_mesh_role_other_edits_keep_the_weight(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", weight=0.25)
-    store.update_mesh_role(path, "wheel", "tire")
-    store.update_mesh_role(path, "tire", "tire", "wheel.front", count=2)
-    store.update_mesh_role(path, "tire", "tire", mesh_regex="^wheel")
-    store.update_mesh_role(path, "tire", "tire", texture_maps=["orm"])
+    _update(path, "wheel", "wheel", weight=0.25)
+    _update(path, "wheel", "tire")
+    _update(path, "tire", "tire", vtx_grp="wheel.front", count=2)
+    _update(path, "tire", "tire", mesh_regex="^wheel")
+    _update(path, "tire", "tire", texture_maps=["orm"])
 
     assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
@@ -792,8 +833,8 @@ def test_update_mesh_role_other_edits_keep_the_weight(tmp_path):
 
 def test_update_mesh_role_writes_the_texture_maps_alone(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", texture_maps=("albedo", "normal"))
-    store.update_mesh_role(path, "glass", "glass", texture_maps=[])
+    _update(path, "wheel", "wheel", texture_maps=["albedo", "normal"])
+    _update(path, "glass", "glass", texture_maps=[])
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["wheel"]["texture_maps"] = ["albedo", "normal"]
@@ -804,8 +845,8 @@ def test_update_mesh_role_writes_the_texture_maps_alone(tmp_path):
 
 def test_update_mesh_role_writes_the_material_slots_alone(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", material_slots=("paint", "trim"))
-    store.update_mesh_role(path, "glass", "glass", material_slots=["tint"])
+    _update(path, "wheel", "wheel", material_slots=["paint", "trim"])
+    _update(path, "glass", "glass", material_slots=["tint"])
 
     after = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["wheel"]["material_slots"] = ["paint", "trim"]
@@ -816,9 +857,9 @@ def test_update_mesh_role_writes_the_material_slots_alone(tmp_path):
 
 def test_update_mesh_role_empty_material_slots_removes_the_key(tmp_path):
     path, document = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", material_slots=["paint"])
-    store.update_mesh_role(path, "wheel", "wheel", material_slots=[])
-    store.update_mesh_role(path, "body", "body", material_slots=[])
+    _update(path, "wheel", "wheel", material_slots=["paint"])
+    _update(path, "wheel", "wheel", material_slots=[])
+    _update(path, "body", "body", material_slots=[])
 
     after = json.loads(path.read_text(encoding="utf-8"))
     assert after == document
@@ -827,10 +868,10 @@ def test_update_mesh_role_empty_material_slots_removes_the_key(tmp_path):
 
 def test_update_mesh_role_other_edits_keep_the_material_slots(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", material_slots=["paint"])
-    store.update_mesh_role(path, "wheel", "tire")
-    store.update_mesh_role(path, "tire", "tire", "wheel.front", count=2)
-    store.update_mesh_role(path, "tire", "tire", texture_maps=[])
+    _update(path, "wheel", "wheel", material_slots=["paint"])
+    _update(path, "wheel", "tire")
+    _update(path, "tire", "tire", vtx_grp="wheel.front", count=2)
+    _update(path, "tire", "tire", texture_maps=[])
 
     assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
@@ -843,9 +884,9 @@ def test_update_mesh_role_other_edits_keep_the_material_slots(tmp_path):
 
 def test_update_mesh_role_other_edits_keep_the_texture_maps(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "wheel", "wheel", texture_maps=["orm"])
-    store.update_mesh_role(path, "wheel", "tire")
-    store.update_mesh_role(path, "tire", "tire", "wheel.front", count=2)
+    _update(path, "wheel", "wheel", texture_maps=["orm"])
+    _update(path, "wheel", "tire")
+    _update(path, "tire", "tire", vtx_grp="wheel.front", count=2)
 
     assert store.mesh_roles(store.read(path))["tire"] == {
         "vtx_grp": "wheel.front",
@@ -867,14 +908,24 @@ def test_update_mesh_role_rejects_and_writes_nothing(tmp_path, name, new_name, m
     before = path.read_bytes()
 
     with pytest.raises(ValueError, match=message):
-        store.update_mesh_role(path, name, new_name, "body")
+        _update(path, name, new_name, vtx_grp="body")
+
+    assert path.read_bytes() == before
+
+
+def test_update_mesh_role_refuses_a_mistyped_edit_and_writes_nothing(tmp_path):
+    path, _ = _three_roles(tmp_path)
+    before = path.read_bytes()
+
+    with pytest.raises(ValueError, match="`texture_maps` is not a list of strings"):
+        _update(path, "wheel", "wheel", texture_maps=("albedo",))
 
     assert path.read_bytes() == before
 
 
 def test_update_mesh_role_leaves_no_tmp_behind(tmp_path):
     path, _ = _three_roles(tmp_path)
-    store.update_mesh_role(path, "body", "hull", "body")
+    _update(path, "body", "hull", vtx_grp="body")
 
     assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]
 

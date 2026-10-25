@@ -1,14 +1,17 @@
 """Mesh roles form tests, pushed directly over a dashboard-booted app."""
 
 import json
+from dataclasses import replace
 
 from textual.widgets import Input, SelectionList, Static
 
 from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
+from model_meta.core.spec import MeshRole
 from model_meta.godot import discovery
 from model_meta.specs import store as specs_store
+from model_meta.specs.store import ArmaturePatch
 from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.mesh_role_form import MeshRoleFormScreen
@@ -46,8 +49,12 @@ def _app(tmp_path, monkeypatch):
 
 def _spec(tmp_path, bones=BONES):
     path = specs_store.create(tmp_path / "specs", "vehicle")
-    specs_store.update_armature(path, add_bones=bones)
+    specs_store.update_armature(path, ArmaturePatch(add_bones=bones))
     return path
+
+
+def _role(vtx_grp, mesh_regex="^m$"):
+    return MeshRole(vtx_grp=vtx_grp, mesh_regex=mesh_regex, count=1, weight=1.0)
 
 
 def _roles(path):
@@ -149,7 +156,7 @@ async def test_form_opens_read_only_on_the_role_list(tmp_path, monkeypatch):
 
 async def test_lists_existing_roles_with_their_vtx_grp(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "body", _role("body"))
     document = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["glass"] = {}
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -190,9 +197,12 @@ async def test_lists_existing_roles_with_their_vtx_grp(tmp_path, monkeypatch):
 
 async def test_lists_each_roles_texture_maps(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "body", _role("body"))
     specs_store.update_mesh_role(
-        path, "body", "body", texture_maps=["albedo", "albedo_tex"]
+        path,
+        "body",
+        "body",
+        lambda role: replace(role, texture_maps=["albedo", "albedo_tex"]),
     )
     app = _app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
@@ -210,9 +220,14 @@ async def test_lists_each_roles_texture_maps(tmp_path, monkeypatch):
 
 async def test_lists_material_slots_only_when_set(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
-    specs_store.add_mesh_role(path, "glass", "body", "^g$", 1, 1.0)
-    specs_store.update_mesh_role(path, "body", "body", material_slots=["paint", "trim"])
+    specs_store.add_mesh_role(path, "body", _role("body"))
+    specs_store.add_mesh_role(path, "glass", _role("body", "^g$"))
+    specs_store.update_mesh_role(
+        path,
+        "body",
+        "body",
+        lambda role: replace(role, material_slots=["paint", "trim"]),
+    )
     document = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["glass"]["material_slots"] = []
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -308,7 +323,7 @@ async def test_roles_are_added_one_after_another(tmp_path, monkeypatch):
 
 async def test_bad_role_names_are_rejected(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "body", _role("body"))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open(pilot, app, path)
@@ -495,7 +510,7 @@ async def test_role_taken_in_between_is_reported(tmp_path, monkeypatch):
         await _open(pilot, app, path)
         await _start_add(pilot)
         await _type(pilot, "body")
-        specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
+        specs_store.add_mesh_role(path, "body", _role("body"))
 
         await _check(pilot, app, "body")
         await _confirm(pilot, app)
@@ -597,8 +612,8 @@ async def test_clicking_the_list_opens_or_refocuses_the_editor(tmp_path, monkeyp
 
 def _with_roles(tmp_path, bones=BONES):
     path = _spec(tmp_path, bones)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
-    specs_store.add_mesh_role(path, "susarm", "susarm.front.top.{1}", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "body", _role("body"))
+    specs_store.add_mesh_role(path, "susarm", _role("susarm.front.top.{1}"))
     document = json.loads(path.read_text(encoding="utf-8"))
     document["mesh_roles"]["glass"] = {"weight": 1.0}
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -753,7 +768,7 @@ def _bindings(app):
 
 async def test_x_deletes_from_a_non_empty_role_list_only(tmp_path, monkeypatch):
     path = _spec(tmp_path)
-    specs_store.add_mesh_role(path, "body", "body", "^m$", 1, 1.0)
+    specs_store.add_mesh_role(path, "body", _role("body"))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:
         await _open(pilot, app, path)
@@ -808,7 +823,7 @@ async def test_no_and_escape_cancel_and_write_nothing(tmp_path, monkeypatch):
 
 async def test_yes_deletes_only_that_role(tmp_path, monkeypatch):
     path = _with_roles(tmp_path)
-    specs_store.update_armature(path, add_parenting={"body": ["arm[L]"]})
+    specs_store.update_armature(path, ArmaturePatch(add_parenting={"body": ["arm[L]"]}))
     before = json.loads(path.read_text(encoding="utf-8"))
     app = _app(tmp_path, monkeypatch)
     async with app.run_test(size=(100, 40)) as pilot:

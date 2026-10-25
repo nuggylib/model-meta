@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Collection, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
@@ -376,7 +377,7 @@ class MeshRoleFormScreen(Screen[str]):
         except ValueError as error:
             self._status(str(error))
             return
-        if pattern is None or not self._write(self.role, pattern):
+        if pattern is None or not self._write(self.role, vtx_grp=pattern):
             return
         self._saved("vtx_grp")
 
@@ -398,28 +399,14 @@ class MeshRoleFormScreen(Screen[str]):
         )
         self._status(f"Mesh role '{self.role}' saved.")
 
-    def _write(
-        self,
-        new_name: str,
-        vtx_grp: str | None = None,
-        *,
-        mesh_regex: str | None = None,
-        count: int | None = None,
-        weight: float | None = None,
-        texture_maps: Sequence[str] | None = None,
-        material_slots: Sequence[str] | None = None,
-    ) -> bool:
+    def _write(self, new_name: str, **changes: object) -> bool:
+        """`changes` are `MeshRole` fields; the others keep what was just read."""
         try:
             store.update_mesh_role(
                 self.path,
                 self.role,
                 new_name,
-                vtx_grp,
-                mesh_regex=mesh_regex,
-                count=count,
-                weight=weight,
-                texture_maps=texture_maps,
-                material_slots=material_slots,
+                lambda role: replace(role, **changes),
             )
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")

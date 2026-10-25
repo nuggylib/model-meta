@@ -656,7 +656,7 @@ class ArmatureFormScreen(Screen):
 
     def _write(self, **changes) -> bool:
         try:
-            store.update_armature(self.path, **changes)
+            store.update_armature(self.path, store.ArmaturePatch(**changes))
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
             return False
