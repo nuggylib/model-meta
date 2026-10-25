@@ -72,6 +72,13 @@ def test_load_rejects_non_object_json(tmp_path, payload):
         _Doc.load(path)
 
 
+def test_load_rejects_invalid_json(tmp_path):
+    path = tmp_path / "doc.json"
+    path.write_text("{nope", encoding="utf-8")
+    with pytest.raises(ValueError):
+        _Doc.load(path)
+
+
 def test_load_surfaces_from_dict(tmp_path):
     path = tmp_path / "doc.json"
     _write(path, {"n": "x"})

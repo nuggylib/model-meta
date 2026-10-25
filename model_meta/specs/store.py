@@ -49,38 +49,8 @@ def create(specs_dir: Path, model_type: str) -> Path:
     return path
 
 
-def read(path: Path) -> dict:
-    """One spec document. Raises `OSError`, or `ValueError` for a malformed one."""
-    return Spec.load(path).to_dict()
-
-
-def required_bones(document: dict) -> list[str]:
-    """`armature.required_bones` of a document `read` returned."""
-    return document.get("armature", {}).get("required_bones", [])
-
-
-def bone_name_inverses(document: dict) -> dict[str, str]:
-    """`armature.bone_name_inverses` of a document `read` returned."""
-    return document.get("armature", {}).get("bone_name_inverses", {})
-
-
-def parenting_map(document: dict) -> dict[str, list[str]]:
-    """`armature.parenting` of a document `read` returned."""
-    return document.get("armature", {}).get("parenting", {})
-
-
-def armature_name(document: dict) -> str:
-    """`armature.object_name` of a document `read` returned."""
-    return document.get("armature", {}).get("object_name", "")
-
-
-def mesh_roles(document: dict) -> dict[str, dict]:
-    """`mesh_roles` of a document `read` returned."""
-    return document.get("mesh_roles", {})
-
-
 def update_armature(path: Path, patch: ArmaturePatch) -> None:
-    """Raises like `read`, or `OSError` on write."""
+    """Raises like `Spec.load`, or `OSError` on write."""
     spec = Spec.load(path)
     armature = spec.armature
     if patch.object_name is not None:
@@ -104,7 +74,7 @@ def rename_bone(
     set_inverses: Mapping[str, str] | None = None,
 ) -> None:
     """Raises `ValueError` if `name` is gone or `new_name` is another required bone,
-    or like `read`, or `OSError` on write."""
+    or like `Spec.load`, or `OSError` on write."""
     spec = Spec.load(path)
     armature = spec.armature
     if name not in armature.required_bones:
@@ -120,7 +90,7 @@ def rename_bone(
 
 def delete_bone(path: Path, name: str) -> None:
     """Inverses, parenting and mesh roles are kept: their patterns simply stop
-    matching it. Raises `ValueError` if `name` is gone, or like `read`, or
+    matching it. Raises `ValueError` if `name` is gone, or like `Spec.load`, or
     `OSError` on write."""
     spec = Spec.load(path)
     if name not in spec.armature.required_bones:
@@ -130,7 +100,7 @@ def delete_bone(path: Path, name: str) -> None:
 
 
 def add_mesh_role(path: Path, name: str, role: MeshRole) -> None:
-    """Raises `ValueError` if `name` is already a role, or like `read`, or
+    """Raises `ValueError` if `name` is already a role, or like `Spec.load`, or
     `OSError` on write."""
     spec = Spec.load(path)
     if name in spec.mesh_roles:
@@ -145,7 +115,7 @@ def update_mesh_role(
     """`edit` gets the role as just read, and the role keeps its position.
 
     Raises `ValueError` if `name` is gone or `new_name` is another role, or like
-    `read`, or `OSError` on write.
+    `Spec.load`, or `OSError` on write.
     """
     spec = Spec.load(path)
     roles = spec.mesh_roles
@@ -162,8 +132,8 @@ def update_mesh_role(
 
 
 def delete_mesh_role(path: Path, name: str) -> None:
-    """Raises `ValueError` if `name` is gone, or like `read`, or `OSError` on
-    write."""
+    """Raises `ValueError` if `name` is gone, or like `Spec.load`, or `OSError`
+    on write."""
     spec = Spec.load(path)
     if name not in spec.mesh_roles:
         raise ValueError(f"'{name}' is no longer a mesh role.")
