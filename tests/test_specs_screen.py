@@ -16,7 +16,7 @@ from textual.widgets import Button, Input, Static
 from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
-from model_meta.godot import discovery
+from model_meta.core.godot_connection import GodotConnection
 from model_meta.specs import schema
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.dashboard import DashboardScreen
@@ -56,7 +56,7 @@ def _app(tmp_path, monkeypatch, specs=(), broken=()):
 
     `broken` names spec files hand-written as raw text (the unreadable cases).
     """
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()

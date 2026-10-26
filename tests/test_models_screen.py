@@ -15,7 +15,7 @@ from textual.widgets import Static
 from model_meta.app import ModelMetaApp
 from model_meta.config import store
 from model_meta.config.settings import Settings
-from model_meta.godot import discovery as godot_discovery
+from model_meta.core.godot_connection import GodotConnection
 from model_meta.models import discovery as models_discovery
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.models import ModelsScreen
@@ -42,7 +42,7 @@ def _app(tmp_path, monkeypatch, directories, blend_files=None):
     directory absent from the map but present on disk scans as empty, and a
     directory mapped to an `OSError` instance raises it (the unreadable case).
     """
-    monkeypatch.setattr(godot_discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     results = blend_files or {}
 
     def fake_scan(directory, max_depth=4):

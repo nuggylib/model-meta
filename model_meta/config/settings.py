@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from model_meta.core.blender_connection import BlenderConnection
+from model_meta.core.godot_connection import GodotConnection
 
 SCHEMA_VERSION = 2
 
@@ -38,6 +39,10 @@ class Settings:
     @property
     def blender(self) -> BlenderConnection:
         return BlenderConnection(Path(self.blender_executable))
+
+    @property
+    def godot(self) -> GodotConnection:
+        return GodotConnection(Path(self.godot_projects_root))
 
     def to_toml_dict(self) -> dict:
         """Serialize to the nested mapping ``tomli_w`` writes to disk."""

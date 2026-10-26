@@ -26,6 +26,16 @@ storage, and connections to the external apps Model Meta validates against.
   UNPARSEABLE, plus the version and a message). It blocks on a subprocess, so
   callers run it in a Textual worker; every failure is a `ProbeResult`, never a
   raise or a hang. The live-scene connection, still unbuilt, will extend it.
+- `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the
+  projects root, and `_accepts` takes a directory. `find_projects(max_depth=4)`
+  returns the absolute, sorted directories under it holding a `project.godot`.
+  It walks the tree, so callers run it in a Textual worker. The walk is
+  depth-capped and tolerates `OSError` per directory (an unlistable dir is
+  skipped) and per entry (a `0o444` parent makes stat-ing a child raise; that
+  child is skipped, its siblings kept). It never descends a symlinked
+  directory (loop guard) or a project directory. Zero projects is a valid
+  result, not an error. It only locates projects: indexing and `.blend`→`.glb`
+  export tracking are future work here.
 - `json_document.py` — JSON file mechanics and the `JsonDocument` base.
   `read_json` checks only that the file holds a JSON object. `write_json` replaces
   atomically (sibling `.tmp` + `os.replace`), so a crash leaves the old file.

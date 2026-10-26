@@ -7,7 +7,7 @@ user cancels.
 
 **Layering:** this screen contains no `subprocess`, no filesystem *walking*, and
 no TOML. The slow, blocking work — probing `blender --version` and scanning for
-`project.godot` — is delegated to `BlenderConnection` and the `godot` category and
+`project.godot` — is delegated to `BlenderConnection` and `GodotConnection` and
 run inside Textual workers (off the event loop) via `asyncio.to_thread`, so the UI
 never freezes. Cheap stats (`is_dir`, `mkdir`) and the fast
 `BlenderConnection.candidates()` prefill run inline. Persistence (TOML) is the app's job, not the screen's.
@@ -34,7 +34,7 @@ from textual.widgets import (
 
 from model_meta.config.settings import Settings
 from model_meta.core.blender_connection import BlenderConnection
-from model_meta.godot import discovery
+from model_meta.core.godot_connection import GodotConnection
 
 STEPS = ["step-blender", "step-models", "step-godot"]
 _INPUT_FOR_STEP = {0: "#blender-path", 1: "#models-dir", 2: "#godot-root"}
@@ -387,7 +387,7 @@ class SetupWizard(Screen[Settings | None]):
     @work(exclusive=True, group="scan")
     async def _scan(self, root: Path) -> None:
         self._status("godot-status", "Scanning for Godot projects…")
-        projects = await asyncio.to_thread(discovery.find_projects, root)
+        projects = await asyncio.to_thread(GodotConnection(root).find_projects)
         if projects:
             listing = "\n".join(f"  • {project}" for project in projects)
             self._status(

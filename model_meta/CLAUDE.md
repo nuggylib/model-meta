@@ -57,8 +57,9 @@ normal checkout. Do not commit or hand-edit it.
 - `core/` — core app business logic shared across categories: `JsonDocument`,
   the typed, atomically-written JSON document base, and `Spec`, the spec
   document built on it; `AppConnection`, the base for an external app at a path,
-  and `BlenderConnection` (executable detection and `--version` probe). No
-  Textual, no UI.
+  `BlenderConnection` (executable detection and `--version` probe) and
+  `GodotConnection` (a bounded scan for `project.godot` under the projects
+  root). No Textual, no UI.
 - `tui/` — Textual screens (`tui/screens/`) and the reusable widgets they are
   assembled from (`tui/widgets/`).
 - `config/` — persistence: the on-disk config first-time setup writes and every
@@ -66,8 +67,6 @@ normal checkout. Do not commit or hand-edit it.
   beyond the config file.
 - `diagnostics/` — build/launch self-tests (`run_headless_check`, the `--check`
   smoke gate). Release-pipeline concerns kept out of `app.py`.
-- `godot/` — Godot project discovery: a bounded scan for `project.godot` under a
-  chosen root. No Textual, no UI.
 - `models/` — source-model discovery: a bounded scan for `.blend` files under a
   configured models directory (`discovery.find_blend_files`). Locates models
   only; reading their contents belongs to `BlenderConnection`. No Textual, no UI.

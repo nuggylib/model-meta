@@ -12,7 +12,7 @@ directories. This category only *locates* models — reading what is inside one
   scan stopped looking instead of hard-coding a number that would drift.
 
 ## Conventions
-- **Mirrors `godot/discovery.py`.** Same shape and same guarantees — bounded by
+- **Mirrors `GodotConnection.find_projects` (`core/godot_connection.py`).** Same shape and same guarantees — bounded by
   depth, a directory we can't list is skipped rather than fatal, symlinked
   directories are never descended (no loops), results sorted for deterministic
   display, zero results a valid outcome. Read that module alongside this one;

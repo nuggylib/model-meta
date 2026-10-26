@@ -15,8 +15,8 @@ from textual.widgets import Static
 from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
+from model_meta.core.godot_connection import GodotConnection
 from model_meta.core.spec import MeshRole
-from model_meta.godot import discovery
 from model_meta.specs import schema
 from model_meta.specs import store as specs_store
 from model_meta.specs.store import ArmaturePatch
@@ -49,7 +49,7 @@ def _app(tmp_path, monkeypatch, specs=(), raw=()):
     `raw` names spec files hand-written as text — the malformed and mismatched
     cases the screen must be indifferent to.
     """
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()

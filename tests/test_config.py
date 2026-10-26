@@ -13,6 +13,7 @@ import pytest
 from model_meta.config import paths, store
 from model_meta.config.settings import SCHEMA_VERSION, Settings
 from model_meta.core.blender_connection import BlenderConnection
+from model_meta.core.godot_connection import GodotConnection
 
 
 def _settings(tmp_path, *directories) -> Settings:
@@ -354,3 +355,7 @@ def test_specs_dir_resolves_without_reading_the_config(tmp_path):
 
 def test_blender_is_a_connection_to_the_stored_executable(tmp_path):
     assert _settings(tmp_path).blender == BlenderConnection(tmp_path / "blender")
+
+
+def test_godot_is_a_connection_to_the_stored_projects_root(tmp_path):
+    assert _settings(tmp_path).godot == GodotConnection(tmp_path / "godot")
