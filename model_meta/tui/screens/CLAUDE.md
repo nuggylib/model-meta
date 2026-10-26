@@ -20,11 +20,12 @@ in the app (analogous to a route in a web app).
   stored order, each with its own independent marker (the schema and the wizard
   both enforce at least one, so there is no empty state). It reads
   `self.app.settings` (app-level state) and never touches TOML or the filesystem
-  beyond cheap stats: Blender validity via `detect.executable_state` (three
+  beyond cheap stats: Blender validity via `settings.blender.state()` (three
   states — valid / present-but-not-executable / missing — platform-aware, no
-  subprocess), Models/Godot-root existence via `is_dir` inline. The one
+  subprocess), Models existence via `is_dir` and the Godot root via
+  `settings.godot.state()`, both inline. The one
   filesystem *walk* — the Godot project count — runs in a `@work` worker
-  (`asyncio.to_thread(discovery.find_projects, …)`) showing "Scanning…" until it
+  (`asyncio.to_thread(godot.find_projects)`) showing "Scanning…" until it
   returns (zero projects is a valid `0`). It `watch`es the app's `settings`
   reactive and `recompose`s on change, so editing config via `s` refreshes the
   view without a restart. When `self.app.settings is None` (absent/corrupt
@@ -287,11 +288,11 @@ in the app (analogous to a route in a web app).
   `push_screen_wait` from inside a `@work` worker.
 - **Keep slow/blocking work out of the event loop and out of the screen.** No
   screen owns a `subprocess`, a filesystem *walk*, or TOML: they call the
-  `blender` (`detect.probe_version`), `godot` (`discovery.find_projects`), and
+  `core` (`BlenderConnection.probe`, `GodotConnection.find_projects`), and
   `models` (`discovery.find_blend_files`) categories inside Textual `@work`
   workers (via `asyncio.to_thread`) so the UI never freezes; the app, not the
   screen, persists results. Cheap inline stats (`is_dir`, `mkdir`) and the fast
-  `candidate_paths()` prefill are fine.
+  `BlenderConnection.candidates()` prefill are fine.
 - **A worker that writes to widgets must tolerate them being gone.** A
   recompose or a `pop_screen` can land while the scan is in flight, so every
   post-scan `query_one` is guarded against `NoMatches` (see `dashboard.py`'s

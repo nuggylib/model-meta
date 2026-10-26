@@ -8,8 +8,8 @@ from textual.widgets import Input, SelectionList, Static
 from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
+from model_meta.core.godot_connection import GodotConnection
 from model_meta.core.spec import MeshRole
-from model_meta.godot import discovery
 from model_meta.specs import store as specs_store
 from model_meta.specs.store import ArmaturePatch
 from model_meta.tui.screens.confirm_modal import ConfirmModal
@@ -31,7 +31,7 @@ async def _wait_for(pilot, predicate, tries=100):
 
 
 def _app(tmp_path, monkeypatch):
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     (tmp_path / "models").mkdir()
     (tmp_path / "godot").mkdir()

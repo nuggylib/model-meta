@@ -5,20 +5,24 @@ always seeded/pointed through an injected ``config_path`` so tests never touch
 the developer's real ``platformdirs`` directory. Textual 8.x applies a ~50ms
 screen-switch delay, so we ``await pilot.pause()`` before asserting the screen.
 
-The wizard's slow steps (``probe_version`` / ``find_projects``) are patched to
-pure functions here — the subprocess and filesystem-walk behavior is unit-tested
-in ``test_detect.py`` / ``test_discovery.py``; these tests exercise the wiring.
+The wizard's slow steps (``BlenderConnection.probe`` / ``find_projects``) are
+patched to pure functions here — the subprocess and filesystem-walk behavior is
+unit-tested in ``test_blender_connection.py`` / ``test_godot_connection.py``; these tests
+exercise the wiring.
 Windows-path serialization round-tripping is covered in ``test_config.py``.
 """
 
 from textual.widgets import Button, ContentSwitcher, Input, Label, ListView
 
 from model_meta.app import ModelMetaApp
-from model_meta.blender import detect
-from model_meta.blender.detect import ProbeOutcome, ProbeResult
 from model_meta.config import store
 from model_meta.config.settings import Settings
-from model_meta.godot import discovery
+from model_meta.core.blender_connection import (
+    BlenderConnection,
+    ProbeOutcome,
+    ProbeResult,
+)
+from model_meta.core.godot_connection import GodotConnection
 from model_meta.tui.screens.dashboard import DashboardScreen
 
 
@@ -45,11 +49,11 @@ async def _wait_for(pilot, predicate, tries=100):
 
 def _patch_wizard_probes(monkeypatch):
     monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
+        BlenderConnection,
+        "probe",
+        lambda self, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
     )
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
 
 
 async def _advance_to_models_step(pilot, wizard):
@@ -98,7 +102,7 @@ async def test_v1_config_boots_dashboard_and_is_upgraded(tmp_path, monkeypatch):
     Nothing in the config chain is mocked here — the point is that boot → load →
     migration → render works end to end on a real file.
     """
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()

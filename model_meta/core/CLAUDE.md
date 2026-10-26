@@ -1,9 +1,41 @@
 # model_meta/core/
 
 Core business logic shared across categories: typed documents and their JSON
-storage. **No Textual, no UI.**
+storage, and connections to the external apps Model Meta validates against.
+**No Textual, no UI.**
 
 ## Files
+- `app_connection.py` — the `AppConnection` base, a frozen dataclass holding
+  one `path`: the app's executable, or for Godot the projects root (each Godot
+  project is its own executable, so the root stands for them all). `state()` is
+  the template method: it expands `~`, returns `PathState.MISSING` when nothing
+  is there, and otherwise asks the subclass's `_accepts(path)` hook, giving
+  `OK` or `INVALID` (present, but not what the app needs). It only stats, so it
+  is safe on the event loop; a hook must stat only too, never run or walk.
+  Slow, app-specific work (a Blender probe) is a subclass method, not a base
+  hook.
+- `blender_connection.py` — `BlenderConnection(AppConnection)`; `path` is the
+  executable. `_accepts` is platform-aware: Windows takes any regular file (no
+  exec bit), macOS also takes a `.app` bundle (a directory), elsewhere it needs
+  a file with the POSIX exec bit. `candidates()` returns existing installs at
+  the standard per-platform locations plus `shutil.which("blender")`, deduped,
+  first entry best (macOS resolves `Blender.app` to its inner binary, Windows
+  globs `Blender Foundation\*`). flatpak/snap wrappers aren't plain executable
+  paths, so they are out of scope. `probe(timeout)` runs `<path> --version` and
+  returns a `ProbeResult` (`ProbeOutcome`: OK / NOT_FOUND / NOT_EXE / TIMEOUT /
+  UNPARSEABLE, plus the version and a message). It blocks on a subprocess, so
+  callers run it in a Textual worker; every failure is a `ProbeResult`, never a
+  raise or a hang. The live-scene connection, still unbuilt, will extend it.
+- `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the
+  projects root, and `_accepts` takes a directory. `find_projects(max_depth=4)`
+  returns the absolute, sorted directories under it holding a `project.godot`.
+  It walks the tree, so callers run it in a Textual worker. The walk is
+  depth-capped and tolerates `OSError` per directory (an unlistable dir is
+  skipped) and per entry (a `0o444` parent makes stat-ing a child raise; that
+  child is skipped, its siblings kept). It never descends a symlinked
+  directory (loop guard) or a project directory. Zero projects is a valid
+  result, not an error. It only locates projects: indexing and `.blend`→`.glb`
+  export tracking are future work here.
 - `json_document.py` — JSON file mechanics and the `JsonDocument` base.
   `read_json` checks only that the file holds a JSON object. `write_json` replaces
   atomically (sibling `.tmp` + `os.replace`), so a crash leaves the old file.

@@ -6,7 +6,7 @@ location. Textual 8.x applies a ~50ms screen-switch delay, so we ``await
 pilot.pause()`` before asserting.
 
 The Godot scan (``find_projects``) is patched to a pure function here — the
-filesystem-walk behavior is unit-tested in ``test_discovery.py``; these tests
+filesystem-walk behavior is unit-tested in ``test_godot_connection.py``; these tests
 exercise the wiring (worker → count) and the live existence markers.
 """
 
@@ -16,11 +16,14 @@ import pytest
 from textual.widgets import Button, ContentSwitcher, Input, ListView, Static
 
 from model_meta.app import ModelMetaApp
-from model_meta.blender import detect
-from model_meta.blender.detect import ProbeOutcome, ProbeResult
 from model_meta.config import store
 from model_meta.config.settings import Settings
-from model_meta.godot import discovery
+from model_meta.core.blender_connection import (
+    BlenderConnection,
+    ProbeOutcome,
+    ProbeResult,
+)
+from model_meta.core.godot_connection import GodotConnection
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.blender_detail import BlenderDetailScreen
 from model_meta.tui.screens.dashboard import DashboardScreen
@@ -66,7 +69,7 @@ async def _wait_for(pilot, predicate, tries=100):
 
 async def test_dashboard_shows_four_sections_in_order(tmp_path, monkeypatch):
     """Scenario 1 — a valid config renders Blender → Specs → Models → Godot."""
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -95,7 +98,7 @@ async def test_dashboard_shows_four_sections_in_order(tmp_path, monkeypatch):
 async def test_dashboard_marks_missing_models_dir(tmp_path, monkeypatch):
     """Scenario 2 — a deleted models directory shows a 'not found' marker and the
     app does not crash."""
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     missing = tmp_path / "gone"  # never created
     godot = tmp_path / "godot"
@@ -113,7 +116,7 @@ async def test_dashboard_marks_missing_models_dir(tmp_path, monkeypatch):
 async def test_dashboard_lists_every_models_directory(tmp_path, monkeypatch):
     """Multi-location display — one row per configured directory, in stored
     order, each with its own independent existence indicator."""
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     vehicles = tmp_path / "vehicles"
     vehicles.mkdir()
@@ -137,7 +140,7 @@ async def test_dashboard_lists_every_models_directory(tmp_path, monkeypatch):
 async def test_dashboard_specs_card_carries_no_status_marker(tmp_path, monkeypatch):
     """Specs has no configured location to stat, so a ✓/✗ would be theater — it
     gets a muted live count instead."""
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -159,7 +162,7 @@ async def test_dashboard_specs_card_carries_no_status_marker(tmp_path, monkeypat
 
 async def test_dashboard_specs_card_counts_the_specs(tmp_path, monkeypatch):
     """A live count, so the card is not stale the moment a spec exists."""
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -177,7 +180,7 @@ async def test_dashboard_specs_card_counts_the_specs(tmp_path, monkeypatch):
 
 async def test_dashboard_specs_card_says_none_with_no_specs(tmp_path, monkeypatch):
     """An absent specs directory counts as zero, and is not created by counting."""
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -198,7 +201,7 @@ async def test_dashboard_specs_count_refreshes_on_screen_resume(tmp_path, monkey
 
     No unit test sees this path — it only exists between two screens.
     """
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -267,7 +270,9 @@ async def test_dashboard_shows_setup_prompt_when_corrupt(tmp_path):
 async def test_dashboard_godot_count_from_worker(tmp_path, monkeypatch):
     """Godot count — computed in a worker and rendered (zero is a valid 0)."""
     projects = [tmp_path / "a", tmp_path / "b"]
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: projects)
+    monkeypatch.setattr(
+        GodotConnection, "find_projects", lambda self, max_depth=4: projects
+    )
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -286,11 +291,11 @@ async def test_dashboard_refreshes_after_edit(tmp_path, monkeypatch):
     """Scenario 3 — editing config via `s` and saving updates the dashboard's
     displayed value without an app restart."""
     monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
+        BlenderConnection,
+        "probe",
+        lambda self, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
     )
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
     models.mkdir()
@@ -343,7 +348,7 @@ async def test_dashboard_refreshes_after_edit(tmp_path, monkeypatch):
 
 def _seeded_app(tmp_path, monkeypatch, directories=1):
     """A dashboard-booting app over a valid config with `directories` models dirs."""
-    monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
+    monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     godot = tmp_path / "godot"
     godot.mkdir()

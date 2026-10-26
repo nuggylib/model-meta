@@ -8,7 +8,9 @@ every later launch reads. This is the first persistence category in the project.
   recorded Blender version) and `SCHEMA_VERSION`, the migration anchor written on
   every save. `models_directories` is a **tuple** (not a list): the dataclass is
   frozen, and a mutable field would undercut that. `to_toml_dict` converts it to
-  a list so `tomli_w` writes a TOML array.
+  a list so `tomli_w` writes a TOML array. The `blender` and `godot` properties
+  build `core`'s `BlenderConnection` / `GodotConnection` from the stored strings; it only constructs, never
+  stats or runs, and TOML stays on the strings.
 - `paths.py` — `config_file()` resolves where the config lives: `$MODEL_META_CONFIG`
   wins (the test/injection seam), else the `platformdirs` per-user config dir.
   `specs_dir(config_path=None)` is `specs/` beside that file — derived from the
@@ -52,7 +54,7 @@ backup. Do not add further writes to `load`.
 ## Conventions
 - **No Textual, no subprocess, no filesystem walking here.** This category produces
   and persists plain data; UI and I/O live in their own categories (`tui/`,
-  `blender/`, `godot/`). The wizard screen calls into this package, not vice versa.
+  `core/`). The wizard screen calls into this package, not vice versa.
 - **Never auto-overwrite a CORRUPT config** — surface it and let the user choose to
   re-run setup (which overwrites deliberately).
 - **Write-once-atomic only.** Never write the config incrementally; a half-written

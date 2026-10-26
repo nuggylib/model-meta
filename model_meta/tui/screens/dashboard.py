@@ -13,8 +13,8 @@ unexpected — see `SectionCard` for how that invariant is held.
 
 **Layering:** the screen holds no config of its own — it reads `self.app.settings`
 (app-level state) and never touches TOML or spawns a subprocess. Cheap file stats
-(`is_dir` / `executable_state`) run inline; the one job that walks the filesystem —
-counting Godot projects — is delegated to the `godot` category inside a Textual
+(`is_dir` / `AppConnection.state`) run inline; the one job that walks the filesystem —
+counting Godot projects — is delegated to `GodotConnection` inside a Textual
 `@work` worker (via `asyncio.to_thread`), exactly as the setup wizard does, so the
 event loop never blocks.
 """
@@ -34,8 +34,7 @@ from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
-from model_meta.blender import detect
-from model_meta.godot import discovery
+from model_meta.core.app_connection import PathState
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.specs import plural_specs
 from model_meta.tui.widgets.section_card import SectionCard
@@ -147,10 +146,10 @@ class DashboardScreen(Screen):
     # -- sections ----------------------------------------------------------
 
     def _blender_section(self, settings: Settings) -> SectionCard:
-        state = detect.executable_state(settings.blender_executable)
-        if state is detect.ExecutableState.OK:
+        state = settings.blender.state()
+        if state is PathState.OK:
             marker = "[green]✓ executable[/]"
-        elif state is detect.ExecutableState.NOT_EXECUTABLE:
+        elif state is PathState.INVALID:
             marker = "[yellow]⚠ present, not executable[/]"
         else:
             marker = _MISSING
@@ -217,7 +216,7 @@ class DashboardScreen(Screen):
         )
 
     def _godot_section(self, settings: Settings) -> SectionCard:
-        found = Path(settings.godot_projects_root).expanduser().is_dir()
+        found = settings.godot.state() is PathState.OK
         # The count is filled in by `_scan_godot` (it walks the fs); until then show
         # a placeholder, or a dash when the root is missing and there is nothing to
         # scan.
@@ -250,11 +249,11 @@ class DashboardScreen(Screen):
         settings = cast("ModelMetaApp", self.app).settings
         if settings is None:
             return
-        root = Path(settings.godot_projects_root).expanduser()
-        if not root.is_dir():
+        godot = settings.godot
+        if godot.state() is not PathState.OK:
             return  # inline marker already shows "not found"; leave count at "—"
         try:
-            projects = await asyncio.to_thread(discovery.find_projects, root)
+            projects = await asyncio.to_thread(godot.find_projects)
             text = f"{len(projects)} Godot project(s) found"
         except OSError:
             text = "Project count unavailable."

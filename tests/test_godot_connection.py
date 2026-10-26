@@ -1,15 +1,9 @@
-"""Unit tests for Godot project discovery (model_meta.godot.discovery).
-
-Headless and pure — a temp directory tree exercises nesting, the depth cap, the
-don't-recurse-into-a-project rule, symlink-loop safety, permission tolerance, and
-the zero-results case.
-"""
-
 import os
 
 import pytest
 
-from model_meta.godot.discovery import find_projects
+from model_meta.core.app_connection import PathState
+from model_meta.core.godot_connection import GodotConnection
 
 
 def _project(dir_path):
@@ -17,6 +11,30 @@ def _project(dir_path):
     dir_path.mkdir(parents=True, exist_ok=True)
     (dir_path / "project.godot").write_text("[application]\n")
     return dir_path.resolve()
+
+
+def find_projects(root, max_depth=4):
+    return GodotConnection(root).find_projects(max_depth)
+
+
+# --- state() ---------------------------------------------------------------
+
+
+def test_state_ok_for_a_directory(tmp_path):
+    assert GodotConnection(tmp_path).state() is PathState.OK
+
+
+def test_state_invalid_for_a_file(tmp_path):
+    file = tmp_path / "project.godot"
+    file.write_text("")
+    assert GodotConnection(file).state() is PathState.INVALID
+
+
+def test_state_missing_for_absent_path(tmp_path):
+    assert GodotConnection(tmp_path / "nope").state() is PathState.MISSING
+
+
+# --- find_projects() -------------------------------------------------------
 
 
 def test_finds_nested_project(tmp_path):
@@ -38,7 +56,6 @@ def test_zero_results_is_empty_not_error(tmp_path):
 def test_does_not_recurse_into_a_project(tmp_path):
     outer = _project(tmp_path / "outer")
     _project(tmp_path / "outer" / "addons" / "inner")  # nested sub-project
-    # Only the outer project root is reported; the walk stops at a project.
     assert find_projects(tmp_path) == [outer]
 
 
@@ -53,7 +70,6 @@ def test_symlink_loop_is_guarded(tmp_path):
     proj = _project(tmp_path / "real")
     loop = tmp_path / "loop"
     loop.symlink_to(tmp_path, target_is_directory=True)  # points back at root
-    # Terminates (no infinite loop) and never descends the symlink.
     assert find_projects(tmp_path) == [proj]
 
 
@@ -62,9 +78,8 @@ def test_symlinked_project_is_not_descended(tmp_path):
     link_parent = tmp_path / "root"
     link_parent.mkdir()
     (link_parent / "linked").symlink_to(tmp_path / "external", target_is_directory=True)
-    # The project is only reachable through a symlink, so it is skipped.
+    # Only reachable through a symlink, so skipped; its real path still finds it.
     assert find_projects(link_parent) == []
-    # ...but discoverable via its real path.
     assert external in find_projects(tmp_path / "external")
 
 
