@@ -12,6 +12,7 @@ from textual.reactive import reactive
 from model_meta import __version__
 from model_meta.config import legacy_dir, paths, store
 from model_meta.config.settings import Settings
+from model_meta.diagnostics import run_headless_check
 from model_meta.tui.screens.blender_detail import BlenderDetailScreen
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.godot_detail import GodotDetailScreen
@@ -202,11 +203,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.check:
-        # Imported here so the packaging smoke test lives with the pipeline
-        # concerns, not in the app's import-time surface.
-        from model_meta.diagnostics import run_headless_check
-
-        asyncio.run(run_headless_check())
+        asyncio.run(run_headless_check(ModelMetaApp()))
         return
 
     legacy_dir.migrate()

@@ -61,12 +61,18 @@ def validate_inverse(segment: str, answer: str, known: Mapping[str, str]) -> str
         return f"'{answer}' is reserved for left/right."
     if answer == segment:
         return f"Leave it blank if '{segment}' has no inverse."
+    return _pairing_conflict(segment, answer, known)
+
+
+def _pairing_conflict(
+    segment: str, answer: str, known: Mapping[str, str]
+) -> str | None:
     paired = known.get(answer)
-    if paired is not None and paired != segment:
-        if paired == answer:
-            return f"'{answer}' is already recorded as having no inverse."
-        return f"'{answer}' is already paired with '{paired}'."
-    return None
+    if paired is None or paired == segment:
+        return None
+    if paired == answer:
+        return f"'{answer}' is already recorded as having no inverse."
+    return f"'{answer}' is already paired with '{paired}'."
 
 
 def pairs(segment: str, answer: str) -> dict[str, str]:
