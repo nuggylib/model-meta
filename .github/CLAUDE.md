@@ -55,6 +55,9 @@ GitHub-specific configuration for the repository.
   **Author** checkbox in the `## QA Sign-off` section of the PR body — the developer's explicit
   "I ran the QA Steps and they pass" acknowledgement. It reads the body from the event payload
   (no API token) and greps for a checked `**Author:**` line.
+- `dependabot.yml` — Weekly Dependabot version updates for the `github-actions` ecosystem, grouped
+  into a single PR with a `chore:` commit prefix. It bumps the pinned action SHAs across every
+  workflow.
 - `pull_request_template.md` — Default pull request description template. Pre-fills every new PR with a
   **Summary** (plus a flat **Changelog** list), numbered **manual QA Steps**, and a **QA Sign-off**
   checkbox the author ticks after running those steps. GitHub auto-populates the PR body from this file.
@@ -70,9 +73,8 @@ GitHub-specific configuration for the repository.
   version (e.g. `@v8.3.2`) and bump deliberately.
 - **`build.yml` pins every action to a full 40-char commit SHA** with a trailing `# vX.Y.Z`
   comment (a version *tag* is mutable — a compromised action re-tag would then run in CI).
-  This is the stronger form of the pinning rule above; prefer it for new workflows and let a
-  Dependabot bump move the SHA. (`qa_signoff.yml` still pins by tag — a safe follow-up is to
-  migrate it to SHAs too.)
+  This is the stronger form of the pinning rule above; every workflow that uses actions follows it.
+  `dependabot.yml` moves the SHA and its version comment together.
 - **Artifact naming.** `build.yml` uploads canary artifacts on PRs
   (`model-meta-canary-pr<N>-<shortsha>-<target>`, 14-day retention, so a longer review keeps a
   live link) and stable release-named artifacts on pushes to `main` (`release-<target>`, 1-day
