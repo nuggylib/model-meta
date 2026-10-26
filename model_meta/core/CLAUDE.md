@@ -1,9 +1,19 @@
 # model_meta/core/
 
 Core business logic shared across categories: typed documents and their JSON
-storage. **No Textual, no UI.**
+storage, and connections to the external apps Model Meta validates against.
+**No Textual, no UI.**
 
 ## Files
+- `app_connection.py` — the `AppConnection` base, a frozen dataclass holding
+  one `path`: the app's executable, or for Godot the projects root (each Godot
+  project is its own executable, so the root stands for them all). `state()` is
+  the template method: it expands `~`, returns `PathState.MISSING` when nothing
+  is there, and otherwise asks the subclass's `_accepts(path)` hook, giving
+  `OK` or `INVALID` (present, but not what the app needs). It only stats, so it
+  is safe on the event loop; a hook must stat only too, never run or walk.
+  Slow, app-specific work (a Blender probe) is a subclass method, not a base
+  hook.
 - `json_document.py` — JSON file mechanics and the `JsonDocument` base.
   `read_json` checks only that the file holds a JSON object. `write_json` replaces
   atomically (sibling `.tmp` + `os.replace`), so a crash leaves the old file.
