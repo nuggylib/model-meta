@@ -13,7 +13,7 @@ unexpected — see `SectionCard` for how that invariant is held.
 
 **Layering:** the screen holds no config of its own — it reads `self.app.settings`
 (app-level state) and never touches TOML or spawns a subprocess. Cheap file stats
-(`is_dir` / `executable_state`) run inline; the one job that walks the filesystem —
+(`is_dir` / `BlenderConnection.state`) run inline; the one job that walks the filesystem —
 counting Godot projects — is delegated to the `godot` category inside a Textual
 `@work` worker (via `asyncio.to_thread`), exactly as the setup wizard does, so the
 event loop never blocks.
@@ -34,7 +34,7 @@ from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
-from model_meta.blender import detect
+from model_meta.core.app_connection import PathState
 from model_meta.godot import discovery
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.specs import plural_specs
@@ -147,10 +147,10 @@ class DashboardScreen(Screen):
     # -- sections ----------------------------------------------------------
 
     def _blender_section(self, settings: Settings) -> SectionCard:
-        state = detect.executable_state(settings.blender_executable)
-        if state is detect.ExecutableState.OK:
+        state = settings.blender.state()
+        if state is PathState.OK:
             marker = "[green]✓ executable[/]"
-        elif state is detect.ExecutableState.NOT_EXECUTABLE:
+        elif state is PathState.INVALID:
             marker = "[yellow]⚠ present, not executable[/]"
         else:
             marker = _MISSING

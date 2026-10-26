@@ -7,10 +7,10 @@ user cancels.
 
 **Layering:** this screen contains no `subprocess`, no filesystem *walking*, and
 no TOML. The slow, blocking work — probing `blender --version` and scanning for
-`project.godot` — is delegated to the `blender` and `godot` categories and run
-inside Textual workers (off the event loop) via `asyncio.to_thread`, so the UI
-never freezes. Cheap stats (`is_dir`, `mkdir`) and the fast `candidate_paths()`
-prefill run inline. Persistence (TOML) is the app's job, not the screen's.
+`project.godot` — is delegated to `BlenderConnection` and the `godot` category and
+run inside Textual workers (off the event loop) via `asyncio.to_thread`, so the UI
+never freezes. Cheap stats (`is_dir`, `mkdir`) and the fast
+`BlenderConnection.candidates()` prefill run inline. Persistence (TOML) is the app's job, not the screen's.
 """
 
 import asyncio
@@ -32,8 +32,8 @@ from textual.widgets import (
     Static,
 )
 
-from model_meta.blender import detect
 from model_meta.config.settings import Settings
+from model_meta.core.blender_connection import BlenderConnection
 from model_meta.godot import discovery
 
 STEPS = ["step-blender", "step-models", "step-godot"]
@@ -188,13 +188,13 @@ class SetupWizard(Screen[Settings | None]):
     def _default_blender(self) -> str:
         """Prefill the Blender field: the existing config, else best auto-detect.
 
-        `candidate_paths()` is a fast, stat-based scan (no subprocess, no walk),
-        so calling it inline at compose time is safe.
+        `candidates()` is a fast, stat-based scan (no subprocess, no walk), so
+        calling it inline at compose time is safe.
         """
         if self.existing:
             return self.existing.blender_executable
-        candidates = detect.candidate_paths()
-        return str(candidates[0]) if candidates else ""
+        candidates = BlenderConnection.candidates()
+        return str(candidates[0].path) if candidates else ""
 
     # -- navigation ---------------------------------------------------------
 
@@ -247,7 +247,7 @@ class SetupWizard(Screen[Settings | None]):
     async def _probe(self, exe: str) -> None:
         # to_thread keeps the blocking subprocess off the event loop; we're back
         # on the loop after the await, so touching widgets here is safe.
-        result = await asyncio.to_thread(detect.probe_version, exe)
+        result = await asyncio.to_thread(BlenderConnection(Path(exe)).probe)
         self._set_checking(False)
         if result.ok:
             self._blender_exe = exe

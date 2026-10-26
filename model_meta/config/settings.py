@@ -14,6 +14,9 @@ Schema history:
 """
 
 from dataclasses import dataclass
+from pathlib import Path
+
+from model_meta.core.blender_connection import BlenderConnection
 
 SCHEMA_VERSION = 2
 
@@ -31,6 +34,10 @@ class Settings:
     blender_version: str
     models_directories: tuple[str, ...]
     godot_projects_root: str
+
+    @property
+    def blender(self) -> BlenderConnection:
+        return BlenderConnection(Path(self.blender_executable))
 
     def to_toml_dict(self) -> dict:
         """Serialize to the nested mapping ``tomli_w`` writes to disk."""

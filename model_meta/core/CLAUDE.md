@@ -14,6 +14,18 @@ storage, and connections to the external apps Model Meta validates against.
   is safe on the event loop; a hook must stat only too, never run or walk.
   Slow, app-specific work (a Blender probe) is a subclass method, not a base
   hook.
+- `blender_connection.py` — `BlenderConnection(AppConnection)`; `path` is the
+  executable. `_accepts` is platform-aware: Windows takes any regular file (no
+  exec bit), macOS also takes a `.app` bundle (a directory), elsewhere it needs
+  a file with the POSIX exec bit. `candidates()` returns existing installs at
+  the standard per-platform locations plus `shutil.which("blender")`, deduped,
+  first entry best (macOS resolves `Blender.app` to its inner binary, Windows
+  globs `Blender Foundation\*`). flatpak/snap wrappers aren't plain executable
+  paths, so they are out of scope. `probe(timeout)` runs `<path> --version` and
+  returns a `ProbeResult` (`ProbeOutcome`: OK / NOT_FOUND / NOT_EXE / TIMEOUT /
+  UNPARSEABLE, plus the version and a message). It blocks on a subprocess, so
+  callers run it in a Textual worker; every failure is a `ProbeResult`, never a
+  raise or a hang. The live-scene connection, still unbuilt, will extend it.
 - `json_document.py` — JSON file mechanics and the `JsonDocument` base.
   `read_json` checks only that the file holds a JSON object. `write_json` replaces
   atomically (sibling `.tmp` + `os.replace`), so a crash leaves the old file.

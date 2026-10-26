@@ -16,10 +16,13 @@ import pytest
 from textual.widgets import Button, ContentSwitcher, Input, ListView, Static
 
 from model_meta.app import ModelMetaApp
-from model_meta.blender import detect
-from model_meta.blender.detect import ProbeOutcome, ProbeResult
 from model_meta.config import store
 from model_meta.config.settings import Settings
+from model_meta.core.blender_connection import (
+    BlenderConnection,
+    ProbeOutcome,
+    ProbeResult,
+)
 from model_meta.godot import discovery
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.blender_detail import BlenderDetailScreen
@@ -286,9 +289,9 @@ async def test_dashboard_refreshes_after_edit(tmp_path, monkeypatch):
     """Scenario 3 — editing config via `s` and saving updates the dashboard's
     displayed value without an app restart."""
     monkeypatch.setattr(
-        detect,
-        "probe_version",
-        lambda exe, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
+        BlenderConnection,
+        "probe",
+        lambda self, timeout=10.0: ProbeResult(ProbeOutcome.OK, version="4.5.0"),
     )
     monkeypatch.setattr(discovery, "find_projects", lambda root, max_depth=4: [])
     cfg = tmp_path / "config.toml"
