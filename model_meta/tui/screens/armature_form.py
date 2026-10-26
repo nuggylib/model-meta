@@ -40,6 +40,7 @@ from textual.widgets import (
     Static,
 )
 
+from model_meta.core.spec import Spec
 from model_meta.specs import bones, mesh_roles, parenting, store
 from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.widgets.field_list import FieldList
@@ -217,7 +218,7 @@ class ArmatureFormScreen(Screen):
 
     async def on_mount(self) -> None:
         try:
-            self._saved_name = store.armature_name(store.read(self.path))
+            self._saved_name = Spec.load(self.path).armature.object_name
         except (OSError, ValueError):
             pass  # `_show_bones` reports it
         self._show_name()
@@ -331,11 +332,11 @@ class ArmatureFormScreen(Screen):
             self._focus_editor()
             return
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError) as error:
             self._status(f"Could not read the spec: {_reason(error)}")
             return
-        if name not in store.required_bones(document):
+        if name not in spec.armature.required_bones:
             self._status(f"'{name}' is no longer a required bone.")
             self._show_bones()
             return
@@ -401,18 +402,18 @@ class ArmatureFormScreen(Screen):
             self._status(error)
             return
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError) as error:
             self._status(f"Could not read the spec: {_reason(error)}")
             return
-        required = store.required_bones(document)
+        required = spec.armature.required_bones
         if self._original is not None and self._original not in required:
             self._status(f"'{self._original}' is no longer a required bone.")
             return
         if name in required and name != self._original:
             self._status(f"'{name}' is already required.")
             return
-        self._bone = _Bone(name, dict(store.bone_name_inverses(document)), required)
+        self._bone = _Bone(name, spec.armature.bone_name_inverses, required)
         if not await self._advance():
             self._bone = None
 
@@ -448,12 +449,12 @@ class ArmatureFormScreen(Screen):
             self._status("Check at least one parent.")
             return
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError) as error:
             self._status(f"Could not read the spec: {_reason(error)}")
             return
-        required = store.required_bones(document)
-        resolved = parenting.resolve(store.parenting_map(document), required)
+        required = spec.armature.required_bones
+        resolved = parenting.resolve(spec.armature.parenting, required)
         above = set().union(*(parenting.ancestors(p, resolved) for p in picked))
         eligible = [
             name
@@ -534,12 +535,12 @@ class ArmatureFormScreen(Screen):
         if not self._picked:
             return None
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError) as error:
             self._status(f"Could not read the spec: {_reason(error)}")
             return None
-        required = store.required_bones(document)
-        current = store.parenting_map(document)
+        required = spec.armature.required_bones
+        current = spec.armature.parenting
         entries = parenting.infer(
             self._picked,
             self.query_one("#child-bones", SelectionList).selected,
@@ -616,17 +617,17 @@ class ArmatureFormScreen(Screen):
     def _stale(self, old: str, new: str) -> tuple[str, frozenset[int]]:
         """A warning naming what matched `old` but not `new`, and those parenting lines."""
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError):
             return "", frozenset()
-        entries = store.parenting_map(document)
+        entries = spec.armature.parenting
         marked = frozenset(
             index
             for index, (pattern, _) in enumerate(_entry_lines(entries))
             if parenting.is_stale(pattern, old, new)
         )
         keys = parenting.stale_keys(entries, old, new)
-        roles = mesh_roles.stale_roles(store.mesh_roles(document), old, new)
+        roles = mesh_roles.stale_roles(spec.mesh_roles, old, new)
         found, them = _references(keys, roles)
         if not found:
             return "", marked
@@ -635,18 +636,18 @@ class ArmatureFormScreen(Screen):
     def _unmatched(self, gone: str) -> tuple[str, frozenset[int]]:
         """A warning naming what deleting `gone` left matching no bone, and those lines."""
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError):
             return "", frozenset()
-        required = store.required_bones(document)
-        entries = store.parenting_map(document)
+        required = spec.armature.required_bones
+        entries = spec.armature.parenting
         marked = frozenset(
             index
             for index, (pattern, _) in enumerate(_entry_lines(entries))
             if parenting.is_unmatched(pattern, gone, required)
         )
         keys = parenting.unmatched_keys(entries, gone, required)
-        roles = mesh_roles.unmatched_roles(store.mesh_roles(document), gone, required)
+        roles = mesh_roles.unmatched_roles(spec.mesh_roles, gone, required)
         found, them = _references(keys, roles)
         if not found:
             return "", marked
@@ -656,7 +657,7 @@ class ArmatureFormScreen(Screen):
 
     def _write(self, **changes) -> bool:
         try:
-            store.update_armature(self.path, **changes)
+            store.update_armature(self.path, store.ArmaturePatch(**changes))
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
             return False
@@ -710,11 +711,11 @@ class ArmatureFormScreen(Screen):
 
     def _show_bones(self) -> None:
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError) as error:
             self._status(f"Could not read the spec: {_reason(error)}")
             return
-        required = store.required_bones(document)
+        required = spec.armature.required_bones
         self._bone_names = list(required)
         self.refresh_bindings()
         self.query_one("#bone-list", FieldList).lines = tuple(
@@ -722,7 +723,7 @@ class ArmatureFormScreen(Screen):
         )
         self._show_parents(required)
         self.query_one("#parenting-list", FieldList).lines = tuple(
-            _entry_lines(store.parenting_map(document))
+            _entry_lines(spec.armature.parenting)
         )
 
     def _show_parents(self, required: list[str]) -> None:

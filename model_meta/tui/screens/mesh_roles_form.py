@@ -13,6 +13,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, SelectionList, Static
 
+from model_meta.core.spec import MeshRole, Spec
 from model_meta.specs import mesh_roles, store
 from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.mesh_role_form import MeshRoleFormScreen
@@ -178,10 +179,10 @@ class MeshRolesFormScreen(Screen):
             return
         self._status("")
         name = self._role_names[event.index]
-        document = self._read()
-        if document is None:
+        spec = self._read()
+        if spec is None:
             return
-        if name not in store.mesh_roles(document):
+        if name not in spec.mesh_roles:
             self._status(f"'{name}' is no longer a mesh role.")
             self._show_roles()
             return
@@ -197,13 +198,13 @@ class MeshRolesFormScreen(Screen):
             role_list = self.query_one("#role-list", FieldList)
             role_list.highlighted = self._role_names.index(current)
 
-    def _gate(self) -> dict | None:
+    def _gate(self) -> Spec | None:
         """A fresh read when the spec has bones to check, else `None` (status set)."""
-        document = self._read()
-        if document is not None and not store.required_bones(document):
+        spec = self._read()
+        if spec is not None and not spec.armature.required_bones:
             self._status(_NO_BONES)
             return None
-        return document
+        return spec
 
     def _open(self) -> None:
         self._adding = True
@@ -226,9 +227,9 @@ class MeshRolesFormScreen(Screen):
         self._status("")
         name = event.value.strip()
         self._drop_question()
-        document = self._check_name(name)
-        if document is not None:
-            self._ask(name, store.required_bones(document))
+        spec = self._check_name(name)
+        if spec is not None:
+            self._ask(name, spec.armature.required_bones)
 
     @on(SelectionList.SelectedChanged, "#role-bones")
     def _on_bones_changed(self) -> None:
@@ -267,7 +268,11 @@ class MeshRolesFormScreen(Screen):
             role_weight.focus()
             return
         try:
-            store.add_mesh_role(self.path, name, pattern, regex, count, weight)
+            store.add_mesh_role(
+                self.path,
+                name,
+                MeshRole(vtx_grp=pattern, mesh_regex=regex, count=count, weight=weight),
+            )
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")
             return
@@ -280,15 +285,15 @@ class MeshRolesFormScreen(Screen):
 
     # -- rendering ---------------------------------------------------------
 
-    def _check_name(self, name: str) -> dict | None:
+    def _check_name(self, name: str) -> Spec | None:
         """A fresh read when `name` is a valid new role name."""
-        document = self._read()
-        if document is None:
+        spec = self._read()
+        if spec is None:
             return None
-        if error := mesh_roles.validate_name(name, store.mesh_roles(document)):
+        if error := mesh_roles.validate_name(name, spec.mesh_roles):
             self._status(error)
             return None
-        return document
+        return spec
 
     def _ask(self, name: str, required: list[str]) -> None:
         """Show the bones question for `name`, nothing checked."""
@@ -327,12 +332,12 @@ class MeshRolesFormScreen(Screen):
 
     def _infer(self) -> str | None:
         """The `vtx_grp` for the checked bones on a fresh read; raises `ValueError`."""
-        document = self._read()
-        if document is None:
+        spec = self._read()
+        if spec is None:
             return None
         return mesh_roles.infer_vtx_grp(
             self.query_one("#role-bones", SelectionList).selected,
-            store.required_bones(document),
+            spec.armature.required_bones,
         )
 
     def _drop_question(self) -> None:
@@ -345,42 +350,44 @@ class MeshRolesFormScreen(Screen):
         self.query_one("#role-bones-question").display = False
 
     def _show_roles(self) -> None:
-        document = self._read()
-        if document is None:
+        spec = self._read()
+        if spec is None:
             return
-        roles = store.mesh_roles(document)
-        self._role_names = list(roles)
+        self._role_names = list(spec.mesh_roles)
         self.refresh_bindings()
         lines: list[tuple[str, int]] = []
         marked: set[int] = set()
-        for name, role in roles.items():
+        for name, role in spec.mesh_roles.items():
             lines.append((name, 0))
-            if not role.get("mesh_regex"):
+            if not role.mesh_regex:
                 marked.add(len(lines))
-            lines.append((f"mesh_regex: {role.get('mesh_regex') or 'not set'}", 1))
-            if "vtx_grp" in role:
-                lines.append((f"vtx_grp: {role['vtx_grp']}", 1))
-            if "count" not in role:
+            lines.append((f"mesh_regex: {role.mesh_regex or 'not set'}", 1))
+            if role.vtx_grp is not None:
+                lines.append((f"vtx_grp: {role.vtx_grp}", 1))
+            if role.count is None:
                 marked.add(len(lines))
-            lines.append((f"count: {role.get('count', 'not set')}", 1))
-            if "weight" in role:
-                weight = mesh_roles.format_weight(role["weight"])
+                count = "not set"
             else:
+                count = str(role.count)
+            lines.append((f"count: {count}", 1))
+            if role.weight is None:
                 marked.add(len(lines))
                 weight = "not set"
+            else:
+                weight = mesh_roles.format_weight(role.weight)
             lines.append((f"weight: {weight}", 1))
-            maps = role.get("texture_maps")
+            maps = role.texture_maps
             lines.append((f"texture_maps: {', '.join(maps) if maps else 'none'}", 1))
-            if slots := role.get("material_slots"):
-                slots_text = mesh_roles.format_material_slots(slots)
+            if role.material_slots:
+                slots_text = mesh_roles.format_material_slots(role.material_slots)
                 lines.append((f"material_slots: {slots_text}", 1))
         role_list = self.query_one("#role-list", FieldList)
         role_list.lines = tuple(lines)
         role_list.marked = frozenset(marked)
 
-    def _read(self) -> dict | None:
+    def _read(self) -> Spec | None:
         try:
-            return store.read(self.path)
+            return Spec.load(self.path)
         except (OSError, ValueError) as error:
             self._status(f"Could not read the spec: {_reason(error)}")
             return None

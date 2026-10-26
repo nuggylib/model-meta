@@ -63,32 +63,21 @@ disk. **No Textual, no UI.**
   skeleton (raising `FileExistsError` rather than overwriting),
   `list_specs(specs_dir)` classifies every spec as `OK` / `UNREADABLE` /
   `MISMATCHED`, and `count(specs_dir)` tallies them without parsing any.
-  `read(path)` returns one document, raising `OSError` / `ValueError` when it
-  is unreadable, not an object, or has a malformed `object_name` /
-  `required_bones` / `bone_name_inverses` / `parenting`, or a `mesh_roles` that
-  isn't a map of objects with string `vtx_grp`s (`armature_name()` /
-  `required_bones()` / `bone_name_inverses()` / `parenting_map()` /
-  `mesh_roles()` default them for older specs). A role may lack `mesh_regex`,
-  but one that holds a non-string is rejected; likewise `count`, which must be
-  an `int` (never a `bool`) when present, `weight`, which must be an `int` or
-  `float` (never a `bool`) when present, and `texture_maps` and
-  `material_slots`, which must be lists of strings (any names). `update_armature(path,
-  add_bones=, set_inverses=, drop_inverses=, object_name=, add_parenting=)`
-  re-reads, patches **only**
-  those keys (bones deduped, drops before sets, `object_name=None` leaves the
-  name alone, parenting merged via `parenting.merge`), and writes
-  atomically — hand edits to anything else survive.
-  `add_mesh_role(path, name, vtx_grp, mesh_regex, count, weight)` re-reads,
-  raises `ValueError` on a taken name, and writes only
-  `mesh_roles[name] = {"mesh_regex": …, "vtx_grp": …, "count": …, "weight": …}`
-  the same way.
-  `update_mesh_role(path, name, new_name, vtx_grp=None, *, mesh_regex=None,
-  count=None, weight=None, texture_maps=None, material_slots=None)`
-  re-reads, raises `ValueError` when `name` is gone or `new_name` is another
-  role, and rewrites that one role in place — same position, other fields
-  kept; a `None` field is kept as is (or left absent), so each editor writes
-  only its own field. An empty `material_slots` removes the key: `[]` is never
-  written for it.
+  Reading one spec is `core.spec.Spec.load(path)`; there is no `read` here.
+  Every mutator below loads the spec, changes it and saves it, raising like
+  `Spec.load` or `OSError` on write.
+  `update_armature(path, ArmaturePatch(add_bones=, set_inverses=,
+  drop_inverses=, object_name=, add_parenting=))` patches **only** those keys
+  (bones deduped, drops before sets, `object_name=None` leaves the name alone,
+  parenting merged via `parenting.merge`) — hand edits to anything else
+  survive.
+  `add_mesh_role(path, name, role: MeshRole)` raises `ValueError` on a taken
+  name and adds that role alone.
+  `update_mesh_role(path, name, new_name, edit)` raises `ValueError` when
+  `name` is gone or `new_name` is another role, and replaces that one role in
+  place with `edit(role)`, where `role` is the `MeshRole` just read. Callers
+  pass `lambda role: replace(role, field=…)` so each editor writes only its
+  own field.
   `delete_mesh_role(path, name)` re-reads, raises `ValueError` when `name` is
   gone, and removes that one role, keeping the others' order. Nothing else in
   a spec names a role, so nothing is stranded.
@@ -101,12 +90,13 @@ disk. **No Textual, no UI.**
   rewritten; callers find the ones it stranded with `unmatched_keys` /
   `unmatched_roles`.
 
-## I/O and validation live in `core/spec_file.py`
-`store.py` holds no file mechanics and no document checks. `read` and `create`
-call `SpecFile(path).read()` / `.create()`, and every mutator wraps its body in
-`with SpecFile(path).edit() as document:`. `SpecFile` (a `core.json_file.JsonFile`)
-owns the spec validators and runs them on every read **and** write, so a mutator
-that produces a malformed spec raises `ValueError` and writes nothing.
+## I/O and validation live in `core/spec.py`
+`store.py` holds no file mechanics and no document checks. `create` builds a
+`Spec` from `schema.skeleton` and calls `.create()`; every mutator is
+`Spec.load(path)` → change → `.save()`. `Spec` owns the shape checks and runs
+them on every load **and** save, so a mutator that produces a malformed spec
+raises `ValueError` and writes nothing. See `core/CLAUDE.md` for what a save
+reorders or adds.
 
 Updates replace atomically (sibling `.tmp` + `os.replace`): replacing *is* the
 point of an update, and a crash never leaves a half-written spec. `create`

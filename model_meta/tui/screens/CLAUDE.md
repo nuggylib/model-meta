@@ -96,7 +96,7 @@ in the app (analogous to a route in a web app).
   shows `Name` (`object_name`, or `not set`) and `Bones` (a count); Mesh roles
   lists the role names (`items`, numbered, columns of 10; `No mesh roles yet.` when
   none). It never lists bones or a role's fields; those live on the forms. The spec is one small
-  file, read inline via `specs.store.read` and **re-read on
+  file, read inline via `Spec.load` and **re-read on
   `on_screen_resume`** so it reflects what a form wrote. A spec `read` rejects
   hides every summary, shows the page-level `#spec-unreadable`, and
   `check_action` disables `e`. `e` (**Edit data**) runs a
@@ -204,7 +204,7 @@ in the app (analogous to a route in a web app).
   `DOMNode` already owns `name`. **Read-only until selected**, the armature
   form's shape: `#role-name-view` (a `FieldList`) swaps for a prefilled
   `#role-name` Input whose Enter renames alone (`update_mesh_role` with no
-  `vtx_grp`; the add rules minus its own name). `#role-fields` (cursor) lists
+  field changes; the add rules minus its own name). `#role-fields` (cursor) lists
   every field the role holds as one `key: value` line, with a muted
   description line beneath where one helps (`_field_lines`; the depth-1
   `.field-list-child` row, `$text-muted`). The required `mesh_regex`,
@@ -313,6 +313,10 @@ in the app (analogous to a route in a web app).
   asks for. The rule's purpose holds because nothing in `SCREENS` names them.
 - **Setup (`s` → `app.open_setup`) is bound on the dashboard only.** No other
   screen offers it, nor tells the user to press `s`.
+- **Spec screens read with `Spec.load(self.path)` and write through
+  `specs.store`.** They load fresh for each read and never hold a `Spec` to
+  save later, so a hand edit made while the screen is open is never
+  overwritten.
 - **Screens read `self.app.specs_dir`, never `config.paths` directly** — the
   same rule that keeps them off `self.app._config_path`. It also means
   `$MODEL_META_CONFIG` needs no sibling `$MODEL_META_SPECS`: point the

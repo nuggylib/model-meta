@@ -20,7 +20,7 @@ from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
-from model_meta.specs import store
+from model_meta.core.spec import Spec
 from model_meta.tui.screens.armature_form import ArmatureFormScreen
 from model_meta.tui.screens.edit_data_modal import EditDataModal
 from model_meta.tui.screens.mesh_roles_form import MeshRolesFormScreen
@@ -100,17 +100,17 @@ class SpecDetailScreen(Screen):
 
     def _show_fields(self) -> None:
         try:
-            document = store.read(self.path)
+            spec = Spec.load(self.path)
         except (OSError, ValueError):
             self._readable = False
         else:
             self._readable = True
             self.query_one("#armature-summary", FieldSummary).rows = (
-                ("Name", store.armature_name(document) or _NOT_SET),
-                ("Bones", str(len(store.required_bones(document)))),
+                ("Name", spec.armature.object_name or _NOT_SET),
+                ("Bones", str(len(spec.armature.required_bones))),
             )
             self.query_one("#mesh-roles-summary", FieldSummary).items = tuple(
-                store.mesh_roles(document)
+                spec.mesh_roles
             )
         for summary in self.query(FieldSummary):
             summary.display = self._readable

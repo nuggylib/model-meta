@@ -2,6 +2,7 @@
 
 import pytest
 
+from model_meta.core.spec import MeshRole
 from model_meta.specs import bones, mesh_roles, schema
 
 REQUIRED = [
@@ -279,9 +280,9 @@ def test_infer_vtx_grp_names_the_bones_it_would_also_match():
 # --- stale_roles -----------------------------------------------------------
 
 ROLES = {
-    "body": {"vtx_grp": "body"},
-    "arm": {"vtx_grp": "arm.{1}"},
-    "glass": {},
+    "body": MeshRole(vtx_grp="body"),
+    "arm": MeshRole(vtx_grp="arm.{1}"),
+    "window_fl": MeshRole(),
 }
 
 
@@ -291,7 +292,7 @@ ROLES = {
         ("body", "hull", ["body"]),
         ("arm.L", "upperarm.L", ["arm"]),
         ("arm.L", "arm.R", []),  # the pattern still covers it
-        ("glass", "window", []),  # no vtx_grp
+        ("window_fl", "window_fr", []),  # no vtx_grp
     ],
 )
 def test_stale_roles(old, new, expected):
@@ -307,7 +308,7 @@ def test_stale_roles(old, new, expected):
         ("body", ["arm.L"], ["body"]),  # a literal
         ("arm.L", ["arm.R"], []),  # the pattern still covers one
         ("arm.L", ["body"], ["arm"]),  # the pattern loses its last bone
-        ("glass", [], []),  # no vtx_grp
+        ("window_fl", [], []),  # no vtx_grp
     ],
 )
 def test_unmatched_roles(gone, required, expected):

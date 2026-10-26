@@ -1,0 +1,38 @@
+# model_meta/core/
+
+Core business logic shared across categories: typed documents and their JSON
+storage. **No Textual, no UI.**
+
+## Files
+- `json_document.py` — JSON file mechanics and the `JsonDocument` base.
+  `read_json` checks only that the file holds a JSON object. `write_json` replaces
+  atomically (sibling `.tmp` + `os.replace`), so a crash leaves the old file.
+  `create_json` opens with `"x"` (`O_EXCL`), so it raises `FileExistsError`
+  rather than overwrite, and makes missing parent dirs.
+  `JsonDocument` is a dataclass base with `path` (keyword-only, ignored by `==`).
+  Subclasses supply `from_dict(data, *, path)`, raising `ValueError` for a
+  malformed document, and `to_dict()`. `load()` is a classmethod; `save()` and
+  `create()` re-parse `to_dict()` through `from_dict()` before touching disk, so
+  a field set to the wrong type raises instead of being written.
+- `spec.py` — the spec document: `Spec(JsonDocument)` holding `model_type`, an
+  `Armature` and `mesh_roles: dict[str, MeshRole]`. `from_dict` carries every
+  shape check and error message. `Spec.path_for(specs_dir, model_type)` raises
+  `ValueError` unless `naming.validate` passes and the name is already
+  normalized.
+  - `MeshRole`: a `None` field was absent and is omitted on write; an empty
+    `material_slots` is omitted too. Keys are written as `mesh_regex`,
+    `vtx_grp`, `count`, `weight`, `texture_maps`, `material_slots`.
+  - `Armature`: absent keys default (`""`, `[]`, `{}`) and are written on save.
+  - `Spec`: a missing `model_type` stays missing; `armature` and `mesh_roles`
+    are always written.
+
+## Conventions
+- **Every level keeps an `extra` dict** of keys the model doesn't know, written
+  back after the known ones. A hand-added or experimental field survives a
+  round trip; `modifiers` lives in `Spec.extra` until it is modeled.
+- **Load right before changing, then save.** Callers hold a `Spec` only for the
+  length of one change. Screens never keep one to save later: a hand edit made
+  in between would be overwritten.
+- The first save of an older or hand-written spec reorders its keys and adds any
+  missing `armature` / `mesh_roles` keys.
+- A new on-disk document is another `JsonDocument` subclass here.

@@ -1,15 +1,15 @@
-"""Spec operations on disk; the file I/O and validation live in `core.spec_file`."""
+"""Spec operations on disk; the file I/O and validation live in `core.spec`."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 
-from model_meta.core.spec_file import SpecFile
-from model_meta.specs import naming, parenting
+from model_meta.core.spec import MeshRole, Spec
+from model_meta.specs import naming, parenting, schema
 
 SPEC_GLOB = f"*{naming.SUFFIX}"
 
@@ -31,75 +31,39 @@ class SpecEntry:
     state: SpecState
 
 
+@dataclass(frozen=True)
+class ArmaturePatch:
+    """Bones append deduped, drops apply before sets, `object_name=None` keeps it."""
+
+    add_bones: Sequence[str] = ()
+    set_inverses: Mapping[str, str] = field(default_factory=dict)
+    drop_inverses: Sequence[str] = ()
+    object_name: str | None = None
+    add_parenting: Mapping[str, Sequence[str]] = field(default_factory=dict)
+
+
 def create(specs_dir: Path, model_type: str) -> Path:
     """Write a new skeleton spec. Raises `FileExistsError` / `OSError`."""
-    path = specs_dir / f"{model_type}{naming.SUFFIX}"
-    SpecFile(path).create()
+    path = Spec.path_for(specs_dir, model_type)
+    Spec.from_dict(schema.skeleton(model_type), path=path).create()
     return path
 
 
-def read(path: Path) -> dict:
-    """One spec document. Raises `OSError`, or `ValueError` for a malformed one."""
-    return SpecFile(path).read()
-
-
-def required_bones(document: dict) -> list[str]:
-    """`armature.required_bones` of a document `read` returned."""
-    return document.get("armature", {}).get("required_bones", [])
-
-
-def bone_name_inverses(document: dict) -> dict[str, str]:
-    """`armature.bone_name_inverses` of a document `read` returned."""
-    return document.get("armature", {}).get("bone_name_inverses", {})
-
-
-def parenting_map(document: dict) -> dict[str, list[str]]:
-    """`armature.parenting` of a document `read` returned."""
-    return document.get("armature", {}).get("parenting", {})
-
-
-def armature_name(document: dict) -> str:
-    """`armature.object_name` of a document `read` returned."""
-    return document.get("armature", {}).get("object_name", "")
-
-
-def mesh_roles(document: dict) -> dict[str, dict]:
-    """`mesh_roles` of a document `read` returned."""
-    return document.get("mesh_roles", {})
-
-
-def update_armature(
-    path: Path,
-    *,
-    add_bones: Iterable[str] = (),
-    set_inverses: Mapping[str, str] | None = None,
-    drop_inverses: Iterable[str] = (),
-    object_name: str | None = None,
-    add_parenting: Mapping[str, Sequence[str]] | None = None,
-) -> None:
-    """Re-read the spec and patch only the armature keys passed.
-
-    Bones append in order, skipping ones already present. Drops apply before
-    sets. `add_parenting` appends child patterns per key, deduped.
-    `object_name` is left alone when `None`. Raises like `read`, or
-    `OSError` on write.
-    """
-    with SpecFile(path).edit() as document:
-        armature = document.setdefault("armature", {})
-        if object_name is not None:
-            armature["object_name"] = object_name
-        bones = armature.setdefault("required_bones", [])
-        for bone in add_bones:
-            if bone not in bones:
-                bones.append(bone)
-        inverses = armature.setdefault("bone_name_inverses", {})
-        for segment in drop_inverses:
-            inverses.pop(segment, None)
-        inverses.update(set_inverses or {})
-        if add_parenting:
-            armature["parenting"] = parenting.merge(
-                armature.get("parenting", {}), add_parenting
-            )
+def update_armature(path: Path, patch: ArmaturePatch) -> None:
+    """Raises like `Spec.load`, or `OSError` on write."""
+    spec = Spec.load(path)
+    armature = spec.armature
+    if patch.object_name is not None:
+        armature.object_name = patch.object_name
+    for bone in patch.add_bones:
+        if bone not in armature.required_bones:
+            armature.required_bones.append(bone)
+    for segment in patch.drop_inverses:
+        armature.bone_name_inverses.pop(segment, None)
+    armature.bone_name_inverses.update(patch.set_inverses)
+    if patch.add_parenting:
+        armature.parenting = parenting.merge(armature.parenting, patch.add_parenting)
+    spec.save()
 
 
 def rename_bone(
@@ -109,117 +73,72 @@ def rename_bone(
     *,
     set_inverses: Mapping[str, str] | None = None,
 ) -> None:
-    """Re-read the spec and rename one required bone in place, touching nothing else.
-
-    `set_inverses` is applied to `bone_name_inverses`. Raises `ValueError` if
-    `name` is gone or `new_name` is another required bone, or like `read`, or
-    `OSError` on write.
-    """
-    with SpecFile(path).edit() as document:
-        bones = required_bones(document)
-        if name not in bones:
-            raise ValueError(f"'{name}' is no longer a required bone.")
-        if new_name != name and new_name in bones:
-            raise ValueError(f"'{new_name}' is already required.")
-        armature = document["armature"]
-        armature["required_bones"] = [new_name if b == name else b for b in bones]
-        armature.setdefault("bone_name_inverses", {}).update(set_inverses or {})
+    """Raises `ValueError` if `name` is gone or `new_name` is another required bone,
+    or like `Spec.load`, or `OSError` on write."""
+    spec = Spec.load(path)
+    armature = spec.armature
+    if name not in armature.required_bones:
+        raise ValueError(f"'{name}' is no longer a required bone.")
+    if new_name != name and new_name in armature.required_bones:
+        raise ValueError(f"'{new_name}' is already required.")
+    armature.required_bones = [
+        new_name if b == name else b for b in armature.required_bones
+    ]
+    armature.bone_name_inverses.update(set_inverses or {})
+    spec.save()
 
 
 def delete_bone(path: Path, name: str) -> None:
-    """Re-read the spec and remove one required bone, touching nothing else.
-
-    Inverses, parenting and mesh roles are kept: their patterns simply stop
-    matching it. Raises `ValueError` if `name` is gone, or like `read`, or
-    `OSError` on write.
-    """
-    with SpecFile(path).edit() as document:
-        bones = required_bones(document)
-        if name not in bones:
-            raise ValueError(f"'{name}' is no longer a required bone.")
-        document["armature"]["required_bones"] = [b for b in bones if b != name]
+    """Inverses, parenting and mesh roles are kept: their patterns simply stop
+    matching it. Raises `ValueError` if `name` is gone, or like `Spec.load`, or
+    `OSError` on write."""
+    spec = Spec.load(path)
+    if name not in spec.armature.required_bones:
+        raise ValueError(f"'{name}' is no longer a required bone.")
+    spec.armature.required_bones.remove(name)
+    spec.save()
 
 
-def add_mesh_role(
-    path: Path, name: str, vtx_grp: str, mesh_regex: str, count: int, weight: float
-) -> None:
-    """Re-read the spec and add one mesh role, touching nothing else.
-
-    Raises `ValueError` if `name` is already a role, or like `read`, or
-    `OSError` on write.
-    """
-    with SpecFile(path).edit() as document:
-        roles = document.setdefault("mesh_roles", {})
-        if name in roles:
-            raise ValueError(f"'{name}' is already a mesh role.")
-        roles[name] = {
-            "mesh_regex": mesh_regex,
-            "vtx_grp": vtx_grp,
-            "count": count,
-            "weight": weight,
-        }
+def add_mesh_role(path: Path, name: str, role: MeshRole) -> None:
+    """Raises `ValueError` if `name` is already a role, or like `Spec.load`, or
+    `OSError` on write."""
+    spec = Spec.load(path)
+    if name in spec.mesh_roles:
+        raise ValueError(f"'{name}' is already a mesh role.")
+    spec.mesh_roles[name] = role
+    spec.save()
 
 
 def update_mesh_role(
-    path: Path,
-    name: str,
-    new_name: str,
-    vtx_grp: str | None = None,
-    *,
-    mesh_regex: str | None = None,
-    count: int | None = None,
-    weight: float | None = None,
-    texture_maps: Sequence[str] | None = None,
-    material_slots: Sequence[str] | None = None,
+    path: Path, name: str, new_name: str, edit: Callable[[MeshRole], MeshRole]
 ) -> None:
-    """Re-read the spec and rename and re-pattern one role, touching nothing else.
+    """`edit` gets the role as just read, and the role keeps its position.
 
-    The role keeps its position and its other fields; a field passed as `None`
-    keeps its value, or its lack of one. An empty `material_slots` removes the
-    key. Raises
-    `ValueError` if `name` is gone or `new_name` is another role, or like
-    `read`, or `OSError` on write.
+    Raises `ValueError` if `name` is gone or `new_name` is another role, or like
+    `Spec.load`, or `OSError` on write.
     """
-    with SpecFile(path).edit() as document:
-        roles = mesh_roles(document)
-        if name not in roles:
-            raise ValueError(f"'{name}' is no longer a mesh role.")
-        if new_name != name and new_name in roles:
-            raise ValueError(f"'{new_name}' is already a mesh role.")
-        changes = {
-            key: value
-            for key, value in (
-                ("vtx_grp", vtx_grp),
-                ("mesh_regex", mesh_regex),
-                ("count", count),
-                ("weight", weight),
-                ("texture_maps", None if texture_maps is None else list(texture_maps)),
-                ("material_slots", list(material_slots) if material_slots else None),
-            )
-            if value is not None
-        }
-        updated = {**roles[name], **changes}
-        if material_slots is not None and not material_slots:
-            updated.pop("material_slots", None)
-        document["mesh_roles"] = {
-            (new_name if key == name else key): (updated if key == name else role)
-            for key, role in roles.items()
-        }
+    spec = Spec.load(path)
+    roles = spec.mesh_roles
+    if name not in roles:
+        raise ValueError(f"'{name}' is no longer a mesh role.")
+    if new_name != name and new_name in roles:
+        raise ValueError(f"'{new_name}' is already a mesh role.")
+    updated = edit(roles[name])
+    spec.mesh_roles = {
+        (new_name if key == name else key): (updated if key == name else role)
+        for key, role in roles.items()
+    }
+    spec.save()
 
 
 def delete_mesh_role(path: Path, name: str) -> None:
-    """Re-read the spec and remove one mesh role, touching nothing else.
-
-    Raises `ValueError` if `name` is gone, or like `read`, or `OSError` on
-    write.
-    """
-    with SpecFile(path).edit() as document:
-        roles = mesh_roles(document)
-        if name not in roles:
-            raise ValueError(f"'{name}' is no longer a mesh role.")
-        document["mesh_roles"] = {
-            key: role for key, role in roles.items() if key != name
-        }
+    """Raises `ValueError` if `name` is gone, or like `Spec.load`, or `OSError`
+    on write."""
+    spec = Spec.load(path)
+    if name not in spec.mesh_roles:
+        raise ValueError(f"'{name}' is no longer a mesh role.")
+    del spec.mesh_roles[name]
+    spec.save()
 
 
 def list_specs(specs_dir: Path) -> list[SpecEntry]:
