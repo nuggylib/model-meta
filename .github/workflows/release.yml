@@ -61,7 +61,7 @@ jobs:
       # artifacts do NOT auto-transfer — fetch by the triggering run's id). Only
       # the macOS target: arm64 is the sole macOS leg.
       - name: Download the ad-hoc macOS archive from the Build run
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
@@ -183,7 +183,7 @@ jobs:
           tar czf "${{ steps.unpack.outputs.archive_name }}" -C dist model-meta.app
 
       - name: Upload the signed macOS archive
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signed-macos-arm64
           path: ${{ steps.unpack.outputs.archive_name }}
@@ -219,7 +219,7 @@ jobs:
       # Check out the exact commit the Build ran on so `body_path` and the moved
       # tag both point at the merged code, not release.yml's default-branch tip.
       - name: Checkout merged commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
@@ -229,7 +229,7 @@ jobs:
       # skips the ad-hoc macOS archive. The SIGNED macOS archive comes from
       # sign-macos in the next step instead.
       - name: Download Linux/Windows binaries from the Build run
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
@@ -241,7 +241,7 @@ jobs:
       # artifact, so no run-id/token needed). Lands in ./dist beside the others
       # under its original model-meta-*-macos-arm64.tar.gz name.
       - name: Download the signed macOS archive
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: signed-macos-arm64
           merge-multiple: true
@@ -273,7 +273,7 @@ jobs:
       # and suspenders for that. Immutable Releases MUST stay disabled on this repo
       # while `latest` is a moving tag.
       - name: Publish / refresh the `latest` prerelease
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: latest
           target_commitish: ${{ github.event.workflow_run.head_sha }}
