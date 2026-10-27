@@ -7,8 +7,10 @@ from typing import Self
 from model_meta.core.json_document import JsonDocument
 from model_meta.specs import naming
 
-_SPEC_KEYS = ("model_type", "armature", "mesh_roles")
+_SPEC_KEYS = ("model_type", "armature", "mesh_roles", "modifiers")
 _ARMATURE_KEYS = ("object_name", "required_bones", "bone_name_inverses", "parenting")
+_MODIFIERS_KEYS = ("required", "allowed", "warn", "fail")
+_REQUIRED_KEYS = ("skinned_meshes",)
 _ROLE_KEYS = (
     "mesh_regex",
     "vtx_grp",
@@ -106,11 +108,68 @@ class Armature:
         }
 
 
+def _default_skinned_meshes() -> list[str]:
+    return ["ARMATURE"]
+
+
+@dataclass
+class RequiredModifiers:
+    skinned_meshes: list[str] = field(default_factory=_default_skinned_meshes)
+    extra: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: object) -> Self:
+        """Raises `ValueError` for malformed requirements. Absent keys get defaults."""
+        if not isinstance(data, dict):
+            raise ValueError("`modifiers.required` is not an object.")
+        return cls(
+            skinned_meshes=_modifier_list(
+                data, "modifiers.required", "skinned_meshes", _default_skinned_meshes()
+            ),
+            extra=_extra(data, _REQUIRED_KEYS),
+        )
+
+    def to_dict(self) -> dict:
+        return {"skinned_meshes": self.skinned_meshes, **self.extra}
+
+
+@dataclass
+class Modifiers:
+    required: RequiredModifiers = field(default_factory=RequiredModifiers)
+    allowed: list[str] = field(default_factory=list)
+    warn: list[str] = field(default_factory=list)
+    fail: list[str] = field(default_factory=list)
+    extra: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: object) -> Self:
+        """Raises `ValueError` for malformed modifiers. Absent keys get defaults."""
+        if not isinstance(data, dict):
+            raise ValueError("`modifiers` is not an object.")
+        return cls(
+            required=RequiredModifiers.from_dict(data.get("required", {})),
+            allowed=_modifier_list(data, "modifiers", "allowed", []),
+            warn=_modifier_list(data, "modifiers", "warn", []),
+            fail=_modifier_list(data, "modifiers", "fail", []),
+            extra=_extra(data, _MODIFIERS_KEYS),
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "required": self.required.to_dict(),
+            "allowed": self.allowed,
+            "warn": self.warn,
+            "fail": self.fail,
+            **self.extra,
+        }
+
+
 @dataclass
 class Spec(JsonDocument):
     model_type: str | None = None
     armature: Armature = field(default_factory=Armature)
     mesh_roles: dict[str, MeshRole] = field(default_factory=dict)
+    modifiers: Modifiers = field(default_factory=Modifiers)
     extra: dict[str, object] = field(default_factory=dict)
 
     @staticmethod
@@ -136,6 +195,7 @@ class Spec(JsonDocument):
             model_type=model_type,
             armature=Armature.from_dict(data.get("armature", {})),
             mesh_roles={name: MeshRole.from_dict(role) for name, role in roles.items()},
+            modifiers=Modifiers.from_dict(data.get("modifiers", {})),
             extra=_extra(data, _SPEC_KEYS),
         )
 
@@ -147,6 +207,7 @@ class Spec(JsonDocument):
             "mesh_roles": {
                 name: role.to_dict() for name, role in self.mesh_roles.items()
             },
+            "modifiers": self.modifiers.to_dict(),
             **self.extra,
         }
 
@@ -183,6 +244,13 @@ def _role_str_list(data: dict, key: str) -> list[str] | None:
     if not _is_str_list(data[key]):
         raise ValueError(f"A mesh role's `{key}` is not a list of strings.")
     return data[key]
+
+
+def _modifier_list(data: dict, where: str, key: str, default: list[str]) -> list[str]:
+    value = data.get(key, default)
+    if not _is_str_list(value):
+        raise ValueError(f"`{where}.{key}` is not a list of strings.")
+    return value
 
 
 def _extra(data: dict, known: tuple[str, ...]) -> dict[str, object]:

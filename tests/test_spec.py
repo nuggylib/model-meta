@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from model_meta.core.spec import Armature, MeshRole, Spec
+from model_meta.core.spec import Armature, MeshRole, Modifiers, RequiredModifiers, Spec
 
 _FULL = {
     "model_type": "vehicle",
@@ -23,6 +23,12 @@ _FULL = {
         },
         # An animated front-left window: skinned to its own bone, so it gets a role.
         "window_fl": {"mesh_regex": "^window_fl", "vtx_grp": "window_fl"},
+    },
+    "modifiers": {
+        "required": {"skinned_meshes": ["ARMATURE"]},
+        "allowed": ["TRIANGULATE", "WEIGHTED_NORMAL"],
+        "warn": ["MIRROR"],
+        "fail": ["BOOLEAN"],
     },
 }
 
@@ -55,6 +61,12 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
     )
     assert spec.mesh_roles["window_fl"] == MeshRole(
         vtx_grp="window_fl", mesh_regex="^window_fl"
+    )
+    assert spec.modifiers == Modifiers(
+        required=RequiredModifiers(skinned_meshes=["ARMATURE"]),
+        allowed=["TRIANGULATE", "WEIGHTED_NORMAL"],
+        warn=["MIRROR"],
+        fail=["BOOLEAN"],
     )
 
 
@@ -95,14 +107,21 @@ def test_empty_material_slots_are_omitted_on_write(tmp_path):
 def test_unknown_keys_survive_at_every_level(tmp_path):
     data = {
         **_FULL,
-        "modifiers": ["bevel"],
+        "materials": ["paint"],
         "armature": {**_FULL["armature"], "ik": {"leg": "foot"}},
         "mesh_roles": {"window_fl": {"vtx_grp": "window_fl", "hinge": "top"}},
+        "modifiers": {
+            **_FULL["modifiers"],
+            "required": {"skinned_meshes": ["ARMATURE"], "static_meshes": []},
+            "notes": "apply MIRROR first",
+        },
     }
     spec = _spec(data, tmp_path)
-    assert spec.extra == {"modifiers": ["bevel"]}
+    assert spec.extra == {"materials": ["paint"]}
     assert spec.armature.extra == {"ik": {"leg": "foot"}}
     assert spec.mesh_roles["window_fl"].extra == {"hinge": "top"}
+    assert spec.modifiers.extra == {"notes": "apply MIRROR first"}
+    assert spec.modifiers.required.extra == {"static_meshes": []}
     assert spec.to_dict() == data
 
 
@@ -110,6 +129,7 @@ def test_missing_keys_default_and_are_added_on_write(tmp_path):
     spec = _spec({"model_type": "vehicle"}, tmp_path)
     assert spec.armature == Armature()
     assert spec.mesh_roles == {}
+    assert spec.modifiers == Modifiers()
     assert spec.to_dict() == {
         "model_type": "vehicle",
         "armature": {
@@ -119,7 +139,63 @@ def test_missing_keys_default_and_are_added_on_write(tmp_path):
             "parenting": {},
         },
         "mesh_roles": {},
+        "modifiers": {
+            "required": {"skinned_meshes": ["ARMATURE"]},
+            "allowed": [],
+            "warn": [],
+            "fail": [],
+        },
     }
+
+
+@pytest.mark.parametrize(
+    "modifiers",
+    [{}, {"required": {}}, {"allowed": ["MIRROR"]}],
+    ids=["empty", "empty-required", "no-required"],
+)
+def test_a_missing_skinned_meshes_defaults_to_armature(tmp_path, modifiers):
+    spec = _spec({"modifiers": modifiers}, tmp_path)
+    assert spec.modifiers.required.skinned_meshes == ["ARMATURE"]
+
+
+def test_an_emptied_skinned_meshes_stays_empty(tmp_path):
+    spec = _spec({"modifiers": {"required": {"skinned_meshes": []}}}, tmp_path)
+    assert spec.modifiers.required.skinned_meshes == []
+    reloaded = _spec(spec.to_dict(), tmp_path)
+    assert reloaded.to_dict()["modifiers"]["required"] == {"skinned_meshes": []}
+
+
+def test_modifier_keys_are_written_in_canonical_order_then_extra(tmp_path):
+    modifiers = {
+        "notes": "",
+        "fail": [],
+        "warn": [],
+        "required": {"future": 1, "skinned_meshes": []},
+        "allowed": [],
+    }
+    written = _spec({"modifiers": modifiers}, tmp_path).to_dict()["modifiers"]
+    assert list(written) == ["required", "allowed", "warn", "fail", "notes"]
+    assert list(written["required"]) == ["skinned_meshes", "future"]
+
+
+@pytest.mark.parametrize(
+    ("modifiers", "message"),
+    [
+        (["bevel"], "`modifiers` is not an object"),
+        ({"required": []}, "`modifiers.required` is not an object"),
+        (
+            {"required": {"skinned_meshes": "ARMATURE"}},
+            "`modifiers.required.skinned_meshes` is not a list of strings",
+        ),
+        ({"allowed": "MIRROR"}, "`modifiers.allowed` is not a list of strings"),
+        ({"warn": "MIRROR"}, "`modifiers.warn` is not a list of strings"),
+        ({"warn": [1]}, "`modifiers.warn` is not a list of strings"),
+        ({"fail": None}, "`modifiers.fail` is not a list of strings"),
+    ],
+)
+def test_malformed_modifiers_are_rejected_with_a_reason(tmp_path, modifiers, message):
+    with pytest.raises(ValueError, match=message):
+        _spec({"modifiers": modifiers}, tmp_path)
 
 
 def test_a_missing_model_type_stays_absent_on_write(tmp_path):

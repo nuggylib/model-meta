@@ -80,7 +80,7 @@ def skeleton(model_type: str) -> dict:
         },
         "mesh_roles": {},
         "modifiers": {
-            "required": {"skinned_meshes": []},
+            "required": {"skinned_meshes": ["ARMATURE"]},
             "allowed": [],
             "warn": [],
             "fail": [],
