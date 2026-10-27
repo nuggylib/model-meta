@@ -27,13 +27,17 @@ Use this skill whenever you are about to run `pytest` locally in this repo.
      then fix failures as CI reports them.
 4. Otherwise pick the test files that import a module in the blast radius (the same `grep`, run over
    `tests`), plus any test file you changed. Leave out everything else.
-5. Run only those files: `uv run pytest -q <file> [<file> ...]`. Narrow further with `-k` when one test
+5. Never run more than **10** test files in one task. When step 4 picks more, keep the 10 closest to the
+   change, in this order: test files you changed or added, then the tests of the modules you changed,
+   then the tests of their importers. Leave the rest to CI.
+6. Run only those files: `uv run pytest -q <file> [<file> ...]`. Narrow further with `-k` when one test
    covers the change.
-6. In your report, list the files you ran and say the full suite is left to CI.
+7. In your report, list the files you ran and say the full suite is left to CI.
 
 ## Verification process
 - No local run in this task was a bare `uv run pytest`, and none passed `tests/` as a whole.
 - Every test file you ran imports a module in the blast radius, or is a test file you changed.
+- No more than 10 test files ran in the task.
 - When the blast radius was more than half the production modules, no tests ran locally and the report
   says CI covers them.
 
