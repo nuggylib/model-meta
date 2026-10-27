@@ -96,19 +96,23 @@ in the app (analogous to a route in a web app).
   Summarizes each root field in a non-focusable `FieldSummary` box — Armature
   shows `Name` (`object_name`, or `not set`) and `Bones` (a count); Mesh roles
   lists the role names (`items`, numbered, columns of 10; `No mesh roles yet.` when
-  none). It never lists bones or a role's fields; those live on the forms. The spec is one small
+  none). Modifiers mirrors the JSON: `Required:` with `skinned_meshes`
+  indented beneath it, then `Allowed`, `Warn`, `Fail`, each via
+  `format_list` (`[]` when empty). It never lists bones or a role's fields; those live on the forms. The spec is one small
   file, read inline via `Spec.load` and **re-read on
   `on_screen_resume`** so it reflects what a form wrote. A spec `read` rejects
   hides every summary, shows the page-level `#spec-unreadable`, and
   `check_action` disables `e`. `e` (**Edit data**) runs a
   `@work(exclusive=True, group="edit-data")` worker:
   `push_screen_wait(EditDataModal())`, then `"armature"` →
-  `ArmatureFormScreen(path)` and `"mesh_roles"` → `MeshRolesFormScreen(path)`.
+  `ArmatureFormScreen(path)`, `"mesh_roles"` → `MeshRolesFormScreen(path)` and
+  `"modifiers"` → `ModifiersFormScreen(path)`.
   A new root field is one `FIELDS` entry in the picker, one route here, and one
   `FieldSummary` with its rows.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
-  root keys: Armature, Mesh roles). Returns the key, or `None` on `escape`.
+  root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
+  `escape`.
   Writes nothing. Own `Footer`, `q` shadowed — `NewSpecModal`'s shape.
 - `confirm_modal.py` — `ConfirmModal(question)`, a generic
   `ModalScreen[bool]`: the question (`markup=False`), **No** (focused) and
@@ -235,6 +239,22 @@ in the app (analogous to a route in a web app).
   Other fields say they can't be edited yet. One editor at a time;
   `escape` closes it unsaved, else leaves. Failures keep text and checks and
   write nothing. `q` shadowed.
+- `modifiers_form.py` — `ModifiersFormScreen(path)`, the spec's `modifiers`.
+  `MeshRoleFormScreen`'s shape minus the name editor and the return value.
+  `#modifier-fields` (cursor) lists `required.skinned_meshes`, `allowed`,
+  `warn` and `fail` as `key: format_list(...)`, each with a muted description
+  beneath, then hand-written `required.<key>` and `modifiers` extras as
+  `key: value` lines that can't be edited yet. Nothing is marked.
+  Enter on a list opens `#modifiers-editor`, one shared `#modifier-choices`
+  checklist relabeled `<key> modifiers`, read fresh: `modifiers.choices`, the
+  list pre-checked, each name tagged `(not a listed modifier)` and/or by its
+  `conflicts` (`(required)` when editing `fail`, else `(in warn, fail)`).
+  Enter on the open list refocuses it; another list discards it unwritten.
+  **Save** writes through `store.update_modifiers` with `modifiers.assign`,
+  closes, keeps the cursor, and reports `Modifiers saved.` plus any moves
+  (`Moved X, Y out of warn; Z out of fail.`), computed against the fresh read.
+  Failures keep the checks and write nothing. `escape` closes the checklist
+  unsaved, else leaves. `q` shadowed.
 - `blender_detail.py`, `godot_detail.py` — the other two detail screens
   (`blender-detail`, `godot-detail` in `SCREENS`). Still **placeholders**: they
   render the configured value they own plus a `#placeholder-note`. They exist so
@@ -305,8 +325,8 @@ in the app (analogous to a route in a web app).
   config-derived pages when it is, so they carry no `None` fallback. `specs.py`
   reads no settings at all — only `self.app.specs_dir` — so it works in every
   config state.
-  `spec_detail.py`, `armature_form.py`, `mesh_roles_form.py` and
-  `mesh_role_form.py` are the named exemptions:
+  `spec_detail.py`, `armature_form.py`, `mesh_roles_form.py`,
+  `mesh_role_form.py` and `modifiers_form.py` are the named exemptions:
   they are *per spec*, with no app-level "current spec" to read, so they take
   the spec as a constructor argument and are **not** registered in `SCREENS` — the
   `SetupWizard` / `NewSpecModal` shape, minus the return value. Adding a

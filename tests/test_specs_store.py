@@ -58,7 +58,7 @@ def test_skeleton_is_complete_and_empty():
     }
     assert document["mesh_roles"] == {}
     assert document["modifiers"] == {
-        "required": {"skinned_meshes": []},
+        "required": {"skinned_meshes": ["ARMATURE"]},
         "allowed": [],
         "warn": [],
         "fail": [],
@@ -394,6 +394,12 @@ def test_update_armature_adds_the_key_to_an_older_spec(tmp_path):
             "parenting": {},
         },
         "mesh_roles": {},
+        "modifiers": {
+            "required": {"skinned_meshes": ["ARMATURE"]},
+            "allowed": [],
+            "warn": [],
+            "fail": [],
+        },
     }
 
 
@@ -747,6 +753,52 @@ def test_update_mesh_role_leaves_no_tmp_behind(tmp_path):
     _update(path, "body", "hull", vtx_grp="body")
 
     assert sorted(p.name for p in tmp_path.iterdir()) == ["vehicle.json"]
+
+
+# --- update_modifiers ------------------------------------------------------
+
+
+def _modified(tmp_path):
+    document = schema.skeleton("vehicle")
+    document["armature"]["required_bones"] = ["root"]
+    document["mesh_roles"] = {"body": {"vtx_grp": "root"}}
+    document["modifiers"]["fail"] = ["BOOLEAN"]
+    document["modifiers"]["notes"] = "hand added"
+    document["hand_added"] = True
+    return _write(tmp_path, "vehicle", document), document
+
+
+def test_update_modifiers_passes_the_modifiers_as_just_read(tmp_path):
+    path, _ = _modified(tmp_path)
+    seen = []
+
+    def edit(mods):
+        seen.append(mods)
+        return mods
+
+    store.update_modifiers(path, edit)
+
+    assert seen[0].fail == ["BOOLEAN"]
+    assert seen[0].extra == {"notes": "hand added"}
+
+
+def test_update_modifiers_writes_the_modifiers_alone(tmp_path):
+    path, document = _modified(tmp_path)
+    store.update_modifiers(path, lambda mods: replace(mods, warn=["MIRROR"]))
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    document["modifiers"]["warn"] = ["MIRROR"]
+    assert after == document
+
+
+def test_update_modifiers_refuses_a_mistyped_edit_and_writes_nothing(tmp_path):
+    path, _ = _modified(tmp_path)
+    before = path.read_bytes()
+
+    with pytest.raises(ValueError, match="`modifiers.warn` is not a list of strings"):
+        store.update_modifiers(path, lambda mods: replace(mods, warn=("MIRROR",)))
+
+    assert path.read_bytes() == before
 
 
 # --- rename_bone -----------------------------------------------------------

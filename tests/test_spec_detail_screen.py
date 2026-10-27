@@ -23,6 +23,7 @@ from model_meta.specs.store import ArmaturePatch
 from model_meta.tui.screens.armature_form import ArmatureFormScreen
 from model_meta.tui.screens.edit_data_modal import EditDataModal
 from model_meta.tui.screens.mesh_roles_form import MeshRolesFormScreen
+from model_meta.tui.screens.modifiers_form import ModifiersFormScreen
 from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.screens.specs import SpecsScreen
 from model_meta.tui.widgets.spec_row import SpecRow
@@ -266,6 +267,7 @@ async def test_spec_detail_reports_an_unreadable_spec_and_disables_edit(
         assert await _wait_for(pilot, lambda: unreadable.display)
         assert not app.screen.query_one("#armature-summary").display
         assert not app.screen.query_one("#mesh-roles-summary").display
+        assert not app.screen.query_one("#modifiers-summary").display
         assert not _enabled(app, "edit_data")
 
         await pilot.press("e")
@@ -398,3 +400,55 @@ async def test_edit_data_opens_the_mesh_roles_form_and_refreshes_on_return(
         await pilot.press("escape", "escape")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecDetailScreen))
         assert await _wait_for(pilot, lambda: _role_columns(app) == [["1). body"]])
+
+
+async def test_spec_detail_lists_each_modifier_list(tmp_path, monkeypatch):
+    document = schema.skeleton("vehicle")
+    document["modifiers"]["allowed"] = ["TRIANGULATE", "WEIGHTED_NORMAL"]
+    document["modifiers"]["fail"] = ["BOOLEAN"]
+    app = _app(tmp_path, monkeypatch, raw=(("vehicle", json.dumps(document)),))
+    async with app.run_test(size=(80, 40)) as pilot:
+        await _open_spec(pilot, app)
+        expected = [
+            "Required:",
+            "skinned_meshes: ARMATURE",
+            "Allowed: TRIANGULATE, WEIGHTED_NORMAL",
+            "Warn: []",
+            "Fail: BOOLEAN",
+        ]
+        assert await _wait_for(
+            pilot, lambda: _rows(app, "modifiers-summary") == expected
+        )
+        summary = app.screen.query_one("#modifiers-summary")
+        assert summary.border_title == "Modifiers"
+        assert [_text(row) for row in summary.query(".field-row-child")] == [
+            "skinned_meshes: ARMATURE"
+        ]
+
+
+async def test_edit_data_opens_the_modifiers_form_and_refreshes_on_return(
+    tmp_path, monkeypatch
+):
+    app = _app(tmp_path, monkeypatch, specs=("vehicle",))
+    spec = tmp_path / "specs" / "vehicle.json"
+    async with app.run_test(size=(80, 40)) as pilot:
+        await _open_spec(pilot, app)
+        first = "skinned_meshes: ARMATURE"
+        assert await _wait_for(pilot, lambda: first in _rows(app, "modifiers-summary"))
+
+        await pilot.press("e")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, EditDataModal))
+        await pilot.press("down", "down", "enter")
+        assert await _wait_for(
+            pilot, lambda: isinstance(app.screen, ModifiersFormScreen)
+        )
+        assert app.screen.path == spec
+
+        await pilot.press("enter", "space", "tab", "enter")
+        await pilot.pause()
+        await pilot.press("escape")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecDetailScreen))
+        emptied = "skinned_meshes: []"
+        assert await _wait_for(
+            pilot, lambda: emptied in _rows(app, "modifiers-summary")
+        )

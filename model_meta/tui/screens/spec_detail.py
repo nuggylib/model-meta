@@ -1,7 +1,8 @@
 """The spec detail screen — one spec's contents, and the way to edit them.
 
 Summarizes each root field in a `FieldSummary` (Armature: name and bone count;
-Mesh roles: the role names in columns; full details live on the forms). `e`
+Mesh roles: the role names in columns; Modifiers: each list; full details live
+on the forms). `e`
 (**Edit data**) opens `EditDataModal`, a picker of the spec's root fields, and
 routes the choice to that field's form. The spec is one small file, read inline (like
 `NewSpecModal`'s inline write) and re-read on every resume so it reflects
@@ -21,13 +22,16 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
 from model_meta.core.spec import Spec
+from model_meta.specs import modifiers
 from model_meta.tui.screens.armature_form import ArmatureFormScreen
 from model_meta.tui.screens.edit_data_modal import EditDataModal
 from model_meta.tui.screens.mesh_roles_form import MeshRolesFormScreen
+from model_meta.tui.screens.modifiers_form import ModifiersFormScreen
 from model_meta.tui.widgets.field_summary import FieldSummary
 
 _UNREADABLE = "This spec can't be read — see the fix steps on the Specs page."
 _NOT_SET = "not set"
+_MODIFIER_ROWS = (("Allowed", "allowed"), ("Warn", "warn"), ("Fail", "fail"))
 
 
 class SpecDetailScreen(Screen):
@@ -67,6 +71,7 @@ class SpecDetailScreen(Screen):
                 id="mesh-roles-summary",
                 classes="field-summary",
             ),
+            FieldSummary("Modifiers", id="modifiers-summary", classes="field-summary"),
             unreadable,
             id="detail-panel",
             can_focus=False,
@@ -95,6 +100,8 @@ class SpecDetailScreen(Screen):
             self.app.push_screen(ArmatureFormScreen(self.path))
         elif field == "mesh_roles":
             self.app.push_screen(MeshRolesFormScreen(self.path))
+        elif field == "modifiers":
+            self.app.push_screen(ModifiersFormScreen(self.path))
 
     # -- sections ----------------------------------------------------------
 
@@ -111,6 +118,15 @@ class SpecDetailScreen(Screen):
             )
             self.query_one("#mesh-roles-summary", FieldSummary).items = tuple(
                 spec.mesh_roles
+            )
+            mods = spec.modifiers
+            skinned = modifiers.format_list(mods.required.skinned_meshes)
+            self.query_one("#modifiers-summary", FieldSummary).rows = (
+                ("Required", (("skinned_meshes", skinned),)),
+                *(
+                    (label, modifiers.format_list(modifiers.get(mods, key)))
+                    for label, key in _MODIFIER_ROWS
+                ),
             )
         for summary in self.query(FieldSummary):
             summary.display = self._readable

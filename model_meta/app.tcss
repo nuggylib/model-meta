@@ -79,6 +79,10 @@ SpecDetailScreen .field-summary {
     border-title-color: $accent;
 }
 
+SpecDetailScreen .field-row-child {
+    padding-left: 2;
+}
+
 /* Item lists (e.g. mesh role names) wrap into side-by-side columns. */
 SpecDetailScreen .field-columns {
     height: auto;
@@ -200,36 +204,38 @@ ModelsScreen #fix-panel {
     border-top: solid $panel;
 }
 
-/* -- armature, mesh-roles and mesh-role forms ---------------------------- */
+/* -- armature, mesh-roles, mesh-role and modifiers forms ----------------- */
 
 /* One box per field (FieldList); the border turns accent when it's selected. */
 ArmatureFormScreen .field-list, MeshRolesFormScreen .field-list,
-MeshRoleFormScreen .field-list {
+MeshRoleFormScreen .field-list, ModifiersFormScreen .field-list {
     padding: 0 1;
     border: round $panel;
     border-title-color: $accent;
 }
 
 ArmatureFormScreen .field-list:focus, MeshRolesFormScreen .field-list:focus,
-MeshRoleFormScreen .field-list:focus {
+MeshRoleFormScreen .field-list:focus, ModifiersFormScreen .field-list:focus {
     border: round $accent;
 }
 
 ArmatureFormScreen .field-list-child, MeshRolesFormScreen .field-list-child,
-MeshRoleFormScreen .field-list-child {
+MeshRoleFormScreen .field-list-child, ModifiersFormScreen .field-list-child {
     padding-left: 2;
 }
 
 /* The row cursor (FieldList cursor=True); stronger while the list has focus. */
 ArmatureFormScreen .field-list-highlighted,
 MeshRolesFormScreen .field-list-highlighted,
-MeshRoleFormScreen .field-list-highlighted {
+MeshRoleFormScreen .field-list-highlighted,
+ModifiersFormScreen .field-list-highlighted {
     background: $boost;
 }
 
 ArmatureFormScreen .field-list:focus .field-list-highlighted,
 MeshRolesFormScreen .field-list:focus .field-list-highlighted,
-MeshRoleFormScreen .field-list:focus .field-list-highlighted {
+MeshRoleFormScreen .field-list:focus .field-list-highlighted,
+ModifiersFormScreen .field-list:focus .field-list-highlighted {
     background: $accent 30%;
 }
 

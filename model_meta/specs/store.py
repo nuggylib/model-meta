@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 
-from model_meta.core.spec import MeshRole, Spec
+from model_meta.core.spec import MeshRole, Modifiers, Spec
 from model_meta.specs import naming, parenting, schema
 
 SPEC_GLOB = f"*{naming.SUFFIX}"
@@ -138,6 +138,14 @@ def delete_mesh_role(path: Path, name: str) -> None:
     if name not in spec.mesh_roles:
         raise ValueError(f"'{name}' is no longer a mesh role.")
     del spec.mesh_roles[name]
+    spec.save()
+
+
+def update_modifiers(path: Path, edit: Callable[[Modifiers], Modifiers]) -> None:
+    """`edit` gets the modifiers as just read. Raises like `Spec.load`, or
+    `OSError` on write."""
+    spec = Spec.load(path)
+    spec.modifiers = edit(spec.modifiers)
     spec.save()
 
 

@@ -13,6 +13,9 @@ COLUMN_LENGTH = 10
 class FieldSummary(Vertical):
     """A titled border around `label: value` rows, then `items` in columns.
 
+    A row whose value is `(key, value)` pairs renders as `label:` with each pair
+    indented beneath it (`.field-row-child`).
+
     Assign `rows` and/or `items`; children come from `compose` via `recompose`
     reactives, as in `FixPanel`, so the auto height re-measures. `items` are
     numbered `1). ` (right-aligned) and fill columns of `COLUMN_LENGTH` top to
@@ -20,7 +23,9 @@ class FieldSummary(Vertical):
     without markup.
     """
 
-    rows: reactive[tuple[tuple[str, str], ...]] = reactive((), recompose=True)
+    rows: reactive[tuple[tuple[str, str | tuple[tuple[str, str], ...]], ...]] = (
+        reactive((), recompose=True)
+    )
     items: reactive[tuple[str, ...]] = reactive((), recompose=True)
 
     def __init__(self, title: str, empty: str = "", **kwargs) -> None:
@@ -30,7 +35,16 @@ class FieldSummary(Vertical):
 
     def compose(self) -> ComposeResult:
         for label, value in self.rows:
-            yield Static(f"{label}: {value}", classes="field-row", markup=False)
+            if isinstance(value, str):
+                yield Static(f"{label}: {value}", classes="field-row", markup=False)
+                continue
+            yield Static(f"{label}:", classes="field-row", markup=False)
+            for key, child in value:
+                yield Static(
+                    f"{key}: {child}",
+                    classes="field-row field-row-child",
+                    markup=False,
+                )
         if self.items:
             width = len(str(len(self.items)))
             numbered = [
