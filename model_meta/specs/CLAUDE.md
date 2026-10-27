@@ -8,7 +8,8 @@ disk. **No Textual, no UI.**
 ## Files
 - `schema.py` — the document's vocabulary (`TEXTURE_MAPS`, `MODIFIERS`) and
   `skeleton(model_type)`, the complete empty-valued document a new spec is
-  written as.
+  written as. Its one non-empty value is `modifiers.required.skinned_meshes:
+  ["ARMATURE"]`.
 - `naming.py` — `normalize(raw)` and `validate(raw)`: the rules a model-type
   name must satisfy to be both a filename and a stored value.
 - `bones.py` — pure bone-name logic: `split`, `validate_name` (63-byte
@@ -59,6 +60,17 @@ disk. **No Textual, no UI.**
   joins them back with `", "`. `texture_choices(current)`: `TEXTURE_MAPS` and then
   `current`'s unknown names, deduped. `order_texture_maps(checked, current)`:
   the checked names in that order (`SelectionList.selected` is click order).
+- `modifiers.py` — pure `modifiers` logic over a `core.spec.Modifiers`.
+  `LISTS` is the four editable lists in display order; `skinned_meshes` stands
+  for `required.skinned_meshes`. `get(mods, name)` returns one.
+  `choices(mods)`: `MODIFIERS`, then every list's unknown names, deduped.
+  Each name sits in one category: `allowed`, `warn` and `fail` exclude each
+  other, and `fail` excludes `skinned_meshes`. `conflicts(mods, name)` maps
+  each name in a list that conflicts with `name` to those lists (more than one
+  for a hand-written overlap). `assign(mods, name, checked)` sets that list to
+  `checked` in `choices` order (deduped) and removes `checked` from every
+  conflicting list; unchecking only removes. Returns a new `Modifiers`, `extra`
+  kept. `format_list(names)`: `", "`-joined, `[]` when empty.
 - `store.py` — the filesystem: `create(specs_dir, model_type)` writes a new
   skeleton (raising `FileExistsError` rather than overwriting),
   `list_specs(specs_dir)` classifies every spec as `OK` / `UNREADABLE` /
@@ -78,6 +90,9 @@ disk. **No Textual, no UI.**
   place with `edit(role)`, where `role` is the `MeshRole` just read. Callers
   pass `lambda role: replace(role, field=…)` so each editor writes only its
   own field.
+  `update_modifiers(path, edit)` replaces `modifiers` with `edit(mods)`, where
+  `mods` is the `Modifiers` just read, so moves are computed against the
+  fresh file.
   `delete_mesh_role(path, name)` re-reads, raises `ValueError` when `name` is
   gone, and removes that one role, keeping the others' order. Nothing else in
   a spec names a role, so nothing is stranded.
@@ -126,8 +141,9 @@ identifiers, not Blender's full ~55, which drifts every release) are the schema
 *definition*. **Nothing validates against them.** A spec written today can hold
 any string in those arrays and no code objects. They exist so the skeleton and a
 later validator key off one list instead of two. The role view's texture
-checklist offers `TEXTURE_MAPS` but keeps unknown names. Do not describe them as
-shipped validation.
+checklist offers `TEXTURE_MAPS` and the Modifiers form's checklists offer
+`MODIFIERS`, but both keep unknown names (exact compare, so `armature` is
+unknown). Do not describe them as shipped validation.
 
 ## Conventions
 - **Validate before joining a path.** `naming._ALLOWED` is the security

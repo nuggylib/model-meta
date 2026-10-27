@@ -44,7 +44,9 @@ in the screen that owns it.
 
 - `field_summary.py` — `FieldSummary(Vertical)`, one spec root field on the
   spec detail screen: `title` becomes the `border_title`, `rows` (a tuple
-  of `(label, value)`) render as `label: value` lines, and `items` (a tuple of
+  of `(label, value)`) render as `label: value` lines, a value of
+  `(key, value)` pairs renders as `label:` with each pair indented beneath it
+  (`.field-row-child`, for a nested JSON object), and `items` (a tuple of
   strings) are numbered `1). ` (right-aligned) and fill side-by-side
   `.field-column`s of `COLUMN_LENGTH` (10), top to bottom; `empty` shows when
   both are empty. Display-only — no
@@ -53,8 +55,8 @@ in the screen that owns it.
   `FixPanel`'s reason, and rows use `markup=False` because values come from
   the spec file (`rich.markup.escape` misses uppercase tags like `[L]`).
 - `field_list.py` — `FieldList(VerticalScroll, can_focus=True)`, one spec
-  field's contents shown read-only on the armature, mesh-roles and mesh-role
-  forms.
+  field's contents shown read-only on the armature, mesh-roles, mesh-role and
+  modifiers forms.
   `title` becomes the `border_title`; `lines` (a tuple of `(text, depth)`)
   render as `.field-list-row`, depth 1 also `.field-list-child`; `empty` shows
   as `.field-list-empty` when there are none. `enter` or a click posts
@@ -66,7 +68,7 @@ in the screen that owns it.
   when `lines` change and kept in view; that row gets
   `.field-list-highlighted`, and a click highlights the clicked row's item.
   `Selected.index` is the highlighted item, `None` without a cursor or items.
-  On: `#role-list`, `#bone-list` and `#role-fields`.
+  On: `#role-list`, `#bone-list`, `#role-fields` and `#modifier-fields`.
   **`marked`** (a frozenset of *line* indices, so a child line can be marked
   alone) adds `.field-list-marked` to those rows. Assigning `lines` clears it,
   so set it after them. On: `#parenting-list`, `#role-list` and

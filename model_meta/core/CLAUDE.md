@@ -47,7 +47,7 @@ storage, and connections to the external apps Model Meta validates against.
   `create()` re-parse `to_dict()` through `from_dict()` before touching disk, so
   a field set to the wrong type raises instead of being written.
 - `spec.py` — the spec document: `Spec(JsonDocument)` holding `model_type`, an
-  `Armature` and `mesh_roles: dict[str, MeshRole]`. `from_dict` carries every
+  `Armature`, `mesh_roles: dict[str, MeshRole]` and `Modifiers`. `from_dict` carries every
   shape check and error message. `Spec.path_for(specs_dir, model_type)` raises
   `ValueError` unless `naming.validate` passes and the name is already
   normalized.
@@ -55,16 +55,21 @@ storage, and connections to the external apps Model Meta validates against.
     `material_slots` is omitted too. Keys are written as `mesh_regex`,
     `vtx_grp`, `count`, `weight`, `texture_maps`, `material_slots`.
   - `Armature`: absent keys default (`""`, `[]`, `{}`) and are written on save.
-  - `Spec`: a missing `model_type` stays missing; `armature` and `mesh_roles`
-    are always written.
+  - `Modifiers`: `required` (a `RequiredModifiers`), `allowed`, `warn` and
+    `fail`, all four always written in that order. Lists default to `[]`,
+    except `required.skinned_meshes`, which defaults to `["ARMATURE"]` **only
+    when the key is missing** (or `required` / `modifiers` is): a `[]` that is
+    present stays `[]`. Shape checks only: the vocabulary isn't enforced.
+  - `Spec`: a missing `model_type` stays missing; `armature`, `mesh_roles` and
+    `modifiers` are always written.
 
 ## Conventions
 - **Every level keeps an `extra` dict** of keys the model doesn't know, written
   back after the known ones. A hand-added or experimental field survives a
-  round trip; `modifiers` lives in `Spec.extra` until it is modeled.
+  round trip.
 - **Load right before changing, then save.** Callers hold a `Spec` only for the
   length of one change. Screens never keep one to save later: a hand edit made
   in between would be overwritten.
 - The first save of an older or hand-written spec reorders its keys and adds any
-  missing `armature` / `mesh_roles` keys.
+  missing `armature` / `mesh_roles` / `modifiers` keys.
 - A new on-disk document is another `JsonDocument` subclass here.
