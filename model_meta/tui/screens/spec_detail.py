@@ -31,12 +31,7 @@ from model_meta.tui.widgets.field_summary import FieldSummary
 
 _UNREADABLE = "This spec can't be read — see the fix steps on the Specs page."
 _NOT_SET = "not set"
-_MODIFIER_ROWS = (
-    ("Required on skinned meshes", "skinned_meshes"),
-    ("Allowed", "allowed"),
-    ("Warn", "warn"),
-    ("Fail", "fail"),
-)
+_MODIFIER_ROWS = (("Allowed", "allowed"), ("Warn", "warn"), ("Fail", "fail"))
 
 
 class SpecDetailScreen(Screen):
@@ -125,9 +120,13 @@ class SpecDetailScreen(Screen):
                 spec.mesh_roles
             )
             mods = spec.modifiers
-            self.query_one("#modifiers-summary", FieldSummary).rows = tuple(
-                (label, modifiers.format_list(modifiers.get(mods, key)))
-                for label, key in _MODIFIER_ROWS
+            skinned = modifiers.format_list(mods.required.skinned_meshes)
+            self.query_one("#modifiers-summary", FieldSummary).rows = (
+                ("Required", (("skinned_meshes", skinned),)),
+                *(
+                    (label, modifiers.format_list(modifiers.get(mods, key)))
+                    for label, key in _MODIFIER_ROWS
+                ),
             )
         for summary in self.query(FieldSummary):
             summary.display = self._readable

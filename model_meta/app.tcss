@@ -79,6 +79,10 @@ SpecDetailScreen .field-summary {
     border-title-color: $accent;
 }
 
+SpecDetailScreen .field-row-child {
+    padding-left: 2;
+}
+
 /* Item lists (e.g. mesh role names) wrap into side-by-side columns. */
 SpecDetailScreen .field-columns {
     height: auto;

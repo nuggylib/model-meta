@@ -410,7 +410,8 @@ async def test_spec_detail_lists_each_modifier_list(tmp_path, monkeypatch):
     async with app.run_test(size=(80, 40)) as pilot:
         await _open_spec(pilot, app)
         expected = [
-            "Required on skinned meshes: ARMATURE",
+            "Required:",
+            "skinned_meshes: ARMATURE",
             "Allowed: TRIANGULATE, WEIGHTED_NORMAL",
             "Warn: []",
             "Fail: BOOLEAN",
@@ -418,7 +419,11 @@ async def test_spec_detail_lists_each_modifier_list(tmp_path, monkeypatch):
         assert await _wait_for(
             pilot, lambda: _rows(app, "modifiers-summary") == expected
         )
-        assert app.screen.query_one("#modifiers-summary").border_title == "Modifiers"
+        summary = app.screen.query_one("#modifiers-summary")
+        assert summary.border_title == "Modifiers"
+        assert [_text(row) for row in summary.query(".field-row-child")] == [
+            "skinned_meshes: ARMATURE"
+        ]
 
 
 async def test_edit_data_opens_the_modifiers_form_and_refreshes_on_return(
@@ -428,7 +433,7 @@ async def test_edit_data_opens_the_modifiers_form_and_refreshes_on_return(
     spec = tmp_path / "specs" / "vehicle.json"
     async with app.run_test(size=(80, 40)) as pilot:
         await _open_spec(pilot, app)
-        first = "Required on skinned meshes: ARMATURE"
+        first = "skinned_meshes: ARMATURE"
         assert await _wait_for(pilot, lambda: first in _rows(app, "modifiers-summary"))
 
         await pilot.press("e")
@@ -443,7 +448,7 @@ async def test_edit_data_opens_the_modifiers_form_and_refreshes_on_return(
         await pilot.pause()
         await pilot.press("escape")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecDetailScreen))
-        emptied = "Required on skinned meshes: []"
+        emptied = "skinned_meshes: []"
         assert await _wait_for(
             pilot, lambda: emptied in _rows(app, "modifiers-summary")
         )
