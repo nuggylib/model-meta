@@ -96,6 +96,11 @@ class ModelMetaApp(App):
         """
         return paths.specs_dir(self._config_path)
 
+    @property
+    def results_dir(self) -> Path:
+        """Where results files live; resolved like `specs_dir`."""
+        return paths.results_dir(self._config_path)
+
     def on_mount(self) -> None:
         self.theme = "textual-dark"
         state, settings = store.load(self._config_path)

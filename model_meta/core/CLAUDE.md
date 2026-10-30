@@ -63,6 +63,12 @@ storage, and connections to the external apps Model Meta validates against.
   - `Spec`: a missing `model_type` stays missing; `armature`, `mesh_roles` and
     `modifiers` are always written.
 
+- `results.py` — `Results(JsonDocument)`, one model's results file:
+  `model_file` (the model's absolute path) and `spec` (the spec's
+  `model_type`), both required strings. `Results.path_for(results_dir,
+  model_file)` names it `<model stem>-<8-hex sha1 of the path>.json`, so
+  same-named models in different directories get separate files.
+
 ## Conventions
 - **Every level keeps an `extra` dict** of keys the model doesn't know, written
   back after the known ones. A hand-added or experimental field survives a

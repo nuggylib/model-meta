@@ -350,6 +350,11 @@ def test_specs_dir_resolves_without_reading_the_config(tmp_path):
     assert paths.specs_dir(cfg) == tmp_path / paths.SPECS_DIRNAME
 
 
+def test_results_dir_sits_beside_the_specs_dir(tmp_path):
+    cfg = tmp_path / "nested" / "config.toml"
+    assert paths.results_dir(cfg) == tmp_path / "nested" / paths.RESULTS_DIRNAME
+
+
 # --- app connections --------------------------------------------------------
 
 
