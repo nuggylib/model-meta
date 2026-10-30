@@ -138,6 +138,7 @@ async def test_specs_dir_is_app_level_state_in_every_config_state(tmp_path):
         await pilot.pause()
         assert app.settings is None
         assert app.specs_dir == tmp_path / "specs"
+        assert app.results_dir == tmp_path / "results"
 
 
 async def test_absent_config_shows_wizard(tmp_path):

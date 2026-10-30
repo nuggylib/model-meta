@@ -63,6 +63,20 @@ DashboardScreen .section:focus {
     margin-top: 1;
 }
 
+/* -- model dashboard screen ---------------------------------------------- */
+
+ModelDashboardScreen #model-title {
+    margin-bottom: 1;
+}
+
+ModelDashboardScreen .model-item-depth-1 {
+    padding-left: 3;
+}
+
+ModelDashboardScreen .model-item-depth-2 {
+    padding-left: 6;
+}
+
 /* -- spec detail screen -------------------------------------------------- */
 
 /* One box per spec root field (FieldSummary); the field name sits in the border. */

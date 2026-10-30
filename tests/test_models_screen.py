@@ -7,6 +7,7 @@ tests exercise the wiring (worker → four states → rows) and the navigation.
 """
 
 import asyncio
+import json
 import time
 from pathlib import Path
 
@@ -16,8 +17,11 @@ from model_meta.app import ModelMetaApp
 from model_meta.config import store
 from model_meta.config.settings import Settings
 from model_meta.core.godot_connection import GodotConnection
+from model_meta.core.results import Results
 from model_meta.models import discovery as models_discovery
 from model_meta.tui.screens.dashboard import DashboardScreen
+from model_meta.tui.screens.link_spec_modal import LinkSpecModal
+from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 from model_meta.tui.screens.models import ModelsScreen
 from model_meta.tui.widgets.model_row import ModelRow
 
@@ -348,8 +352,7 @@ async def test_models_screen_fix_block_stays_visible_under_a_long_list(
 
 
 async def test_models_screen_navigates_and_selects_rows(tmp_path, monkeypatch):
-    """Rows are the only focus stops; enter selects one and says plainly that
-    nothing acts on it yet."""
+    """Rows are the only focus stops; enter opens one."""
     vehicles = tmp_path / "vehicles"
     vehicles.mkdir()
     app = _app(
@@ -375,10 +378,94 @@ async def test_models_screen_navigates_and_selects_rows(tmp_path, monkeypatch):
         assert screen.focused.path.name == "truck.blend"
 
         await pilot.press("enter")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, LinkSpecModal))
+
+
+def _write_spec(app, model_type):
+    path = app.specs_dir / f"{model_type}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"model_type": model_type}), encoding="utf-8")
+
+
+def _sedan_app(tmp_path, monkeypatch):
+    vehicles = tmp_path / "vehicles"
+    vehicles.mkdir()
+    sedan = vehicles / "sedan.blend"
+    app = _app(tmp_path, monkeypatch, [vehicles], {vehicles: [sedan]})
+    return app, sedan
+
+
+async def test_enter_on_an_unlinked_model_links_it_then_opens_its_dashboard(
+    tmp_path, monkeypatch
+):
+    app, sedan = _sedan_app(tmp_path, monkeypatch)
+    _write_spec(app, "vehicle")
+    # An unreadable spec can't be linked to, so it isn't offered.
+    (app.specs_dir / "broken.json").write_text("{", encoding="utf-8")
+    async with app.run_test() as pilot:
+        await _open_models(pilot, app)
+        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        await pilot.press("enter")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, LinkSpecModal))
+        assert app.screen.specs == ["vehicle"]
+
+        await pilot.press("enter")
+        assert await _wait_for(
+            pilot, lambda: isinstance(app.screen, ModelDashboardScreen)
+        )
+        assert app.screen.model_name == "sedan"
+        assert app.screen.spec_path == app.specs_dir / "vehicle.json"
+        results = Results.load(Results.path_for(app.results_dir, sedan))
+        assert (results.model_file, results.spec) == (str(sedan), "vehicle")
+
+
+async def test_enter_on_a_linked_model_skips_the_modal(tmp_path, monkeypatch):
+    app, sedan = _sedan_app(tmp_path, monkeypatch)
+    _write_spec(app, "vehicle")
+    Results(
+        model_file=str(sedan),
+        spec="vehicle",
+        path=Results.path_for(app.results_dir, sedan),
+    ).create()
+    async with app.run_test() as pilot:
+        await _open_models(pilot, app)
+        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        await pilot.press("enter")
+        assert await _wait_for(
+            pilot, lambda: isinstance(app.screen, ModelDashboardScreen)
+        )
+        assert app.screen.spec_path == app.specs_dir / "vehicle.json"
+
+
+async def test_cancelling_the_modal_writes_nothing(tmp_path, monkeypatch):
+    app, sedan = _sedan_app(tmp_path, monkeypatch)
+    _write_spec(app, "vehicle")
+    async with app.run_test() as pilot:
+        await _open_models(pilot, app)
+        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        await pilot.press("enter")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, LinkSpecModal))
+        await pilot.press("escape")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, ModelsScreen))
+        assert not Results.path_for(app.results_dir, sedan).exists()
+
+
+async def test_an_unreadable_results_file_is_reported_not_overwritten(
+    tmp_path, monkeypatch
+):
+    app, sedan = _sedan_app(tmp_path, monkeypatch)
+    results_path = Results.path_for(app.results_dir, sedan)
+    results_path.parent.mkdir(parents=True)
+    results_path.write_text("{", encoding="utf-8")
+    async with app.run_test() as pilot:
+        await _open_models(pilot, app)
+        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        await pilot.press("enter")
         await pilot.pause()
         notices = [str(notification.message) for notification in app._notifications]
-        assert any("truck.blend" in notice for notice in notices)
-        assert any("not wired up yet" in notice for notice in notices)
+        assert any("can't be read" in notice for notice in notices)
+        assert isinstance(app.screen, ModelsScreen)
+        assert results_path.read_text(encoding="utf-8") == "{"
 
 
 async def test_models_screen_scroller_is_not_a_focus_stop(tmp_path, monkeypatch):

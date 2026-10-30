@@ -13,6 +13,7 @@ from platformdirs import user_config_path
 APP_NAME = "model-meta"
 APP_AUTHOR = "mcnuggies"
 SPECS_DIRNAME = "specs"
+RESULTS_DIRNAME = "results"
 
 
 def config_file() -> Path:
@@ -36,3 +37,8 @@ def specs_dir(config_path: Path | None = None) -> Path:
     for free, with no sibling override to set.
     """
     return (config_path or config_file()).parent / SPECS_DIRNAME
+
+
+def results_dir(config_path: Path | None = None) -> Path:
+    """The ``results/`` folder beside ``specs/``, resolved the same way."""
+    return (config_path or config_file()).parent / RESULTS_DIRNAME
