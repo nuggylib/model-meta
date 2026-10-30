@@ -114,6 +114,11 @@ in the app (analogous to a route in a web app).
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
   `escape`.
   Writes nothing. Own `Footer`, `q` shadowed — `NewSpecModal`'s shape.
+- `link_spec_modal.py` — `LinkSpecModal(model_name, specs)`, a
+  `ModalScreen[str | None]`: an `OptionList` of the given spec names. Returns
+  the chosen name, or `None` on `escape`. The caller loads and filters
+  `specs`, so the modal does no I/O. With no specs it shows `#no-specs` and
+  only `escape` works. Writes nothing. Own `Footer`, `q` shadowed.
 - `confirm_modal.py` — `ConfirmModal(question)`, a generic
   `ModalScreen[bool]`: the question (`markup=False`), **No** (focused) and
   **Yes** buttons, `left`/`right` between them. Yes → `True`; No or `escape`
