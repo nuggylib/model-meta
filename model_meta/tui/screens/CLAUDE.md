@@ -65,10 +65,14 @@ in the app (analogous to a route in a web app).
   `VerticalScroll` wrapper passes `can_focus=False` (`ScrollableContainer` opts
   in by default and would otherwise be a stop the user arrows past). Group
   shells are keyed by **position** (`#models-state-{i}`, `#models-files-{i}`),
-  not by path — a path is not a usable widget id. `enter` on a row is a
-  deliberately inert seam: `on_model_row_selected` confirms the choice and says
-  validation is not wired up yet, because there is no spec to validate against
-  and no live Blender connection to validate through.
+  not by path — a path is not a usable widget id. `enter` on a row runs
+  `_open_model` (`@work(exclusive=True, group="open-model")`): it loads the
+  model's `Results` from `app.results_dir`. With none, it lists the `OK` specs
+  (in a thread), `push_screen_wait`s a `LinkSpecModal`, and `create`s the
+  results file from the choice (`escape` writes nothing). Then it pushes
+  `ModelDashboardScreen(model.stem, spec path)`. An unreadable results file,
+  an invalid spec name in it, or a failed write is a notice; the file is never
+  overwritten.
 - `specs.py` — `SpecsScreen` (`specs` in `SCREENS`), the Specs page: the
   validation specs in `specs/`, one focusable `SpecRow` each. Follows
   `models.py`'s page shape — a `VerticalScroll` of rows (`can_focus=False`, so
@@ -109,6 +113,15 @@ in the app (analogous to a route in a web app).
   `"modifiers"` → `ModifiersFormScreen(path)`.
   A new root field is one `FIELDS` entry in the picker, one route here, and one
   `FieldSummary` with its rows.
+- `model_dashboard.py` — `ModelDashboardScreen(model_name, spec_path)`, one
+  model against its spec, pushed by `enter` on a Models row. Not in `SCREENS`.
+  `Models - <model_name>` heading, an unprefixed `Model type: <spec stem>`,
+  then emoji-prefixed rows nested by depth (`.model-item-depth-{n}`):
+  `Armature:` (`object_name`, or `not found`), `Mesh Roles:` with one row per
+  role, and `Modifiers` with `Required:` → `Skinned Meshes`, `Warnings: None`
+  and `Blocked: None`. Every prefix is the `_PENDING` placeholder until live
+  validation exists. The spec is read inline in `compose`; a spec `Spec.load`
+  rejects shows `not found` and no roles.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
@@ -331,8 +344,8 @@ in the app (analogous to a route in a web app).
   reads no settings at all — only `self.app.specs_dir` — so it works in every
   config state.
   `spec_detail.py`, `armature_form.py`, `mesh_roles_form.py`,
-  `mesh_role_form.py` and `modifiers_form.py` are the named exemptions:
-  they are *per spec*, with no app-level "current spec" to read, so they take
+  `mesh_role_form.py`, `modifiers_form.py` and `model_dashboard.py` are the
+  named exemptions: they are *per spec* (or per model), with no app-level "current spec" to read, so they take
   the spec as a constructor argument and are **not** registered in `SCREENS` — the
   `SetupWizard` / `NewSpecModal` shape, minus the return value. Adding a
   `current_spec` to app state would be persisting a selected spec, which nothing

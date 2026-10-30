@@ -25,7 +25,13 @@ from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from model_meta.core.results import Results
+from model_meta.core.spec import Spec
 from model_meta.models import discovery
+from model_meta.specs import store
+from model_meta.specs.store import SpecState
+from model_meta.tui.screens.link_spec_modal import LinkSpecModal
+from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 from model_meta.tui.widgets.fix_panel import FixPanel
 from model_meta.tui.widgets.model_row import ModelRow
 
@@ -82,12 +88,8 @@ class ModelsScreen(Screen):
     """Detail view for the configured source-model directories.
 
     Navigation mirrors the dashboard: rows are focusable (`ModelRow`), `↑`/`↓`
-    and `j`/`k` step through them, `enter` selects one. Only the model rows are
+    and `j`/`k` step through them, `enter` opens one. Only the model rows are
     focus stops — the directory headings and state lines are plain `Static`s.
-
-    Selecting a model currently does nothing but confirm the choice: there is no
-    spec to validate against and no live Blender connection to validate through.
-    `on_model_row_selected` is the seam that work replaces.
     """
 
     BINDINGS = [
@@ -231,7 +233,36 @@ class ModelsScreen(Screen):
     # -- selection ---------------------------------------------------------
 
     def on_model_row_selected(self, message: ModelRow.Selected) -> None:
-        """Confirm the choice; validation has nothing to run against yet."""
-        self.notify(
-            f"{message.path.name} selected — model validation is not wired up yet."
-        )
+        self._open_model(message.path)
+
+    @work(exclusive=True, group="open-model")
+    async def _open_model(self, model: Path) -> None:
+        """Open the model's dashboard, linking it to a spec first if it has no results."""
+        app = cast("ModelMetaApp", self.app)
+        results_path = Results.path_for(app.results_dir, model)
+        try:
+            spec = Results.load(results_path).spec
+        except FileNotFoundError:
+            entries = await asyncio.to_thread(store.list_specs, app.specs_dir)
+            names = [
+                entry.model_type for entry in entries if entry.state is SpecState.OK
+            ]
+            spec = await app.push_screen_wait(LinkSpecModal(model.name, names))
+            if spec is None:
+                return
+            try:
+                Results(model_file=str(model), spec=spec, path=results_path).create()
+            except OSError as error:
+                self.notify(
+                    f"Couldn't save {results_path.name}: {error}", severity="error"
+                )
+                return
+        except (OSError, ValueError):
+            self.notify(f"{results_path.name} can't be read.", severity="error")
+            return
+        try:
+            spec_path = Spec.path_for(app.specs_dir, spec)
+        except ValueError:
+            self.notify(f"{results_path.name} names an invalid spec.", severity="error")
+            return
+        app.push_screen(ModelDashboardScreen(model.stem, spec_path))
