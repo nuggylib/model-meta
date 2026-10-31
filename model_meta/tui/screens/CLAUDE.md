@@ -129,9 +129,10 @@ in the app (analogous to a route in a web app).
   `is_refreshing` reactive swaps every row's prefix to 🔄, then back to
   `_PENDING`. The `blender_running` reactive sets the muted
   `#connection-status` beside the heading: `Manual Mode` when running,
-  `Inactive` when not, empty before the first check. `Inactive` also shows
-  `#connection-hint` ("Start Blender, then press r to refresh."), hidden by
-  CSS otherwise. Both watchers are `NoMatches`-guarded.
+  `Inactive` when not, empty before the first check. The muted
+  `#connection-hint` below it always shows: "Press r to refresh.", or "Start
+  Blender, then press r to refresh." when `Inactive`. Both watchers are
+  `NoMatches`-guarded.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
