@@ -25,7 +25,13 @@ storage, and connections to the external apps Model Meta validates against.
   returns a `ProbeResult` (`ProbeOutcome`: OK / NOT_FOUND / NOT_EXE / TIMEOUT /
   UNPARSEABLE, plus the version and a message). It blocks on a subprocess, so
   callers run it in a Textual worker; every failure is a `ProbeResult`, never a
-  raise or a hang. The live-scene connection, still unbuilt, will extend it.
+  raise or a hang.
+  `is_running(timeout)` reports whether any Blender process is running: `ps -A
+  -o comm=` matched on the basename (so macOS's full path matches and
+  `blender-thumbnailer` doesn't), or `tasklist` filtered to `blender.exe` on
+  Windows. It never checks which file is open: that waits for the Blender
+  add-on built in a separate repo. It blocks on a subprocess, so callers run it
+  in a Textual worker; a failed lookup is `False`, never a raise.
 - `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the
   projects root, and `_accepts` takes a directory. `find_projects(max_depth=4)`
   returns the absolute, sorted directories under it holding a `project.godot`.

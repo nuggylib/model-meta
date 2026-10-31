@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -156,3 +157,59 @@ def test_probe_timeout_when_it_hangs(tmp_path):
     exe = _make_exe(tmp_path / "blender", "sleep 5")
     result = BlenderConnection(exe).probe(timeout=0.3)
     assert result.outcome is ProbeOutcome.TIMEOUT
+
+
+# --- is_running() ----------------------------------------------------------
+
+
+def _fake_run(monkeypatch, platform, stdout):
+    monkeypatch.setattr(blender_connection.sys, "platform", platform)
+    monkeypatch.setattr(
+        blender_connection.subprocess,
+        "run",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, stdout, ""),
+    )
+
+
+def test_is_running_finds_macos_blender(monkeypatch):
+    _fake_run(
+        monkeypatch,
+        "darwin",
+        "/usr/bin/zsh\n/Applications/Blender.app/Contents/MacOS/Blender\n",
+    )
+    assert BlenderConnection.is_running()
+
+
+def test_is_running_ignores_thumbnailer(monkeypatch):
+    thumbnailer = "/Applications/Blender.app/Contents/MacOS/blender-thumbnailer"
+    _fake_run(monkeypatch, "darwin", f"/usr/bin/zsh\n{thumbnailer}\n")
+    assert not BlenderConnection.is_running()
+
+
+def test_is_running_finds_linux_blender(monkeypatch):
+    _fake_run(monkeypatch, "linux", "bash\nblender\n")
+    assert BlenderConnection.is_running()
+
+
+def test_is_running_finds_windows_blender(monkeypatch):
+    _fake_run(
+        monkeypatch, "win32", '"blender.exe","1234","Console","1","512,000 K"\r\n'
+    )
+    assert BlenderConnection.is_running()
+
+
+def test_is_running_false_on_windows_no_match(monkeypatch):
+    _fake_run(
+        monkeypatch,
+        "win32",
+        "INFO: No tasks are running which match the specified criteria.\r\n",
+    )
+    assert not BlenderConnection.is_running()
+
+
+def test_is_running_false_when_lookup_fails(monkeypatch):
+    def run(cmd, **kwargs):
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr(blender_connection.subprocess, "run", run)
+    assert not BlenderConnection.is_running()

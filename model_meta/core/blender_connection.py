@@ -99,3 +99,26 @@ class BlenderConnection(AppConnection):
         return ProbeResult(
             ProbeOutcome.UNPARSEABLE, message="That program is not Blender."
         )
+
+    @classmethod
+    def is_running(cls, timeout: float = 5.0) -> bool:
+        """Blocks on a subprocess, so call it from a worker. Never raises."""
+        if sys.platform == "win32":
+            cmd = ["tasklist", "/FI", "IMAGENAME eq blender.exe", "/FO", "CSV", "/NH"]
+        else:
+            cmd = ["ps", "-A", "-o", "comm="]
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+        if sys.platform == "win32":
+            # With no match, tasklist prints an INFO line rather than nothing.
+            return '"blender.exe"' in proc.stdout.casefold()
+        # macOS lists the full path, and `blender-thumbnailer` must not match.
+        return any(
+            Path(line.strip()).name.casefold() == "blender"
+            for line in proc.stdout.splitlines()
+        )
