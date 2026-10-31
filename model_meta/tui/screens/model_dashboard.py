@@ -23,6 +23,7 @@ _NOT_FOUND = "not found"
 _NONE = "None"
 _MANUAL_MODE = "Manual Mode"
 _INACTIVE = "Inactive"
+_REFRESH_HINT = "Press r to refresh."
 _INACTIVE_HINT = "Start Blender, then press r to refresh."
 
 
@@ -57,7 +58,7 @@ class ModelDashboardScreen(Screen):
                     )
                     yield Static(id="connection-status", classes="config-detail")
                 yield Static(
-                    _INACTIVE_HINT, id="connection-hint", classes="config-detail"
+                    _REFRESH_HINT, id="connection-hint", classes="config-detail"
                 )
             yield Static(
                 f"Model type: {self.spec_path.stem}",
@@ -104,7 +105,7 @@ class ModelDashboardScreen(Screen):
             status.update("")
         else:
             status.update(_MANUAL_MODE if running else _INACTIVE)
-        hint.display = running is False
+        hint.update(_INACTIVE_HINT if running is False else _REFRESH_HINT)
 
     def _emoji(self) -> str:
         return _REFRESHING if self.is_refreshing else _PENDING

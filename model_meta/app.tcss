@@ -83,10 +83,6 @@ ModelDashboardScreen #connection-status {
     margin-left: 1;
 }
 
-ModelDashboardScreen #connection-hint {
-    display: none;
-}
-
 ModelDashboardScreen .model-item-depth-1 {
     padding-left: 3;
 }

@@ -52,6 +52,10 @@ def _status(screen):
     return _text(screen.query_one("#connection-status", Static))
 
 
+def _hint(screen):
+    return _text(screen.query_one("#connection-hint", Static))
+
+
 def _rows(screen):
     return [_text(row) for row in screen.query(".model-item-depth-0")]
 
@@ -61,7 +65,7 @@ async def test_running_blender_shows_manual_mode(tmp_path, monkeypatch):
     screen = _screen(tmp_path)
     async with _Host(screen).run_test() as pilot:
         assert await _wait_for(pilot, lambda: _status(screen) == "Manual Mode")
-        assert not screen.query_one("#connection-hint").display
+        assert _hint(screen) == "Press r to refresh."
 
 
 async def test_no_blender_shows_inactive_and_hint(tmp_path, monkeypatch):
@@ -69,9 +73,7 @@ async def test_no_blender_shows_inactive_and_hint(tmp_path, monkeypatch):
     screen = _screen(tmp_path)
     async with _Host(screen).run_test() as pilot:
         assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
-        hint = screen.query_one("#connection-hint", Static)
-        assert hint.display
-        assert _text(hint) == "Start Blender, then press r to refresh."
+        assert _hint(screen) == "Start Blender, then press r to refresh."
 
 
 async def test_rows_show_refreshing_emoji_until_the_check_returns(
@@ -97,4 +99,4 @@ async def test_r_checks_again(tmp_path, monkeypatch):
         await pilot.press("r")
         assert await _wait_for(pilot, lambda: _status(screen) == "Manual Mode")
         assert len(calls) == 2
-        assert not screen.query_one("#connection-hint").display
+        assert _hint(screen) == "Press r to refresh."
