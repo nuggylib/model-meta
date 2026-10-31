@@ -122,6 +122,16 @@ in the app (analogous to a route in a web app).
   and `Blocked: None`. Every prefix is the `_PENDING` placeholder until live
   validation exists. The spec is read inline in `compose`; a spec `Spec.load`
   rejects shows `not found` and no roles.
+  **Manual Mode:** a check runs on mount and on `r` (**Refresh**), in a
+  `@work(exclusive=True, group="blender-check")` worker calling
+  `BlenderConnection.is_running` via `asyncio.to_thread`. It only asks whether
+  Blender is running, never which file is open. While it runs the
+  `is_refreshing` reactive swaps every row's prefix to 🔄, then back to
+  `_PENDING`. The `blender_running` reactive sets the muted
+  `#connection-status` beside the heading: `Manual Mode` when running,
+  `Inactive` when not, empty before the first check. `Inactive` also shows
+  `#connection-hint` ("Start Blender, then press r to refresh."), hidden by
+  CSS otherwise. Both watchers are `NoMatches`-guarded.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
