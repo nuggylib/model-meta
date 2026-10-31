@@ -65,8 +65,26 @@ DashboardScreen .section:focus {
 
 /* -- model dashboard screen ---------------------------------------------- */
 
-ModelDashboardScreen #model-title {
+ModelDashboardScreen #model-header {
+    height: auto;
     margin-bottom: 1;
+}
+
+ModelDashboardScreen #model-heading {
+    height: auto;
+}
+
+ModelDashboardScreen #model-title {
+    width: auto;
+}
+
+ModelDashboardScreen #connection-status {
+    width: auto;
+    margin-left: 1;
+}
+
+ModelDashboardScreen #connection-hint {
+    display: none;
 }
 
 ModelDashboardScreen .model-item-depth-1 {
