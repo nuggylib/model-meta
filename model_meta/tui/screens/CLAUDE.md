@@ -119,20 +119,26 @@ in the app (analogous to a route in a web app).
   then emoji-prefixed rows nested by depth (`.model-item-depth-{n}`):
   `Armature:` (`object_name`, or `not found`), `Mesh Roles:` with one row per
   role, and `Modifiers` with `Required:` → `Skinned Meshes`, `Warnings: None`
-  and `Blocked: None`. Every prefix is the `_PENDING` placeholder until live
-  validation exists. The spec is read inline in `compose`; a spec `Spec.load`
-  rejects shows `not found` and no roles.
-  **Manual Mode:** a check runs on mount and on `r` (**Refresh**), in a
-  `@work(exclusive=True, group="blender-check")` worker calling
-  `BlenderConnection.is_running` via `asyncio.to_thread`. It only asks whether
-  Blender is running, never which file is open. While it runs the
-  `is_refreshing` reactive swaps every row's prefix to 🔄, then back to
-  `_PENDING`. The `blender_running` reactive sets the muted
-  `#connection-status` beside the heading: `Manual Mode` when running,
+  and `Blocked: None`. Every prefix is the `_PENDING` placeholder except the
+  armature row in Live Mode. The spec is read inline in `compose`; a spec
+  `Spec.load` rejects shows `not found` and no roles.
+  **Connection:** on mount and on `r` (**Refresh**), the
+  `@work(exclusive=True, group="blender-check")` worker first subscribes
+  through `core.blender_bridge.subscribe_armatures` and stays subscribed. Each
+  message sets `live`; each armature list sets `armatures` (a `busy` `None`
+  keeps the last list). In Live Mode the `Armature:` row is ✅ when the spec's
+  `object_name` is in the scene's armatures, else ❌ (a blank `object_name`
+  is ❌). Only that row has a live check. When the bridge raises
+  `BridgeError` (unreachable or dropped), `live` and `armatures` reset and the
+  worker falls back to the **Manual Mode** check: `BlenderConnection.is_running`
+  via `asyncio.to_thread`, which only asks whether Blender is running. While
+  connecting or checking, the `is_refreshing` reactive swaps every row's
+  prefix to 🔄. The muted `#connection-status` beside the heading reads
+  `Live Mode`, else from `blender_running`: `Manual Mode` when running,
   `Inactive` when not, empty before the first check. The muted
-  `#connection-hint` below it always shows: "Press r to refresh.", or "Start
-  Blender, then press r to refresh." when `Inactive`. Both watchers are
-  `NoMatches`-guarded.
+  `#connection-hint` below it always shows: "Results update when you save in
+  Blender." in Live Mode, "Press r to refresh.", or "Start Blender, then press
+  r to refresh." when `Inactive`. Every watcher is `NoMatches`-guarded.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
