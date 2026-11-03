@@ -32,6 +32,14 @@ storage, and connections to the external apps Model Meta validates against.
   Windows. It never checks which file is open: that waits for the Blender
   add-on built in a separate repo. It blocks on a subprocess, so callers run it
   in a Textual worker; a failed lookup is `False`, never a raise.
+- `blender_bridge.py` — the client for the `model-meta-blender-addon`
+  protocol (TCP `127.0.0.1:7417`, one JSON object per line, `"protocol": 1`).
+  `subscribe_armatures(port, timeout)` is an async generator: it sends
+  `subscribe_armatures` and yields each pushed armature-name list (the add-on
+  pushes on subscribe and after a save/load that changes it), or `None` for a
+  `busy` error. It never ends normally: an unreachable add-on, any other error
+  line, a malformed message or a closed socket raises `BridgeError`. Pure
+  asyncio streams, so it runs on the event loop with no thread.
 - `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the
   projects root, and `_accepts` takes a directory. `find_projects(max_depth=4)`
   returns the absolute, sorted directories under it holding a `project.godot`.
