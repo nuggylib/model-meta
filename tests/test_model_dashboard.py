@@ -6,7 +6,7 @@ import pytest
 from textual.app import App
 from textual.widgets import Static
 
-from model_meta.core.blender_bridge import BridgeError
+from model_meta.core.blender_bridge import Armatures, BridgeError
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.tui.screens import model_dashboard
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
@@ -59,7 +59,7 @@ def _fake_bridge(monkeypatch, *, reachable=True):
         if not reachable:
             raise BridgeError("The Blender add-on isn't reachable.")
         while (armatures := await pushes.get()) is not _DROP:
-            yield armatures
+            yield Armatures(armatures)
         raise BridgeError("The Blender add-on closed the connection.")
 
     monkeypatch.setattr(model_dashboard, "subscribe_armatures", subscribe_armatures)

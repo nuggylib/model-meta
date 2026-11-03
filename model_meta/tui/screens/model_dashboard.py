@@ -13,7 +13,11 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
-from model_meta.core.blender_bridge import BridgeError, subscribe_armatures
+from model_meta.core.blender_bridge import (
+    Armatures,
+    BridgeError,
+    subscribe_armatures,
+)
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.spec import Spec
 
@@ -99,11 +103,12 @@ class ModelDashboardScreen(Screen):
     async def _refresh(self) -> None:
         self.is_refreshing = True
         try:
-            async for armatures in subscribe_armatures():
+            async for message in subscribe_armatures():
                 self.live = True
                 self.is_refreshing = False
-                if armatures is not None:  # busy: keep the last result
-                    self.armatures = armatures
+                # busy (`None`): keep the last result
+                if isinstance(message, Armatures) and message.names is not None:
+                    self.armatures = message.names
         except BridgeError:
             pass
         self.live = False
