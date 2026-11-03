@@ -57,7 +57,8 @@ normal checkout. Do not commit or hand-edit it.
 - `core/` — core app business logic shared across categories: `JsonDocument`,
   the typed, atomically-written JSON document base, and `Spec`, the spec
   document built on it; `AppConnection`, the base for an external app at a path,
-  `BlenderConnection` (executable detection and `--version` probe) and
+  `BlenderConnection` (executable detection and `--version` probe), the
+  `blender_bridge` client for the Blender add-on's armature subscription, and
   `GodotConnection` (a bounded scan for `project.godot` under the projects
   root). No Textual, no UI.
 - `tui/` — Textual screens (`tui/screens/`) and the reusable widgets they are
