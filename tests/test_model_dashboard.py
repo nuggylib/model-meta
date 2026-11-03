@@ -139,7 +139,10 @@ async def test_reachable_add_on_shows_live_mode(tmp_path, monkeypatch):
     async with _Host(screen).run_test() as pilot:
         pushes.put_nowait(["Rig"])
         assert await _wait_for(pilot, lambda: _status(screen) == "Live Mode")
-        assert _hint(screen) == "Results update when you save in Blender."
+        assert (
+            _hint(screen)
+            == "Results update when you load a file, or save one, in Blender."
+        )
         assert calls == []
 
 
