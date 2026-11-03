@@ -32,6 +32,7 @@ _NONE = "None"
 _LIVE_MODE = "Live Mode"
 _MANUAL_MODE = "Manual Mode"
 _INACTIVE = "Inactive"
+_WRONG_FILE = "Wrong File"
 _LIVE_HINT = "Results update when you load a file, or save one, in Blender."
 _REFRESH_HINT = "Press r to refresh."
 _INACTIVE_HINT = "Start Blender, then press r to refresh."
@@ -78,7 +79,10 @@ class ModelDashboardScreen(Screen):
                     )
                     yield Static(id="connection-status", classes="config-detail")
                 yield Static(
-                    _REFRESH_HINT, id="connection-hint", classes="config-detail"
+                    _REFRESH_HINT,
+                    id="connection-hint",
+                    classes="config-detail",
+                    markup=False,
                 )
             yield Static(
                 f"Model type: {self.spec_path.stem}",
@@ -110,8 +114,9 @@ class ModelDashboardScreen(Screen):
                 self.is_refreshing = False
                 if isinstance(message, OpenFile):
                     self.wrong_file = not _is_model(message.path, self.model)
+                    self.armatures = None
                 # busy (`None`): keep the last result
-                elif message.names is not None:
+                elif message.names is not None and not self.wrong_file:
                     self.armatures = message.names
         except BridgeError:
             pass
@@ -134,6 +139,9 @@ class ModelDashboardScreen(Screen):
     def watch_blender_running(self) -> None:
         self._update_connection()
 
+    def watch_wrong_file(self) -> None:
+        self._update_connection()
+
     def _update_rows(self) -> None:
         for index, (_, text) in enumerate(self._rows):
             try:
@@ -147,6 +155,13 @@ class ModelDashboardScreen(Screen):
             status = self.query_one("#connection-status", Static)
             hint = self.query_one("#connection-hint", Static)
         except NoMatches:
+            return
+        if self.live and self.wrong_file:
+            status.update(_WRONG_FILE)
+            hint.update(
+                f"Blender doesn't have {self.model.name} open. "
+                "Results are paused until it does."
+            )
             return
         if self.live:
             status.update(_LIVE_MODE)

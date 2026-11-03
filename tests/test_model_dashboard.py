@@ -251,6 +251,46 @@ async def test_symlink_to_the_model_is_the_right_file(tmp_path, monkeypatch):
     assert not await _wrong_file_after(tmp_path, monkeypatch, OpenFile(str(link)))
 
 
+async def test_wrong_file_pauses_results_and_says_so(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(OpenFile(None))
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
+        assert await _wait_for(pilot, pushes.empty)
+        await pilot.pause()
+        assert (
+            _hint(screen)
+            == "Blender doesn't have sedan.blend open. Results are paused until it does."
+        )
+        assert all(row.startswith("🟡 ") for row in _rows(screen))
+
+
+async def test_leaving_the_model_file_drops_its_live_results(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(OpenFile(str(tmp_path / "sedan.blend")))
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
+        pushes.put_nowait(OpenFile(None))
+        assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
+        assert _rows(screen)[0] == "🟡 Armature: Rig"
+
+
+async def test_opening_the_model_file_resumes_live_mode(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(OpenFile(None))
+        assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
+        pushes.put_nowait(OpenFile(str(tmp_path / "sedan.blend")))
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
+        assert _status(screen) == "Live Mode"
+
+
 async def test_opening_the_model_file_clears_the_wrong_file(tmp_path, monkeypatch):
     model = str(tmp_path / "sedan.blend")
     assert not await _wrong_file_after(
