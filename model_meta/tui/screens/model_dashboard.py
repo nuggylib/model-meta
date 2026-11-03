@@ -28,7 +28,7 @@ _NONE = "None"
 _LIVE_MODE = "Live Mode"
 _MANUAL_MODE = "Manual Mode"
 _INACTIVE = "Inactive"
-_LIVE_HINT = "Results update when you save in Blender."
+_LIVE_HINT = "Results update when you load a file, or save one, in Blender."
 _REFRESH_HINT = "Press r to refresh."
 _INACTIVE_HINT = "Start Blender, then press r to refresh."
 
