@@ -70,7 +70,7 @@ in the app (analogous to a route in a web app).
   model's `Results` from `app.results_dir`. With none, it lists the `OK` specs
   (in a thread), `push_screen_wait`s a `LinkSpecModal`, and `create`s the
   results file from the choice (`escape` writes nothing). Then it pushes
-  `ModelDashboardScreen(model.stem, spec path)`. An unreadable results file,
+  `ModelDashboardScreen(model, spec path)`. An unreadable results file,
   an invalid spec name in it, or a failed write is a notice; the file is never
   overwritten.
 - `specs.py` — `SpecsScreen` (`specs` in `SCREENS`), the Specs page: the
@@ -113,9 +113,9 @@ in the app (analogous to a route in a web app).
   `"modifiers"` → `ModifiersFormScreen(path)`.
   A new root field is one `FIELDS` entry in the picker, one route here, and one
   `FieldSummary` with its rows.
-- `model_dashboard.py` — `ModelDashboardScreen(model_name, spec_path)`, one
-  model against its spec, pushed by `enter` on a Models row. Not in `SCREENS`.
-  `Models - <model_name>` heading, an unprefixed `Model type: <spec stem>`,
+- `model_dashboard.py` — `ModelDashboardScreen(model, spec_path)`, one
+  model (its `.blend` path) against its spec, pushed by `enter` on a Models
+  row. Not in `SCREENS`. `Models - <model stem>` heading, an unprefixed `Model type: <spec stem>`,
   then emoji-prefixed rows nested by depth (`.model-item-depth-{n}`):
   `Armature:` (`object_name`, or `not found`), `Mesh Roles:` with one row per
   role, and `Modifiers` with `Required:` → `Skinned Meshes`, `Warnings: None`
@@ -125,11 +125,13 @@ in the app (analogous to a route in a web app).
   **Connection:** on mount and on `r` (**Refresh**), the
   `@work(exclusive=True, group="blender-check")` worker first subscribes
   through `core.blender_bridge.subscribe_armatures` and stays subscribed. Each
-  message sets `live`; each armature list sets `armatures` (a `busy` `None`
-  keeps the last list). In Live Mode the `Armature:` row is ✅ when the spec's
+  message sets `live`; each `OpenFile` sets `wrong_file` unless its path is the
+  model (`Path.samefile`, so a symlink or a case difference still matches; a
+  never-saved `None` or a missing file is wrong); each armature list sets
+  `armatures` (a `busy` `None` keeps the last list). In Live Mode the `Armature:` row is ✅ when the spec's
   `object_name` is in the scene's armatures, else ❌ (a blank `object_name`
   is ❌). Only that row has a live check. When the bridge raises
-  `BridgeError` (unreachable or dropped), `live` and `armatures` reset and the
+  `BridgeError` (unreachable or dropped), `live`, `wrong_file` and `armatures` reset and the
   worker falls back to the **Manual Mode** check: `BlenderConnection.is_running`
   via `asyncio.to_thread`, which only asks whether Blender is running. While
   connecting or checking, the `is_refreshing` reactive swaps every row's

@@ -14,8 +14,8 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
 from model_meta.core.blender_bridge import (
-    Armatures,
     BridgeError,
+    OpenFile,
     subscribe_armatures,
 )
 from model_meta.core.blender_connection import BlenderConnection
@@ -50,9 +50,11 @@ class ModelDashboardScreen(Screen):
     live: reactive[bool] = reactive(False)
     armatures: reactive[list[str] | None] = reactive(None)
 
-    def __init__(self, model_name: str, spec_path: Path) -> None:
+    wrong_file: reactive[bool] = reactive(False)
+
+    def __init__(self, model: Path, spec_path: Path) -> None:
         super().__init__()
-        self.model_name = model_name
+        self.model = model
         self.spec_path = spec_path
         self._armature = ""
         self._rows: list[tuple[int, str]] = []
@@ -69,7 +71,7 @@ class ModelDashboardScreen(Screen):
             with Vertical(id="model-header"):
                 with Horizontal(id="model-heading"):
                     yield Static(
-                        f"Models - {self.model_name}",
+                        f"Models - {self.model.stem}",
                         id="model-title",
                         classes="section-title",
                         markup=False,
@@ -106,12 +108,15 @@ class ModelDashboardScreen(Screen):
             async for message in subscribe_armatures():
                 self.live = True
                 self.is_refreshing = False
+                if isinstance(message, OpenFile):
+                    self.wrong_file = not _is_model(message.path, self.model)
                 # busy (`None`): keep the last result
-                if isinstance(message, Armatures) and message.names is not None:
+                elif message.names is not None:
                     self.armatures = message.names
         except BridgeError:
             pass
         self.live = False
+        self.wrong_file = False
         self.armatures = None
         self.is_refreshing = True
         self.blender_running = await asyncio.to_thread(BlenderConnection.is_running)
@@ -173,3 +178,13 @@ class ModelDashboardScreen(Screen):
             (1, f"Warnings: {_NONE}"),
             (1, f"Blocked: {_NONE}"),
         ]
+
+
+def _is_model(open_file: str | None, model: Path) -> bool:
+    if open_file is None:
+        return False
+    try:
+        # samefile, not ==: a symlinked model or a case-insensitive filesystem still matches.
+        return Path(open_file).samefile(model)
+    except OSError:
+        return False
