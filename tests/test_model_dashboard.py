@@ -6,7 +6,7 @@ import pytest
 from textual.app import App
 from textual.widgets import Static
 
-from model_meta.core.blender_bridge import BridgeError
+from model_meta.core.blender_bridge import Armatures, BridgeError, OpenFile
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.tui.screens import model_dashboard
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
@@ -52,14 +52,14 @@ def _fake_running(monkeypatch, *answers):
 
 
 def _fake_bridge(monkeypatch, *, reachable=True):
-    """Each put is yielded to the screen; `_DROP` closes the connection."""
+    """Each put is yielded to the screen, a list as `Armatures`; `_DROP` closes the connection."""
     pushes = asyncio.Queue()
 
     async def subscribe_armatures(port=7417, timeout=2.0):
         if not reachable:
             raise BridgeError("The Blender add-on isn't reachable.")
-        while (armatures := await pushes.get()) is not _DROP:
-            yield armatures
+        while (message := await pushes.get()) is not _DROP:
+            yield message if isinstance(message, OpenFile) else Armatures(message)
         raise BridgeError("The Blender add-on closed the connection.")
 
     monkeypatch.setattr(model_dashboard, "subscribe_armatures", subscribe_armatures)
@@ -75,7 +75,9 @@ def _screen(tmp_path, armature=None):
     path = tmp_path / "vehicle.json"
     if armature is not None:
         path.write_text(json.dumps({"armature": {"object_name": armature}}))
-    return ModelDashboardScreen("sedan", path)
+    model = tmp_path / "sedan.blend"
+    model.touch()
+    return ModelDashboardScreen(model, path)
 
 
 def _status(screen):
@@ -215,3 +217,82 @@ async def test_dropped_connection_falls_back_to_manual_mode(tmp_path, monkeypatc
         assert await _wait_for(pilot, lambda: _status(screen) == "Manual Mode")
         assert _rows(screen)[0] == "🟡 Armature: Rig"
         assert _hint(screen) == "Press r to refresh."
+
+
+async def _wrong_file_after(tmp_path, monkeypatch, *messages):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        for message in messages:
+            pushes.put_nowait(message)
+        assert await _wait_for(pilot, pushes.empty)
+        await pilot.pause()
+        return screen.wrong_file
+
+
+async def test_model_file_open_is_the_right_file(tmp_path, monkeypatch):
+    model = str(tmp_path / "sedan.blend")
+    assert not await _wrong_file_after(tmp_path, monkeypatch, OpenFile(model))
+
+
+async def test_another_file_open_is_the_wrong_file(tmp_path, monkeypatch):
+    other = tmp_path / "coupe.blend"
+    other.touch()
+    assert await _wrong_file_after(tmp_path, monkeypatch, OpenFile(str(other)))
+
+
+async def test_unsaved_file_open_is_the_wrong_file(tmp_path, monkeypatch):
+    assert await _wrong_file_after(tmp_path, monkeypatch, OpenFile(None))
+
+
+async def test_symlink_to_the_model_is_the_right_file(tmp_path, monkeypatch):
+    link = tmp_path / "link.blend"
+    link.symlink_to(tmp_path / "sedan.blend")
+    assert not await _wrong_file_after(tmp_path, monkeypatch, OpenFile(str(link)))
+
+
+async def test_wrong_file_pauses_results_and_says_so(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(OpenFile(None))
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
+        assert await _wait_for(pilot, pushes.empty)
+        await pilot.pause()
+        assert (
+            _hint(screen)
+            == "Blender doesn't have sedan.blend open. Results are paused until it does."
+        )
+        assert all(row.startswith("🟡 ") for row in _rows(screen))
+
+
+async def test_leaving_the_model_file_drops_its_live_results(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(OpenFile(str(tmp_path / "sedan.blend")))
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
+        pushes.put_nowait(OpenFile(None))
+        assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
+        assert _rows(screen)[0] == "🟡 Armature: Rig"
+
+
+async def test_opening_the_model_file_resumes_live_mode(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(OpenFile(None))
+        assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
+        pushes.put_nowait(OpenFile(str(tmp_path / "sedan.blend")))
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
+        assert _status(screen) == "Live Mode"
+
+
+async def test_opening_the_model_file_clears_the_wrong_file(tmp_path, monkeypatch):
+    model = str(tmp_path / "sedan.blend")
+    assert not await _wrong_file_after(
+        tmp_path, monkeypatch, OpenFile(None), OpenFile(model)
+    )

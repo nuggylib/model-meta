@@ -413,7 +413,7 @@ async def test_enter_on_an_unlinked_model_links_it_then_opens_its_dashboard(
         assert await _wait_for(
             pilot, lambda: isinstance(app.screen, ModelDashboardScreen)
         )
-        assert app.screen.model_name == "sedan"
+        assert app.screen.model == sedan
         assert app.screen.spec_path == app.specs_dir / "vehicle.json"
         results = Results.load(Results.path_for(app.results_dir, sedan))
         assert (results.model_file, results.spec) == (str(sedan), "vehicle")

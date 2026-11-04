@@ -13,7 +13,11 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
-from model_meta.core.blender_bridge import BridgeError, subscribe_armatures
+from model_meta.core.blender_bridge import (
+    BridgeError,
+    OpenFile,
+    subscribe_armatures,
+)
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.spec import Spec
 
@@ -28,6 +32,7 @@ _NONE = "None"
 _LIVE_MODE = "Live Mode"
 _MANUAL_MODE = "Manual Mode"
 _INACTIVE = "Inactive"
+_WRONG_FILE = "Wrong File"
 _LIVE_HINT = "Results update when you load a file, or save one, in Blender."
 _REFRESH_HINT = "Press r to refresh."
 _INACTIVE_HINT = "Start Blender, then press r to refresh."
@@ -46,9 +51,11 @@ class ModelDashboardScreen(Screen):
     live: reactive[bool] = reactive(False)
     armatures: reactive[list[str] | None] = reactive(None)
 
-    def __init__(self, model_name: str, spec_path: Path) -> None:
+    wrong_file: reactive[bool] = reactive(False)
+
+    def __init__(self, model: Path, spec_path: Path) -> None:
         super().__init__()
-        self.model_name = model_name
+        self.model = model
         self.spec_path = spec_path
         self._armature = ""
         self._rows: list[tuple[int, str]] = []
@@ -65,14 +72,17 @@ class ModelDashboardScreen(Screen):
             with Vertical(id="model-header"):
                 with Horizontal(id="model-heading"):
                     yield Static(
-                        f"Models - {self.model_name}",
+                        f"Models - {self.model.stem}",
                         id="model-title",
                         classes="section-title",
                         markup=False,
                     )
                     yield Static(id="connection-status", classes="config-detail")
                 yield Static(
-                    _REFRESH_HINT, id="connection-hint", classes="config-detail"
+                    _REFRESH_HINT,
+                    id="connection-hint",
+                    classes="config-detail",
+                    markup=False,
                 )
             yield Static(
                 f"Model type: {self.spec_path.stem}",
@@ -99,14 +109,19 @@ class ModelDashboardScreen(Screen):
     async def _refresh(self) -> None:
         self.is_refreshing = True
         try:
-            async for armatures in subscribe_armatures():
+            async for message in subscribe_armatures():
                 self.live = True
                 self.is_refreshing = False
-                if armatures is not None:  # busy: keep the last result
-                    self.armatures = armatures
+                if isinstance(message, OpenFile):
+                    self.wrong_file = not _is_model(message.path, self.model)
+                    self.armatures = None
+                # busy (`None`): keep the last result
+                elif message.names is not None and not self.wrong_file:
+                    self.armatures = message.names
         except BridgeError:
             pass
         self.live = False
+        self.wrong_file = False
         self.armatures = None
         self.is_refreshing = True
         self.blender_running = await asyncio.to_thread(BlenderConnection.is_running)
@@ -124,6 +139,9 @@ class ModelDashboardScreen(Screen):
     def watch_blender_running(self) -> None:
         self._update_connection()
 
+    def watch_wrong_file(self) -> None:
+        self._update_connection()
+
     def _update_rows(self) -> None:
         for index, (_, text) in enumerate(self._rows):
             try:
@@ -137,6 +155,13 @@ class ModelDashboardScreen(Screen):
             status = self.query_one("#connection-status", Static)
             hint = self.query_one("#connection-hint", Static)
         except NoMatches:
+            return
+        if self.live and self.wrong_file:
+            status.update(_WRONG_FILE)
+            hint.update(
+                f"Blender doesn't have {self.model.name} open. "
+                "Results are paused until it does."
+            )
             return
         if self.live:
             status.update(_LIVE_MODE)
@@ -168,3 +193,13 @@ class ModelDashboardScreen(Screen):
             (1, f"Warnings: {_NONE}"),
             (1, f"Blocked: {_NONE}"),
         ]
+
+
+def _is_model(open_file: str | None, model: Path) -> bool:
+    if open_file is None:
+        return False
+    try:
+        # samefile, not ==: a symlinked model or a case-insensitive filesystem still matches.
+        return Path(open_file).samefile(model)
+    except OSError:
+        return False
