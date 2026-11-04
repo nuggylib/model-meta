@@ -8,6 +8,7 @@ from textual.widgets import Static
 
 from model_meta.core.blender_bridge import Armatures, BridgeError, OpenFile
 from model_meta.core.blender_connection import BlenderConnection
+from model_meta.core.results import Results
 from model_meta.tui.screens import model_dashboard
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 
@@ -71,13 +72,26 @@ def _no_bridge(monkeypatch):
     _fake_bridge(monkeypatch, reachable=False)
 
 
-def _screen(tmp_path, armature=None):
+def _screen(tmp_path, armature=None, passed=None):
+    """`passed` is the armature result already in the results file."""
     path = tmp_path / "vehicle.json"
     if armature is not None:
         path.write_text(json.dumps({"armature": {"object_name": armature}}))
     model = tmp_path / "sedan.blend"
     model.touch()
-    return ModelDashboardScreen(model, path)
+    results_path = tmp_path / "sedan-results.json"
+    Results(
+        model_file=str(model), spec="vehicle", armature=passed, path=results_path
+    ).create()
+    return ModelDashboardScreen(model, path, results_path)
+
+
+def _on_model(tmp_path):
+    return OpenFile(str(tmp_path / "sedan.blend"))
+
+
+def _saved(screen):
+    return Results.load(screen.results_path).armature
 
 
 def _status(screen):
@@ -134,12 +148,42 @@ async def test_r_checks_again(tmp_path, monkeypatch):
         assert _hint(screen) == "Press r to refresh."
 
 
+@pytest.mark.parametrize(("passed", "emoji"), [(True, "✅"), (False, "❌")])
+async def test_inactive_shows_the_saved_result(tmp_path, monkeypatch, passed, emoji):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig", passed=passed)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        assert _rows(screen)[0] == f"{emoji} Armature: Rig"
+
+
+async def test_r_rereads_the_results_file(tmp_path, monkeypatch):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        results = Results.load(screen.results_path)
+        results.armature = True
+        results.save()
+        await pilot.press("r")
+        assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
+
+
+async def test_unreadable_results_file_is_pending(tmp_path, monkeypatch):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig", passed=True)
+    screen.results_path.write_text("{", encoding="utf-8")
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        assert _rows(screen)[0] == "🟡 Armature: Rig"
+
+
 async def test_reachable_add_on_shows_live_mode(tmp_path, monkeypatch):
     calls = _fake_running(monkeypatch, True)
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
-        pushes.put_nowait(["Rig"])
+        pushes.put_nowait(_on_model(tmp_path))
         assert await _wait_for(pilot, lambda: _status(screen) == "Live Mode")
         assert (
             _hint(screen)
@@ -148,27 +192,32 @@ async def test_reachable_add_on_shows_live_mode(tmp_path, monkeypatch):
         assert calls == []
 
 
-async def test_armature_in_scene_passes(tmp_path, monkeypatch):
+async def test_armature_in_scene_passes_and_is_saved(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Other", "Rig"])
         assert await _wait_for(pilot, lambda: _rows(screen)[0] == "✅ Armature: Rig")
+        assert _saved(screen) is True
         assert all(row.startswith("🟡 ") for row in _rows(screen)[1:])
 
 
-async def test_armature_missing_from_scene_fails(tmp_path, monkeypatch):
+async def test_armature_missing_from_scene_fails_and_is_saved(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
-    screen = _screen(tmp_path, "Rig")
+    screen = _screen(tmp_path, "Rig", passed=True)
     async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Other"])
         assert await _wait_for(pilot, lambda: _rows(screen)[0] == "❌ Armature: Rig")
+        assert _saved(screen) is False
 
 
 async def test_unnamed_armature_fails(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "")
     async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Rig"])
         assert await _wait_for(
             pilot, lambda: _rows(screen)[0] == "❌ Armature: not found"
@@ -179,16 +228,42 @@ async def test_pushed_change_updates_the_armature_row(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Other"])
         assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("❌ "))
         pushes.put_nowait(["Rig"])
         assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
+        assert _saved(screen) is True
+
+
+async def test_save_keeps_other_keys_in_the_results_file(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    data = json.loads(screen.results_path.read_text(encoding="utf-8"))
+    screen.results_path.write_text(json.dumps({**data, "note": "hand-added"}))
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
+        assert Results.load(screen.results_path).extra == {"note": "hand-added"}
+
+
+async def test_armatures_before_the_open_file_are_not_saved(tmp_path, monkeypatch):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig")
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(["Rig"])
+        assert await _wait_for(pilot, pushes.empty)
+        await pilot.pause()
+        assert _rows(screen)[0] == "🟡 Armature: Rig"
+        assert _saved(screen) is None
 
 
 async def test_busy_keeps_the_last_result(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Rig"])
         assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
         pushes.put_nowait(None)
@@ -201,21 +276,23 @@ async def test_busy_before_a_result_is_pending(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(None)
         assert await _wait_for(pilot, lambda: _status(screen) == "Live Mode")
         assert _rows(screen)[0] == "🟡 Armature: Rig"
 
 
-async def test_dropped_connection_falls_back_to_manual_mode(tmp_path, monkeypatch):
+async def test_dropped_connection_keeps_the_saved_result(tmp_path, monkeypatch):
     _fake_running(monkeypatch, True)
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Rig"])
-        assert await _wait_for(pilot, lambda: _status(screen) == "Live Mode")
+        assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
         pushes.put_nowait(_DROP)
         assert await _wait_for(pilot, lambda: _status(screen) == "Manual Mode")
-        assert _rows(screen)[0] == "🟡 Armature: Rig"
+        assert _rows(screen)[0] == "✅ Armature: Rig"
         assert _hint(screen) == "Press r to refresh."
 
 
@@ -231,8 +308,7 @@ async def _wrong_file_after(tmp_path, monkeypatch, *messages):
 
 
 async def test_model_file_open_is_the_right_file(tmp_path, monkeypatch):
-    model = str(tmp_path / "sedan.blend")
-    assert not await _wrong_file_after(tmp_path, monkeypatch, OpenFile(model))
+    assert not await _wrong_file_after(tmp_path, monkeypatch, _on_model(tmp_path))
 
 
 async def test_another_file_open_is_the_wrong_file(tmp_path, monkeypatch):
@@ -251,7 +327,7 @@ async def test_symlink_to_the_model_is_the_right_file(tmp_path, monkeypatch):
     assert not await _wrong_file_after(tmp_path, monkeypatch, OpenFile(str(link)))
 
 
-async def test_wrong_file_pauses_results_and_says_so(tmp_path, monkeypatch):
+async def test_wrong_file_says_so_and_saves_nothing(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
@@ -265,34 +341,53 @@ async def test_wrong_file_pauses_results_and_says_so(tmp_path, monkeypatch):
             == "Blender doesn't have sedan.blend open. Results are paused until it does."
         )
         assert all(row.startswith("🟡 ") for row in _rows(screen))
+        assert _saved(screen) is None
 
 
-async def test_leaving_the_model_file_drops_its_live_results(tmp_path, monkeypatch):
+@pytest.mark.parametrize(("passed", "emoji"), [(True, "✅"), (False, "❌")])
+async def test_wrong_file_shows_the_saved_result(tmp_path, monkeypatch, passed, emoji):
+    pushes = _fake_bridge(monkeypatch)
+    screen = _screen(tmp_path, "Rig", passed=passed)
+    async with _Host(screen).run_test() as pilot:
+        pushes.put_nowait(OpenFile(None))
+        pushes.put_nowait(["Rig"] if not passed else ["Other"])
+        assert await _wait_for(pilot, pushes.empty)
+        await pilot.pause()
+        assert _status(screen) == "Wrong File"
+        assert _rows(screen)[0] == f"{emoji} Armature: Rig"
+        assert _saved(screen) is passed
+
+
+async def test_leaving_the_model_file_keeps_its_saved_result(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
     screen = _screen(tmp_path, "Rig")
     async with _Host(screen).run_test() as pilot:
-        pushes.put_nowait(OpenFile(str(tmp_path / "sedan.blend")))
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Rig"])
         assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
         pushes.put_nowait(OpenFile(None))
-        assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
-        assert _rows(screen)[0] == "🟡 Armature: Rig"
+        pushes.put_nowait(["Other"])
+        assert await _wait_for(pilot, pushes.empty)
+        await pilot.pause()
+        assert _status(screen) == "Wrong File"
+        assert _rows(screen)[0] == "✅ Armature: Rig"
+        assert _saved(screen) is True
 
 
 async def test_opening_the_model_file_resumes_live_mode(tmp_path, monkeypatch):
     pushes = _fake_bridge(monkeypatch)
-    screen = _screen(tmp_path, "Rig")
+    screen = _screen(tmp_path, "Rig", passed=False)
     async with _Host(screen).run_test() as pilot:
         pushes.put_nowait(OpenFile(None))
         assert await _wait_for(pilot, lambda: _status(screen) == "Wrong File")
-        pushes.put_nowait(OpenFile(str(tmp_path / "sedan.blend")))
+        pushes.put_nowait(_on_model(tmp_path))
         pushes.put_nowait(["Rig"])
         assert await _wait_for(pilot, lambda: _rows(screen)[0].startswith("✅ "))
         assert _status(screen) == "Live Mode"
+        assert _saved(screen) is True
 
 
 async def test_opening_the_model_file_clears_the_wrong_file(tmp_path, monkeypatch):
-    model = str(tmp_path / "sedan.blend")
     assert not await _wrong_file_after(
-        tmp_path, monkeypatch, OpenFile(None), OpenFile(model)
+        tmp_path, monkeypatch, OpenFile(None), _on_model(tmp_path)
     )
