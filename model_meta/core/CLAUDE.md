@@ -31,20 +31,34 @@ storage, and connections to the external apps Model Meta validates against.
   `blender-thumbnailer` doesn't), or `tasklist` filtered to `blender.exe` on
   Windows. It never checks which file is open: `blender_bridge` does. It blocks on a subprocess, so callers run it
   in a Textual worker; a failed lookup is `False`, never a raise.
-- `blender_bridge.py` — the client for the `model-meta-blender-addon`
+- `blender_bridge.py` — the client for the `model-meta-bridge` add-on's
   protocol (TCP `127.0.0.1:7417`, one JSON object per line, `"protocol": 1`).
-  `subscribe_armatures(port, timeout)` is an async generator: it sends
-  `get_filepath` and `subscribe_armatures` in one write, so the add-on answers
-  both in the same tick and the path is the file the subscription is on. It
-  yields `OpenFile(path)` (`None` for a never-saved file), then each pushed
-  `Armatures(names)` (the add-on pushes on subscribe and after a save/load that
-  changes the list), with `names` `None` for a `busy` error. When a save/load
-  leaves Blender on another file, the add-on pushes the new path and ends the
-  subscription; the client sends the pair again and yields the new
-  `OpenFile`, so it stays subscribed across files. It never ends normally: an
-  unreachable add-on, any other error
-  line, a malformed message or a closed socket raises `BridgeError`. Pure
-  asyncio streams, so it runs on the event loop with no thread.
+  Each subscription is an async generator on its own connection, opened by
+  `_subscription(kind)`, which yields a `_Bridge`. The `_Bridge` sends
+  `get_filepath` and the subscribe request in one write, so the add-on answers
+  both in the same tick and the path is the file the subscription is on. When
+  a save/load leaves Blender on another file, the add-on pushes the new path
+  and ends the subscription; `_Bridge.receive` sends the pair again and returns
+  only the reply's `OpenFile`, so both generators stay subscribed across files.
+  `_parse` reads every reply shape. Neither generator ends normally: an
+  unreachable add-on, an error line other than `busy` / `stale`, a malformed
+  message or a closed socket raises `BridgeError`. Pure asyncio streams, so it
+  runs on the event loop with no thread.
+  - `subscribe_armatures(port, timeout)` yields `OpenFile(path)` (`None` for a
+    never-saved file), then each pushed `Armatures(names)` (pushed on subscribe
+    and after a save/load that changes the list), with `names` `None` for
+    `busy`.
+  - `subscribe_meshes(plan, port, timeout)` yields `OpenFile`, then one
+    `MeshReport(meshes, weights, textures)` per pushed `meshes_revision` (on
+    subscribe and after every save/load). A `_Fetch` follows every page of
+    `get_meshes`, then calls `plan(meshes)` for the `WeightTarget`s and
+    `TextureTarget`s and pages through `get_mesh_weights` /
+    `get_mesh_textures` for them, in order (an empty list isn't requested).
+    Only one request is in flight at a time. A newer revision restarts the
+    fetch from cursor 0 once the in-flight reply lands, whether that reply is
+    an old page or `stale`. `busy` yields nothing: queued requests are answered
+    when Blender unlocks. A `MeshWeight` / `MeshTextures` with `error` set
+    (`no mesh`, `no vertex group`) is an item, not a raise.
 - `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the
   projects root, and `_accepts` takes a directory. `find_projects(max_depth=4)`
   returns the absolute, sorted directories under it holding a `project.godot`.

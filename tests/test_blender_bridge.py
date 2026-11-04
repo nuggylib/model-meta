@@ -1,13 +1,21 @@
 import asyncio
 import json
+from contextlib import aclosing
 
 import pytest
 
 from model_meta.core.blender_bridge import (
     Armatures,
     BridgeError,
+    MeshReport,
+    MeshTextures,
+    MeshWeight,
     OpenFile,
+    SceneMesh,
+    TextureTarget,
+    WeightTarget,
     subscribe_armatures,
+    subscribe_meshes,
 )
 
 _PAIR = [
@@ -20,30 +28,38 @@ def _line(body):
     return (json.dumps({"protocol": 1, **body}) + "\n").encode()
 
 
+def _result(result):
+    return _line({"status": "success", "result": result})
+
+
 def _success(*names):
-    return _line({"status": "success", "result": {"armatures": list(names)}})
+    return _result({"armatures": list(names)})
 
 
 def _filepath(path):
-    return _line({"status": "success", "result": {"filepath": path}})
+    return _result({"filepath": path})
 
 
 def _error(message):
     return _line({"status": "error", "message": message})
 
 
-async def _serve(*replies):
-    """Each reply is the lines sent after reading one request pair; closes after the last.
+async def _serve(respond):
+    """`respond(request)` returns the lines to send back; a `None` among them closes.
 
     Returns (server, port, requests).
     """
     requests = []
 
     async def handle(reader, writer):
-        for lines in replies:
-            requests.append([json.loads(await reader.readline()) for _ in _PAIR])
-            for line in lines:
-                writer.write(line)
+        while line := await reader.readline():
+            request = json.loads(line)
+            requests.append(request)
+            for reply in respond(request):
+                if reply is None:
+                    writer.close()
+                    return
+                writer.write(reply)
             await writer.drain()
         writer.close()
 
@@ -51,8 +67,20 @@ async def _serve(*replies):
     return server, server.sockets[0].getsockname()[1], requests
 
 
+def _subscriptions(*replies):
+    """Answers each subscribe with the next reply, then closes after the last."""
+    remaining = list(replies)
+
+    def respond(request):
+        if request["type"] == "get_filepath":
+            return []
+        return [*remaining.pop(0), *([] if remaining else [None])]
+
+    return respond
+
+
 async def _collect(*replies):
-    server, port, requests = await _serve(*replies)
+    server, port, requests = await _serve(_subscriptions(*replies))
     seen = []
     async with server:
         with pytest.raises(BridgeError) as info:
@@ -63,7 +91,7 @@ async def _collect(*replies):
 
 async def test_sends_filepath_then_subscribe_requests():
     _, _, requests = await _collect([])
-    assert requests == [_PAIR]
+    assert requests == _PAIR
 
 
 async def test_yields_the_open_file_then_each_armature_list():
@@ -97,7 +125,7 @@ async def test_another_file_opening_subscribes_again():
         [_filepath("/a.blend"), _success("Rig"), _filepath("/b.blend")],
         [_filepath("/b.blend"), _success("Other")],
     )
-    assert requests == [_PAIR, _PAIR]
+    assert requests == [*_PAIR, *_PAIR]
     assert seen == [
         OpenFile("/a.blend"),
         Armatures(["Rig"]),
@@ -139,6 +167,8 @@ async def test_unsupported_protocol_raises(version):
         {"status": "success", "result": {"armatures": "Rig"}},
         {"status": "success", "result": {"armatures": [1]}},
         {"status": "success", "result": {"filepath": 1}},
+        {"status": "success", "result": {"meshes_revision": 1}},
+        {"status": "error", "message": "stale"},
     ],
 )
 async def test_unexpected_message_raises(body):
@@ -147,9 +177,265 @@ async def test_unexpected_message_raises(body):
 
 
 async def test_unreachable_raises():
-    server, port, _ = await _serve()
+    server, port, _ = await _serve(lambda _request: [None])
     server.close()
     await server.wait_closed()
     with pytest.raises(BridgeError, match="isn't reachable"):
         async for _ in subscribe_armatures(port=port):
             pass
+
+
+_WHEEL = {
+    "name": "wheel_hub.front.L",
+    "vertex_groups": ["wheel_hub.front.L", "paint"],
+    "material_slots": ["rubber"],
+}
+_BODY = {
+    "name": "body",
+    "vertex_groups": ["body"],
+    "material_slots": ["paint", "glass"],
+}
+_SCENE_BODY = SceneMesh("body", ["body"], ["paint", "glass"])
+
+
+class _FakeAddon:
+    """Answers mesh requests one item per page, so every list takes several pages.
+
+    `saves` maps a request's index to `"before"` or `"after"`: a save/load bumps the
+    revision and pushes it before or after that request's answer. `answers` maps a
+    request type to `f(lines)`, which returns what to send in place of `lines`.
+    """
+
+    def __init__(self, meshes, weights=None, textures=None, saves=None, answers=None):
+        self.revision = 1
+        self.meshes = meshes
+        self.weights = weights or {}
+        self.textures = textures or {}
+        self.saves = saves or {}
+        self.answers = answers or {}
+        self._index = 0
+
+    def respond(self, request):
+        save = self.saves.get(self._index)
+        self._index += 1
+        before = self._save() if save == "before" else []
+        lines = self._answer(request)
+        after = self._save() if save == "after" else []
+        change = self.answers.get(request["type"], lambda lines: lines)
+        return [*before, *change(lines), *after]
+
+    def _save(self):
+        self.revision += 1
+        return [_result({"meshes_revision": self.revision})]
+
+    def _answer(self, request):
+        kind = request["type"]
+        if kind == "get_filepath":
+            return [_filepath("/models/sedan.blend")]
+        if kind == "subscribe_meshes":
+            return [_result({"meshes_revision": self.revision})]
+        if request["revision"] != self.revision:
+            return [_error("stale")]
+        key, build = {
+            "get_meshes": ("meshes", lambda _request: self.meshes),
+            "get_mesh_weights": ("mesh_weights", self._weights),
+            "get_mesh_textures": ("mesh_textures", self._textures),
+        }[kind]
+        items = build(request)
+        cursor = request["cursor"]
+        more = cursor + 1 < len(items)
+        return [
+            _result(
+                {
+                    "revision": self.revision,
+                    key: items[cursor : cursor + 1],
+                    "has_more": more,
+                    "next_cursor": cursor + 1 if more else None,
+                }
+            )
+        ]
+
+    def _weights(self, request):
+        return [
+            {
+                "mesh": target["mesh"],
+                "vertex_group": target["vertex_group"],
+                **self.weights[target["mesh"], target["vertex_group"]],
+            }
+            for target in request["meshes"]
+        ]
+
+    def _textures(self, request):
+        return [
+            {"mesh": target["mesh"], **self.textures[target["mesh"]]}
+            for target in request["meshes"]
+        ]
+
+
+def _no_targets(_meshes):
+    return [], []
+
+
+async def _collect_meshes(addon, plan=_no_targets, count=2):
+    server, port, requests = await _serve(addon.respond)
+    seen = []
+    async with server:
+        async with aclosing(subscribe_meshes(plan, port=port)) as messages:
+            async for message in messages:
+                seen.append(message)
+                if len(seen) == count:
+                    break
+    return seen, requests
+
+
+def _paged(requests):
+    return [
+        (request["type"], request["revision"], request["cursor"])
+        for request in requests
+        if request["type"].startswith("get_mesh")
+    ]
+
+
+async def test_meshes_subscribes_then_follows_every_page():
+    seen, requests = await _collect_meshes(_FakeAddon([_BODY, _WHEEL]))
+    assert requests[:2] == [
+        {"protocol": 1, "type": "get_filepath"},
+        {"protocol": 1, "type": "subscribe_meshes"},
+    ]
+    assert _paged(requests) == [("get_meshes", 1, 0), ("get_meshes", 1, 1)]
+    assert seen == [
+        OpenFile("/models/sedan.blend"),
+        MeshReport(
+            [
+                _SCENE_BODY,
+                SceneMesh(
+                    "wheel_hub.front.L", ["wheel_hub.front.L", "paint"], ["rubber"]
+                ),
+            ],
+            [],
+            [],
+        ),
+    ]
+
+
+async def test_no_meshes_is_a_report():
+    seen, _ = await _collect_meshes(_FakeAddon([]))
+    assert seen[1] == MeshReport([], [], [])
+
+
+async def test_plan_targets_are_fetched_in_order():
+    planned = []
+
+    def plan(meshes):
+        planned.append(meshes)
+        return (
+            [
+                WeightTarget("wheel_hub.front.L", "wheel_hub.front.L", 1.0),
+                WeightTarget("body", "body", 0.5),
+            ],
+            [TextureTarget("wheel_hub.front.L", ["albedo", "orm"])],
+        )
+
+    addon = _FakeAddon(
+        [_BODY, _WHEEL],
+        weights={
+            ("wheel_hub.front.L", "wheel_hub.front.L"): {
+                "vertices": 340,
+                "assigned": 328,
+                "at_weight": 300,
+            },
+            ("body", "body"): {"error": "no vertex group"},
+        },
+        textures={"wheel_hub.front.L": {"maps": {"albedo": True, "orm": False}}},
+    )
+    seen, requests = await _collect_meshes(addon, plan)
+    assert [mesh.name for mesh in planned[0]] == ["body", "wheel_hub.front.L"]
+    weight_requests = [r for r in requests if r["type"] == "get_mesh_weights"]
+    assert weight_requests[0]["meshes"] == [
+        {
+            "mesh": "wheel_hub.front.L",
+            "vertex_group": "wheel_hub.front.L",
+            "weight": 1.0,
+        },
+        {"mesh": "body", "vertex_group": "body", "weight": 0.5},
+    ]
+    assert _paged(requests)[2:] == [
+        ("get_mesh_weights", 1, 0),
+        ("get_mesh_weights", 1, 1),
+        ("get_mesh_textures", 1, 0),
+    ]
+    assert seen[1].weights == [
+        MeshWeight("wheel_hub.front.L", "wheel_hub.front.L", 340, 328, 300),
+        MeshWeight("body", "body", error="no vertex group"),
+    ]
+    assert seen[1].textures == [
+        MeshTextures("wheel_hub.front.L", {"albedo": True, "orm": False})
+    ]
+
+
+async def test_a_mesh_gone_from_the_textures_is_an_error():
+    def plan(_meshes):
+        return [], [TextureTarget("body", ["albedo"])]
+
+    addon = _FakeAddon([_BODY], textures={"body": {"error": "no mesh"}})
+    seen, _ = await _collect_meshes(addon, plan)
+    assert seen[1].textures == [MeshTextures("body", {}, "no mesh")]
+
+
+async def test_each_save_sends_a_new_report():
+    # Request 2 is the only page; the save lands after it is answered.
+    addon = _FakeAddon([_BODY], saves={2: "after"})
+    seen, requests = await _collect_meshes(addon, count=3)
+    assert _paged(requests) == [("get_meshes", 1, 0), ("get_meshes", 2, 0)]
+    assert seen[1:] == [MeshReport([_SCENE_BODY], [], [])] * 2
+
+
+@pytest.mark.parametrize("when", ["before", "after"])
+async def test_a_save_mid_fetch_starts_again_at_the_new_revision(when):
+    # Request 2 is the first of two pages.
+    addon = _FakeAddon([_BODY, _WHEEL], saves={2: when})
+    seen, requests = await _collect_meshes(addon)
+    # Saved after: page 1 was answered, so page 2 is asked for and comes back stale.
+    first = [("get_meshes", 1, 0), *([("get_meshes", 1, 1)] if when == "after" else [])]
+    assert _paged(requests) == [*first, ("get_meshes", 2, 0), ("get_meshes", 2, 1)]
+    assert [mesh.name for mesh in seen[1].meshes] == ["body", "wheel_hub.front.L"]
+
+
+async def test_busy_waits_for_the_answer():
+    addon = _FakeAddon(
+        [_BODY], answers={"get_meshes": lambda lines: [_error("busy"), *lines]}
+    )
+    seen, _ = await _collect_meshes(addon)
+    assert seen[1].meshes == [_SCENE_BODY]
+
+
+_LAST = {"has_more": False, "next_cursor": None}
+
+
+async def _meshes_error(meshes_answer):
+    addon = _FakeAddon([], answers={"get_meshes": lambda _lines: [meshes_answer]})
+    server, port, _ = await _serve(addon.respond)
+    async with server:
+        with pytest.raises(BridgeError) as info:
+            async for _ in subscribe_meshes(_no_targets, port=port):
+                pass
+    return str(info.value)
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"revision": 1, "meshes": [{"name": "body"}], **_LAST},
+        {"revision": 1, "meshes": [], "has_more": True, "next_cursor": None},
+        {"revision": 1, "meshes": "body", **_LAST},
+        {"revision": 1, "mesh_weights": [], **_LAST},
+    ],
+)
+async def test_an_unexpected_page_raises(result):
+    message = await _meshes_error(_result(result))
+    assert message == "The Blender add-on sent an unexpected message."
+
+
+async def test_a_failed_query_raises_with_its_message():
+    message = await _meshes_error(_error("query failed: boom"))
+    assert message == "The Blender add-on reported: query failed: boom"
