@@ -62,6 +62,9 @@ normal checkout. Do not commit or hand-edit it.
   subscriptions, and
   `GodotConnection` (a bounded scan for `project.godot` under the projects
   root). No Textual, no UI.
+- `checks/` — pure checks comparing the bridge's scene data against a spec
+  (`mesh_roles.plan` / `evaluate`), building the results `core.results`
+  stores. No I/O, no Textual, no UI.
 - `tui/` — Textual screens (`tui/screens/`) and the reusable widgets they are
   assembled from (`tui/widgets/`).
 - `config/` — persistence: the on-disk config first-time setup writes and every

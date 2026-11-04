@@ -10,6 +10,25 @@ from model_meta.core.json_document import JsonDocument
 _RESULTS_KEYS = ("model_file", "spec", "armature")
 
 
+@dataclass(frozen=True)
+class FieldCheck:
+    """One spec field's check: a dict of facts per failure."""
+
+    failures: list[dict[str, object]]
+
+    @property
+    def passed(self) -> bool:
+        return not self.failures
+
+
+@dataclass(frozen=True)
+class MeshRoleResult:
+    """`meshes` are the names `mesh_regex` matched; `checks` holds only the role's set fields."""
+
+    meshes: list[str]
+    checks: dict[str, FieldCheck]
+
+
 @dataclass
 class Results(JsonDocument):
     """A `None` check was never run and is omitted on write."""

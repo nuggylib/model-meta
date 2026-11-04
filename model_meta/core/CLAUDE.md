@@ -102,6 +102,10 @@ storage, and connections to the external apps Model Meta validates against.
   field: `armature` (`True` passed, `False` failed). A `None` check was never
   run and is omitted on write; a present one must be a boolean. It is the
   source of truth for the dashboard's icons: a new check is a field here.
+  `MeshRoleResult(meshes, checks)` is one role's result: the names
+  `mesh_regex` matched, and a `FieldCheck(failures)` per set field.
+  `FieldCheck.passed` is derived from `failures` being empty, so the two
+  can't disagree. `checks.mesh_roles.evaluate` builds them.
   `Results.path_for(results_dir,
   model_file)` names it `<model stem>-<8-hex sha1 of the path>.json`, so
   same-named models in different directories get separate files.
