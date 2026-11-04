@@ -19,9 +19,10 @@ from model_meta.core.blender_bridge import (
     subscribe_armatures,
 )
 from model_meta.core.blender_connection import BlenderConnection
+from model_meta.core.results import Results
 from model_meta.core.spec import Spec
 
-# Stands in for a validation result until that row has a live check.
+# A row with no check result in the results file.
 _PENDING = "🟡"
 _REFRESHING = "🔄"
 _PASS = "✅"
@@ -49,16 +50,17 @@ class ModelDashboardScreen(Screen):
     is_refreshing: reactive[bool] = reactive(False)
     blender_running: reactive[bool | None] = reactive(None)
     live: reactive[bool] = reactive(False)
-    armatures: reactive[list[str] | None] = reactive(None)
-
     wrong_file: reactive[bool] = reactive(False)
+    armature_passed: reactive[bool | None] = reactive(None)
 
-    def __init__(self, model: Path, spec_path: Path) -> None:
+    def __init__(self, model: Path, spec_path: Path, results_path: Path) -> None:
         super().__init__()
         self.model = model
         self.spec_path = spec_path
+        self.results_path = results_path
         self._armature = ""
         self._rows: list[tuple[int, str]] = []
+        self._on_model = False
 
     def compose(self) -> ComposeResult:
         try:
@@ -66,6 +68,7 @@ class ModelDashboardScreen(Screen):
         except (OSError, ValueError):
             spec = None
         self._armature = spec.armature.object_name if spec else ""
+        self._load_results()
         self._rows = self._items(spec)
         yield Header()
         with VerticalScroll(id="detail-panel", can_focus=False):
@@ -103,6 +106,7 @@ class ModelDashboardScreen(Screen):
         self._refresh()
 
     def action_refresh(self) -> None:
+        self._load_results()
         self._refresh()
 
     @work(exclusive=True, group="blender-check")
@@ -113,16 +117,16 @@ class ModelDashboardScreen(Screen):
                 self.live = True
                 self.is_refreshing = False
                 if isinstance(message, OpenFile):
-                    self.wrong_file = not _is_model(message.path, self.model)
-                    self.armatures = None
+                    self._on_model = _is_model(message.path, self.model)
+                    self.wrong_file = not self._on_model
                 # busy (`None`): keep the last result
-                elif message.names is not None and not self.wrong_file:
-                    self.armatures = message.names
+                elif message.names is not None and self._on_model:
+                    self._save_armature(self._armature in message.names)
         except BridgeError:
             pass
+        self._on_model = False
         self.live = False
         self.wrong_file = False
-        self.armatures = None
         self.is_refreshing = True
         self.blender_running = await asyncio.to_thread(BlenderConnection.is_running)
         self.is_refreshing = False
@@ -130,8 +134,27 @@ class ModelDashboardScreen(Screen):
     def watch_is_refreshing(self) -> None:
         self._update_rows()
 
-    def watch_armatures(self) -> None:
+    def watch_armature_passed(self) -> None:
         self._update_rows()
+
+    def _load_results(self) -> None:
+        try:
+            self.armature_passed = Results.load(self.results_path).armature
+        except (OSError, ValueError):
+            self.armature_passed = None
+
+    def _save_armature(self, passed: bool) -> None:
+        try:
+            results = Results.load(self.results_path)
+            if results.armature is not passed:
+                results.armature = passed
+                results.save()
+        except (OSError, ValueError) as error:
+            self.notify(
+                f"Couldn't save {self.results_path.name}: {error}", severity="error"
+            )
+            return
+        self.armature_passed = passed
 
     def watch_live(self) -> None:
         self._update_connection()
@@ -177,8 +200,8 @@ class ModelDashboardScreen(Screen):
     def _emoji(self, index: int) -> str:
         if self.is_refreshing:
             return _REFRESHING
-        if index == _ARMATURE_ROW and self.armatures is not None:
-            return _PASS if self._armature in self.armatures else _FAIL
+        if index == _ARMATURE_ROW and self.armature_passed is not None:
+            return _PASS if self.armature_passed else _FAIL
         return _PENDING
 
     def _items(self, spec: Spec | None) -> list[tuple[int, str]]:

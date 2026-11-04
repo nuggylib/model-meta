@@ -7,13 +7,16 @@ from typing import Self
 
 from model_meta.core.json_document import JsonDocument
 
-_RESULTS_KEYS = ("model_file", "spec")
+_RESULTS_KEYS = ("model_file", "spec", "armature")
 
 
 @dataclass
 class Results(JsonDocument):
+    """A `None` check was never run and is omitted on write."""
+
     model_file: str
     spec: str
+    armature: bool | None = None
     extra: dict[str, object] = field(default_factory=dict)
 
     @staticmethod
@@ -31,8 +34,23 @@ class Results(JsonDocument):
         spec = data.get("spec")
         if not isinstance(spec, str):
             raise ValueError("`spec` is not a string.")
+        armature = data.get("armature")
+        if "armature" in data and not isinstance(armature, bool):
+            raise ValueError("`armature` is not a boolean.")
         extra = {key: value for key, value in data.items() if key not in _RESULTS_KEYS}
-        return cls(model_file=model_file, spec=spec, extra=extra, path=path)
+        return cls(
+            model_file=model_file,
+            spec=spec,
+            armature=armature,
+            extra=extra,
+            path=path,
+        )
 
     def to_dict(self) -> dict:
-        return {"model_file": self.model_file, "spec": self.spec, **self.extra}
+        checks = {} if self.armature is None else {"armature": self.armature}
+        return {
+            "model_file": self.model_file,
+            "spec": self.spec,
+            **checks,
+            **self.extra,
+        }

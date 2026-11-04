@@ -435,6 +435,7 @@ async def test_enter_on_a_linked_model_skips_the_modal(tmp_path, monkeypatch):
             pilot, lambda: isinstance(app.screen, ModelDashboardScreen)
         )
         assert app.screen.spec_path == app.specs_dir / "vehicle.json"
+        assert app.screen.results_path == Results.path_for(app.results_dir, sedan)
 
 
 async def test_cancelling_the_modal_writes_nothing(tmp_path, monkeypatch):

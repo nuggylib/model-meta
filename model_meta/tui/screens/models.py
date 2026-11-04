@@ -265,4 +265,4 @@ class ModelsScreen(Screen):
         except ValueError:
             self.notify(f"{results_path.name} names an invalid spec.", severity="error")
             return
-        app.push_screen(ModelDashboardScreen(model, spec_path))
+        app.push_screen(ModelDashboardScreen(model, spec_path, results_path))
