@@ -57,8 +57,7 @@ class SpecDetailScreen(Screen):
         unreadable = Static(_UNREADABLE, id="spec-unreadable", classes="config-detail")
         unreadable.display = False
         yield VerticalScroll(
-            # Escaped for the same reason `SpecRow` escapes it: a spec called
-            # `mech[v2]` would otherwise be read as markup.
+            # A spec called `mech[v2]` would otherwise be read as markup.
             Static(
                 f"Spec — {escape(self.model_type)}",
                 id="spec-title",

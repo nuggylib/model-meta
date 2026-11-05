@@ -34,7 +34,7 @@ from model_meta.specs.store import SpecState
 from model_meta.tui.screens.new_spec_modal import NewSpecModal
 from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.widgets.fix_panel import FixPanel
-from model_meta.tui.widgets.spec_row import SpecRow
+from model_meta.tui.widgets.selectable_row import SelectableRow
 
 if TYPE_CHECKING:
     from model_meta.app import ModelMetaApp
@@ -72,7 +72,7 @@ def plural_specs(count: int) -> str:
 class SpecsScreen(Screen):
     """Detail view for the validation specs in `specs/`.
 
-    Navigation mirrors the Models screen: rows are focusable (`SpecRow`), `↑`/`↓`
+    Navigation mirrors the Models screen: rows are focusable (`SelectableRow`), `↑`/`↓`
     and `j`/`k` step through them, `enter` selects one. The rows are the only
     focus stops — the title and summary lines are plain `Static`s.
 
@@ -158,12 +158,7 @@ class SpecsScreen(Screen):
         summary.display = True
         summary.update(plural_specs(len(entries)))
         await panel.mount_all(
-            SpecRow(
-                entry.path,
-                entry.model_type,
-                marker=_MARKERS.get(entry.state, ""),
-                classes="spec-row",
-            )
+            SelectableRow(entry, entry.model_type, marker=_MARKERS.get(entry.state, ""))
             for entry in entries
         )
         self._show_fix_steps({entry.state for entry in entries})
@@ -179,22 +174,21 @@ class SpecsScreen(Screen):
 
     def _focus_first_row(self) -> None:
         """Focus the just-created spec, else the first, else leave focus alone."""
-        rows = list(self.query(SpecRow))
+        rows = list(self.query(SelectableRow))
         if not rows:
             return
         target, self._focus_after_load = self._focus_after_load, None
         if target is not None:
-            row = next((row for row in rows if row.path == target), None)
+            row = next((row for row in rows if row.key.path == target), None)
             if row is not None:
                 row.focus()
                 return
-        if isinstance(self.focused, SpecRow):
+        if isinstance(self.focused, SelectableRow):
             return
         rows[0].focus()
 
     # -- selection ---------------------------------------------------------
 
-    def on_spec_row_selected(self, message: SpecRow.Selected) -> None:
-        """Open the spec's detail view. The row names the spec, which is why the
-        screen can be pushed as an instance."""
-        self.app.push_screen(SpecDetailScreen(message.model_type, message.path))
+    def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
+        entry = message.row.key
+        self.app.push_screen(SpecDetailScreen(entry.model_type, entry.path))

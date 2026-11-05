@@ -15,22 +15,17 @@ in the screen that owns it.
   exactly **one stop per section**, so a `Button` added inside a card later
   cannot become a stop of its own and break the "arrow keys step through
   sections" contract.
-- `model_row.py` — `ModelRow(Static, can_focus=True)`, one `.blend` file on the
-  Models screen. Same shape as `SectionCard` — focusable, `enter` posts
-  `ModelRow.Selected` — but it carries a `Path` rather than a screen name,
-  because what happens to a selected model is not a navigation decision.
-  `label` (the screen passes the model's path *relative to* its configured
-  directory) is escaped inside the widget: it is always a filename, and a model
-  called `sedan[wip].blend` would otherwise be read as markup and render with a
-  chunk missing.
-- `spec_row.py` — `SpecRow(Static, can_focus=True)`, one validation spec on the
-  Specs screen. `ModelRow`'s shape — focusable, `enter` posts
-  `SpecRow.Selected` — with two differences: it is labeled with the spec's
-  **`model_type`** (the filename stem, the spec's identity) rather than a path,
-  and it takes an optional `marker` rendered beside the name for the
-  unreadable/mismatched states. The message carries both the name and the path.
-  The name is escaped inside the widget for the same reason `ModelRow` escapes
-  its label: a spec called `mech[v2]` would otherwise be read as markup.
+- `selectable_row.py` — `SelectableRow(Static, can_focus=True)`, one row a
+  screen lists for the user to pick: a model on the Models screen (`key` is
+  its `Path`, `label` its path relative to the configured directory), a spec
+  on the Specs screen (`key` is its `SpecEntry`, `label` its `model_type`,
+  `marker` the unreadable / mismatched note). `enter` posts
+  `SelectableRow.Selected`, whose `row` (also `control`) carries `key`. It
+  carries a key rather than a screen name because what a selection does is
+  the screen's call. `render` builds a Rich `Text`: `▸ <label>` as plain text,
+  so a `sedan[wip].blend` or `[L]` can't be read as markup, then `marker` as
+  markup. `label` is a reactive, so a screen can retitle a row in place.
+  Styled once in `app.tcss` by type (`SelectableRow`, `SelectableRow:focus`).
 - `fix_panel.py` — `FixPanel(Vertical)`, the "How to fix issues" block on a
   page whose content scrolls. Assign `steps` (rendered strings); an empty tuple
   hides it. Two constraints worth keeping:

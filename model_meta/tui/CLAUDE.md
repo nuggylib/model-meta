@@ -6,8 +6,8 @@ The Textual UI layer: everything the user sees and interacts with.
 - `screens/` — full-page views (`Screen` subclasses). The app navigates by
   pushing/popping screens on the stack.
 - `widgets/` — reusable widgets screens are assembled from (`SectionCard`, the
-  focusable dashboard section; `ModelRow`, the focusable model row; `SpecRow`,
-  the focusable spec row; `FixPanel`, the "how to fix issues" block;
+  focusable dashboard section; `SelectableRow`, the focusable row a screen
+  lists models or specs in; `FixPanel`, the "how to fix issues" block;
   `FieldSummary`, the per-root-field box on the spec detail screen;
   `FieldList`, the selectable read-only field on the armature, mesh-roles,
   mesh-role and modifiers forms).

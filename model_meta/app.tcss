@@ -17,6 +17,20 @@
     color: $text-muted;
 }
 
+/* The rail is painted on every row and only its color changes, keeping the text
+   from shifting sideways as focus moves, as on the dashboard's cards. */
+SelectableRow {
+    width: 100%;
+    height: auto;
+    border-left: thick $panel;
+    padding-left: 1;
+}
+
+SelectableRow:focus {
+    border-left: thick $accent;
+    background: $boost;
+}
+
 /* Shown in place of the sections when there is no valid config. */
 #setup-prompt {
     width: auto;
@@ -137,21 +151,6 @@ SpecsScreen #specs-empty {
     margin-bottom: 1;
 }
 
-/* Spec rows are focusable, so — as on the dashboard and the Models screen —
-   the rail is painted on every row and only its color changes, keeping the
-   text from shifting sideways as focus moves. */
-SpecsScreen .spec-row {
-    width: 100%;
-    height: auto;
-    border-left: thick $panel;
-    padding-left: 1;
-}
-
-SpecsScreen .spec-row:focus {
-    border-left: thick $accent;
-    background: $boost;
-}
-
 SpecsScreen .fix-step {
     width: 100%;
     height: auto;
@@ -193,21 +192,6 @@ ModelsScreen .models-directory {
 ModelsScreen .models-files {
     width: 100%;
     height: auto;
-}
-
-/* Model rows are focusable, so — as on the dashboard — the rail is painted on
-   every row and only its color changes, keeping the text from shifting
-   sideways as focus moves. */
-ModelsScreen .model-row {
-    width: 100%;
-    height: auto;
-    border-left: thick $panel;
-    padding-left: 1;
-}
-
-ModelsScreen .model-row:focus {
-    border-left: thick $accent;
-    background: $boost;
 }
 
 ModelsScreen .fix-step {

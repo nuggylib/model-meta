@@ -59,7 +59,8 @@ in the app (analogous to a route in a web app).
   category inside `@work(exclusive=True, group="models-scan")` via
   `asyncio.to_thread`, per directory, sequentially — few directories, ordered
   output, and `exclusive` means a recompose-driven rescan cancels the one in
-  flight rather than racing it. Rows are `ModelRow`s labeled with the model's
+  flight rather than racing it. Rows are `SelectableRow`s keyed by the model's
+  `Path` and labeled with its
   path *relative to* its configured directory, so a model in a subfolder keeps
   that context; they are the screen's only focus stops, which is why the
   `VerticalScroll` wrapper passes `can_focus=False` (`ScrollableContainer` opts
@@ -74,7 +75,8 @@ in the app (analogous to a route in a web app).
   an invalid spec name in it, or a failed write is a notice; the file is never
   overwritten.
 - `specs.py` — `SpecsScreen` (`specs` in `SCREENS`), the Specs page: the
-  validation specs in `specs/`, one focusable `SpecRow` each. Follows
+  validation specs in `specs/`, one focusable `SelectableRow` each, keyed by
+  its `SpecEntry`. Follows
   `models.py`'s page shape — a `VerticalScroll` of rows (`can_focus=False`, so
   the rows are the only focus stops) plus a `FixPanel` **outside** the scroller.
   The listing parses JSON per file, so it runs in
@@ -96,7 +98,7 @@ in the app (analogous to a route in a web app).
   than its contents, so the page lists and works identically in every config
   state.
 - `spec_detail.py` — `SpecDetailScreen(model_type, path)`, the per-spec detail
-  view opened by `enter` on a `SpecRow`. Not in `SCREENS` (see Conventions).
+  view opened by `enter` on a spec row. Not in `SCREENS` (see Conventions).
   Summarizes each root field in a non-focusable `FieldSummary` box — Armature
   shows `Name` (`object_name`, or `not set`) and `Bones` (a count); Mesh roles
   lists the role names (`items`, numbered, columns of 10; `No mesh roles yet.` when
