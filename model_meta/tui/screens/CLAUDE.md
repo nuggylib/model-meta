@@ -124,25 +124,38 @@ in the app (analogous to a route in a web app).
   found` and no roles.
   **Icons always come from the results file**, in every mode (Live, Wrong
   File, Manual, Inactive): ✅ for `True`, ❌ for `False`, and `_PENDING` for
-  a check never run or a results file that can't be read. Today only
-  `armature` is stored, in the `armature_passed` reactive; every other row is
-  `_PENDING`. The file is read in `compose` and again on `r`.
+  a check never run or a results file that can't be read. The loaded file is
+  the `results` reactive. It is read in `compose` and again on `r`. Each row
+  in `_rows` carries a `Status` (`Results` → `bool | None`) that reads its
+  result. `Armature` reads `armature`. A role row passes when every
+  `FieldCheck` in its `MeshRoleResult` passes, and is pending when the role
+  has none. `Mesh Roles:` shows the most severe status beneath it (a failure,
+  else a pending role, else a pass) and is pending until `mesh_roles` is
+  stored. Every role keeps its own row. Failures are never shown here, only
+  their icons. The `Modifiers` rows aren't checked yet.
   **Connection:** on mount and on `r` (**Refresh**), the
-  `@work(exclusive=True, group="blender-check")` worker first subscribes
-  through `core.blender_bridge.subscribe_armatures` and stays subscribed. Each
-  message sets `live`; each `OpenFile` sets `wrong_file` unless its path is the
-  model (`Path.samefile`, so a symlink or a case difference still matches; a
-  never-saved `None` or a missing file is wrong). An armature list is checked
-  only once an `OpenFile` has confirmed the model is open: the check passes when
-  the spec's `object_name` is in the list (a blank `object_name` fails). The
-  result is saved to the results file (load right before, save only when it
-  changed, other keys kept), and then `armature_passed` is updated. A failed
-  load or save is an error notice, and the icon keeps the stored result. A
-  `busy` `None` checks nothing. With the wrong file open, armature lists are
-  ignored and nothing is written; the icons keep showing the results file.
-  When the bridge raises `BridgeError` (unreachable or dropped), `live` and
-  `wrong_file` reset (the icons keep the stored results) and the worker falls back to the **Manual Mode** check: `BlenderConnection.is_running`
-  via `asyncio.to_thread`, which only asks whether Blender is running. While
+  `@work(exclusive=True, group="blender-check")` worker runs both
+  `core.blender_bridge` subscriptions in one `asyncio.TaskGroup`, each through
+  `_follow(messages, check)`: `subscribe_armatures` with `_check_armature`,
+  and `subscribe_meshes(partial(mesh_roles.plan, roles))` with
+  `_check_mesh_roles`. Each message sets `live`. Each `OpenFile` sets
+  `wrong_file` unless its path is the model (`Path.samefile`, so a symlink or
+  a case difference still matches; a never-saved `None` or a missing file is
+  wrong). A connection's results are checked only once that connection's
+  own `OpenFile` has confirmed the model is open. The armature check passes
+  when the spec's `object_name` is in the list (a blank `object_name` fails).
+  The mesh check stores `checks.mesh_roles.evaluate(roles, report)`. Both go
+  through `_save(**checks)`: load right before, `replace` those fields, save
+  only when something changed (other keys kept), then set `results`. A failed
+  load or save is an error notice, and the icons keep the stored results. A
+  `busy` `None` armature list checks nothing. With the wrong file open,
+  results are ignored and nothing is written; the icons keep showing the
+  results file.
+  When either subscription raises `BridgeError` (unreachable or dropped), the
+  `TaskGroup` cancels the other, `live` and `wrong_file` reset (the icons keep
+  the stored results), and the worker falls back to the **Manual Mode**
+  check: `BlenderConnection.is_running` via `asyncio.to_thread`, which only
+  asks whether Blender is running. While
   connecting or checking, the `is_refreshing` reactive swaps every row's
   prefix to 🔄. The muted `#connection-status` beside the heading reads
   `Wrong File` in Live Mode on the wrong file, `Live Mode`, else from
