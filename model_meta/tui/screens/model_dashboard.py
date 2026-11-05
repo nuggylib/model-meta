@@ -32,7 +32,7 @@ from model_meta.core.results import Results
 from model_meta.core.spec import MeshRole, Spec
 from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.check_detail import CheckDetailScreen
-from model_meta.tui.status import REFRESHING, icon, most_severe, status_of
+from model_meta.tui.status import REFRESHING, icon, lookup, most_severe, status_of
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _NOT_FOUND = "not found"
@@ -132,7 +132,11 @@ class ModelDashboardScreen(Screen):
         field = message.row.key
         self.app.push_screen(
             CheckDetailScreen(
-                self.model, field, _ROOTS[field], self.results, self.results_changed
+                self.model,
+                (field,),
+                (_ROOTS[field],),
+                self.results,
+                self.results_changed,
             )
         )
 
@@ -259,7 +263,7 @@ class ModelDashboardScreen(Screen):
     def _status(self, index: int, data: dict | None) -> bool | None:
         """A row with rows beneath it shows the most severe of theirs."""
         path = self._rows[index][2]
-        if data is None or path is None or (value := _lookup(data, path)) is None:
+        if data is None or path is None or (value := lookup(data, path)) is None:
             return None
         children = list(self._children(index))
         if children:
@@ -285,16 +289,6 @@ class ModelDashboardScreen(Screen):
             (1, f"Warnings: {_NONE}", None),
             (1, f"Blocked: {_NONE}", None),
         ]
-
-
-def _lookup(data: dict, path: tuple[str, ...]) -> object:
-    """The value at `path`, or `None` when any key is missing."""
-    value: object = data
-    for key in path:
-        if not isinstance(value, dict) or key not in value:
-            return None
-        value = value[key]
-    return value
 
 
 def _is_model(open_file: str | None, model: Path) -> bool:

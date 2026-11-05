@@ -1,22 +1,26 @@
-"""One root field's check results for a model, laid out as the results file nests them."""
+"""A model's check results at one key path, laid out as the results file nests them."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.signal import Signal
+from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
 from model_meta.core.results import Results
 from model_meta.specs.modifiers import format_list
-from model_meta.tui.status import icon, is_check, status_of
-from model_meta.tui.widgets.fix_panel import FixPanel
+from model_meta.tui.bindings import MOVE
+from model_meta.tui.status import icon, is_check, lookup, status_of
+from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _NO_RESULTS = "No results yet."
+_PASSING = "passing"
+_FAILING = "failing"
 
 # Keyed by a check's key in the results file, wherever it sits.
 _FIX_STEPS = {
@@ -31,101 +35,140 @@ _FIX_STEPS = {
     "material_slots": "Add a material slot for each missing name to the listed mesh.",
 }
 
-Line = tuple[int, str]
-
 
 class CheckDetailScreen(Screen):
-    """Pushed as an instance, per model and field. `updates` publishes each new
-    `Results` (`None` when the file can't be read)."""
+    """Pushed as an instance, per model and key path. `headings` title each key in
+    `path`. `updates` publishes each new `Results` (`None` when the file can't be
+    read)."""
 
-    BINDINGS = [("escape", "app.pop_screen", "Back")]
+    BINDINGS = [("escape", "app.pop_screen", "Back"), *MOVE]
 
     def __init__(
         self,
         model: Path,
-        field: str,
-        heading: str,
+        path: tuple[str, ...],
+        headings: tuple[str, ...],
         results: Results | None,
         updates: Signal[Results | None],
     ) -> None:
         super().__init__()
         self.model = model
-        self.field = field
-        self.heading = heading
+        self.path = path
+        self.headings = headings
         self._results = results
         self._updates = updates
+        self._rows: list[str] | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            f"Models - {self.model.stem} - {self.heading}",
+            " - ".join(("Models", self.model.stem, *self.headings)),
             id="check-title",
             classes="section-title",
             markup=False,
         )
         yield VerticalScroll(id="check-lines")
-        yield FixPanel(id="fix-panel")
         yield Footer()
 
     async def on_mount(self) -> None:
         self._updates.subscribe(self, self._show)
         await self._show(self._results)
 
+    def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
+        key = message.row.key
+        self.app.push_screen(
+            CheckDetailScreen(
+                self.model,
+                (*self.path, key),
+                (*self.headings, key),
+                self._results,
+                self._updates,
+            )
+        )
+
     async def _show(self, results: Results | None) -> None:
         self._results = results
-        value = None if results is None else results.to_dict().get(self.field)
+        value = None if results is None else lookup(results.to_dict(), self.path)
         try:
             lines = self.query_one("#check-lines", VerticalScroll)
-            panel = self.query_one("#fix-panel", FixPanel)
         except NoMatches:
             return
+        if _is_listing(value):
+            await self._show_rows(lines, value)
+            return
+        self._rows = None
+        lines.can_focus = True
         await lines.remove_children()
-        if value is None:
+        if value is None or value == {}:
             await lines.mount(Static(_NO_RESULTS, classes="config-detail"))
+        elif isinstance(value, dict) and not is_check(value):
+            await lines.mount_all(_section(key, child) for key, child in value.items())
         else:
-            await lines.mount_all(
-                Static(text, classes=f"check-line check-depth-{depth}", markup=False)
-                for depth, text in _root_lines(self.field, value)
-            )
-        failing = dict.fromkeys(_failing(self.field, value))
-        panel.steps = tuple(_FIX_STEPS[key] for key in failing if key in _FIX_STEPS)
+            await lines.mount(_section(self.path[-1], value))
+
+    async def _show_rows(self, lines: VerticalScroll, value: dict) -> None:
+        labels = {
+            key: f"{icon(status_of(child))} {key}" for key, child in value.items()
+        }
+        if self._rows == list(labels):
+            for row in lines.query(SelectableRow):
+                row.label = labels[row.key]
+            return
+        self._rows = list(labels)
+        # The rows are the focus stops; focusing one scrolls it into view.
+        lines.can_focus = False
+        await lines.remove_children()
+        rows = [SelectableRow(key, label) for key, label in labels.items()]
+        await lines.mount_all(rows)
+        rows[0].focus()
 
 
-def _root_lines(field: str, value: object) -> list[Line]:
-    # The title already names the field, so a container's children start the page.
-    if isinstance(value, dict) and not is_check(value):
-        return [line for key, child in value.items() for line in _lines(key, child, 0)]
-    return _lines(field, value, 0)
+def _is_listing(value: object) -> bool:
+    """A container of containers, like `mesh_roles`: one row opens each."""
+    return (
+        isinstance(value, dict)
+        and bool(value)
+        and not is_check(value)
+        and all(isinstance(v, dict) and not is_check(v) for v in value.values())
+    )
 
 
-def _lines(key: str, value: object, depth: int) -> list[Line]:
-    if isinstance(value, bool | dict):
-        lines = [(depth, f"{icon(status_of(value))} {key}")]
-        if is_check(value):
-            lines += _failure_lines(value["failures"], depth + 1)
-        elif isinstance(value, dict):
-            for child_key, child in value.items():
-                lines += _lines(child_key, child, depth + 1)
-        return lines
-    if isinstance(value, list):
-        return [(depth, f"{key}: {format_list([str(item) for item in value])}")]
-    return [(depth, f"{key}: {value}")]
-
-
-def _failure_lines(failures: list[dict], depth: int) -> list[Line]:
-    """Each failure's facts as `key: value` lines, the first marked `- ` like YAML."""
-    lines = []
-    for failure in failures:
-        for index, (key, value) in enumerate(failure.items()):
-            bullet = "- " if index == 0 else "  "
-            lines += [(d, f"{bullet}{text}") for d, text in _lines(key, value, depth)]
-    return lines
-
-
-def _failing(key: str, value: object) -> list[str]:
-    """The keys of every failing check under `value`, in file order."""
-    if status_of(value) is not False:
-        return []
+def _section(key: str, value: object) -> Vertical:
     if isinstance(value, bool) or is_check(value):
-        return [key]
-    return [found for child, item in value.items() for found in _failing(child, item)]
+        passed = status_of(value)
+        lines = [f"{icon(passed)} {_PASSING if passed else _FAILING}"]
+        if is_check(value):
+            lines += _failure_lines(value["failures"])
+        children: list[Widget] = _statics(lines)
+        if not passed and key in _FIX_STEPS:
+            children.append(
+                Static(
+                    f"How to fix: {_FIX_STEPS[key]}",
+                    classes="config-detail check-fix",
+                    markup=False,
+                )
+            )
+    else:
+        children = _statics([_text(value)])
+    section = Vertical(*children, classes="check-section")
+    section.border_title = key
+    return section
+
+
+def _statics(lines: list[str]) -> list[Widget]:
+    return [Static(text, classes="check-line", markup=False) for text in lines]
+
+
+def _failure_lines(failures: list[dict]) -> list[str]:
+    """Each failure's facts as `key: value` lines, the first marked `- ` like YAML."""
+    return [
+        f"{'- ' if index == 0 else '  '}{key}: {_text(value)}"
+        for failure in failures
+        for index, (key, value) in enumerate(failure.items())
+    ]
+
+
+def _text(value: object) -> str:
+    if isinstance(value, list):
+        return format_list([str(item) for item in value])
+    return str(value)

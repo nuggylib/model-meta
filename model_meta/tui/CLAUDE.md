@@ -14,7 +14,8 @@ The Textual UI layer: everything the user sees and interacts with.
 - `status.py` — check status from a results file's JSON: the icons (`PENDING`,
   `REFRESHING`, `PASS`, `FAIL`, `icon(status)`), `is_check` (a
   `{passed, failures}` object), `status_of(value)` (a bool, a check's
-  `passed`, a container's most severe, else `None`) and `most_severe`. Shared
+  `passed`, a container's most severe, else `None`), `most_severe` and
+  `lookup(data, path)` (the value at a key path, `None` when missing). Shared
   by the model dashboard and the check detail screen.
 - `bindings.py` — `MOVE`, the `↑↓` / `j` / `k` focus bindings every screen
   with a list of focus stops spreads into its `BINDINGS`.

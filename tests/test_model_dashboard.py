@@ -566,7 +566,7 @@ async def test_enter_on_a_root_opens_its_check_detail(
         await pilot.press("enter")
         app = screen.app
         assert await _wait_for(pilot, lambda: isinstance(app.screen, CheckDetailScreen))
-        assert app.screen.field == field
+        assert app.screen.path == (field,)
         heading = _text(app.screen.query_one("#check-title"))
         assert heading == f"Models - sedan - {title}"
 

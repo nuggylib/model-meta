@@ -128,7 +128,7 @@ in the app (analogous to a route in a web app).
   keyed by their results file key (`_ROOTS`: `armature`, `mesh_roles`,
   `modifiers`, each with its title). They are the only focus stops (`MOVE`
   steps through them), and the nested rows are plain `Static`s. `enter`
-  pushes `CheckDetailScreen(model, key, title, results, results_changed)`.
+  pushes `CheckDetailScreen(model, (key,), (title,), results, results_changed)`.
   `results_changed` is a Textual `Signal` that `watch_results` publishes, so
   the detail screen follows live results while the worker keeps running
   beneath it. Nested rows are indented past the root rows' rail and `▸ `.
@@ -175,22 +175,30 @@ in the app (analogous to a route in a web app).
   on the wrong file, "Results update when you load a file, or save one, in
   Blender." in Live Mode, "Press r to refresh.", or "Start Blender, then press
   r to refresh." when `Inactive`. Every watcher is `NoMatches`-guarded.
-- `check_detail.py` — `CheckDetailScreen(model, field, heading, results,
-  updates)`, one root field's results for one model, pushed by `enter` on a
-  model dashboard root row. Not in `SCREENS`. One class serves every field: it
-  reads nothing per field and lays out `Results.to_dict()[field]` by its
-  shape, mirroring the JSON. A container's keys are headings with their
-  children indented beneath (a top-level container's children start the page,
-  since the title names the field). A bool or a `{passed, failures}` check is
-  an icon line (`tui.status`), and a container's icon is the most severe
-  beneath it. Every failure's facts are listed under its check as `key: value`
-  lines, the first marked `- `. Lists render via `format_list`, other values
-  as `key: value`. Depth is `.check-depth-{n}` (deepest today: 2). A missing
-  field or unreadable file shows `No results yet.` The `FixPanel` shows one
-  `_FIX_STEPS` entry per failing check key (deduped, file order). A new
-  field's fix text is an entry there, never a new screen. It subscribes to
-  `updates` on mount and redraws on each publish. Only `escape` is bound;
-  `#check-lines` keeps its default focus so long lists scroll.
+- `check_detail.py` — `CheckDetailScreen(model, path, headings, results,
+  updates)`, one model's results at a key path in `Results.to_dict()`
+  (`tui.status.lookup`), pushed by `enter` on a model dashboard root row and
+  by `enter` on its own rows. Not in `SCREENS`. The title is `Models - <model
+  stem>` then each of `headings`. One class serves every path: it reads
+  nothing per field and lays the value out by its shape, mirroring the JSON.
+  - **A container of containers** (`mesh_roles`): one `SelectableRow` per
+    key, `<icon> <key>`, the icon the most severe status beneath it. They are
+    the focus stops (`MOVE`; `#check-lines` gets `can_focus=False`), and the
+    first is focused. `enter` pushes another `CheckDetailScreen` at
+    `(*path, key)`, sharing `updates`. A publish with the same keys relabels
+    the rows in place, so focus stays put; other keys remount them.
+  - **Any other container** (a role): one bordered `.check-section` per key,
+    the key as its `border_title`. A bool or a check shows `✅ passing`, or
+    `❌ failing` with every failure's facts as `key: value` lines (the first
+    marked `- `) and then its `_FIX_STEPS` entry as `How to fix: ...`
+    (`.check-fix`). A list (`meshes`) shows `format_list`. Only set fields
+    have a check, so only they get a section.
+  - **A bool or a check** (`armature`): that one section, titled by its key.
+  A missing value, an empty container or an unreadable file shows `No results
+  yet.` A new field's fix text is a `_FIX_STEPS` entry, never a new screen.
+  It subscribes to `updates` on mount and redraws on each publish. Only
+  `escape` and `MOVE` are bound; outside the row list, `#check-lines` keeps
+  its focus so long pages scroll.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on

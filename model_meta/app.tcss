@@ -133,12 +133,19 @@ CheckDetailScreen #check-lines {
     padding: 1 2;
 }
 
-CheckDetailScreen .check-depth-1 {
-    padding-left: 3;
+/* One box per check or field (a mesh role's, or armature alone); the key sits in
+   the border. */
+CheckDetailScreen .check-section {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+    padding: 0 1;
+    border: round $panel;
+    border-title-color: $accent;
 }
 
-CheckDetailScreen .check-depth-2 {
-    padding-left: 6;
+CheckDetailScreen .check-fix {
+    margin-top: 1;
 }
 
 /* -- spec detail screen -------------------------------------------------- */

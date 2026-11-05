@@ -39,6 +39,16 @@ def most_severe(statuses: Iterable[bool | None]) -> bool | None:
     return True
 
 
+def lookup(data: dict, path: tuple[str, ...]) -> object:
+    """The value at `path`, or `None` when any key is missing."""
+    value: object = data
+    for key in path:
+        if not isinstance(value, dict) or key not in value:
+            return None
+        value = value[key]
+    return value
+
+
 def icon(status: bool | None) -> str:
     if status is None:
         return PENDING
