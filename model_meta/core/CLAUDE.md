@@ -99,13 +99,20 @@ storage, and connections to the external apps Model Meta validates against.
 - `results.py` — `Results(JsonDocument)`, one model's results file:
   `model_file` (the model's absolute path) and `spec` (the spec's
   `model_type`), both required strings, then one check result per spec root
-  field: `armature` (`True` passed, `False` failed). A `None` check was never
-  run and is omitted on write; a present one must be a boolean. It is the
-  source of truth for the dashboard's icons: a new check is a field here.
+  field, written in this order: `armature` (`True` passed, `False` failed)
+  and `mesh_roles` (role name → `MeshRoleResult`). A `None` check was never
+  run and is omitted on write. A present one must be well formed (a `null` is
+  rejected). It is the source of truth for the dashboard's icons: a new check
+  is a field here.
   `MeshRoleResult(meshes, checks)` is one role's result: the names
-  `mesh_regex` matched, and a `FieldCheck(failures)` per set field.
-  `FieldCheck.passed` is derived from `failures` being empty, so the two
-  can't disagree. `checks.mesh_roles.evaluate` builds them.
+  `mesh_regex` matched, then a `FieldCheck(failures)` per set field, written
+  as `{"meshes": [...], "<field>": {"passed", "failures"}, ...}`. Every key
+  but `meshes` is a field's check. `FieldCheck.passed` is derived from
+  `failures` being empty, so it can't disagree in memory, and `from_dict`
+  rejects a file where it does. Failures are fact dicts, stored as given.
+  Both classes' `from_dict(data, where=)` raise `ValueError` naming the
+  dotted path, e.g. `mesh_roles.wheels.count.passed`.
+  `checks.mesh_roles.evaluate` builds them.
   `Results.path_for(results_dir,
   model_file)` names it `<model stem>-<8-hex sha1 of the path>.json`, so
   same-named models in different directories get separate files.
