@@ -18,6 +18,7 @@ from model_meta.core.blender_bridge import (
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import FieldCheck, MeshRoleResult, Results
 from model_meta.tui.screens import model_dashboard
+from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 
 _DROP = object()
@@ -33,7 +34,7 @@ class _Host(App):
 
 
 def _text(widget):
-    return str(widget.render())
+    return str(widget.render()).removeprefix("▸ ")
 
 
 async def _wait_for(pilot, predicate, tries=100):
@@ -531,6 +532,63 @@ async def test_inactive_shows_the_saved_role_results(
     async with _Host(screen).run_test() as pilot:
         assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
         assert _role_rows(screen) == expected
+
+
+async def test_root_rows_are_the_only_focus_stops(tmp_path, monkeypatch):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        seen = []
+        for _ in range(4):
+            seen.append(screen.focused.key)
+            await pilot.press("down")
+        assert seen == ["armature", "mesh_roles", "modifiers", "armature"]
+
+
+@pytest.mark.parametrize(
+    ("presses", "field", "title"),
+    [
+        (0, "armature", "Armature"),
+        (1, "mesh_roles", "Mesh Roles"),
+        (2, "modifiers", "Modifiers"),
+    ],
+)
+async def test_enter_on_a_root_opens_its_check_detail(
+    tmp_path, monkeypatch, presses, field, title
+):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        for _ in range(presses):
+            await pilot.press("down")
+        await pilot.press("enter")
+        app = screen.app
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, CheckDetailScreen))
+        assert app.screen.field == field
+        heading = _text(app.screen.query_one("#check-title"))
+        assert heading == f"Models - sedan - {title}"
+
+
+async def test_check_detail_follows_live_results(tmp_path, monkeypatch):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        assert await _wait_for(pilot, lambda: _status(screen) == "Live Mode")
+        await pilot.press("down", "enter")
+        app = screen.app
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, CheckDetailScreen))
+        detail = app.screen
+
+        def lines():
+            return [_text(line) for line in detail.query("#check-lines Static")]
+
+        assert lines() == ["No results yet."]
+        meshes.put_nowait(_SCENE)
+        assert await _wait_for(pilot, lambda: "✅ wheels" in lines())
 
 
 async def test_dropped_mesh_connection_falls_back_to_manual_mode(tmp_path, monkeypatch):

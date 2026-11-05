@@ -31,6 +31,7 @@ from textual.widgets import Footer, Header, Static
 
 from model_meta.specs import store
 from model_meta.specs.store import SpecState
+from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.new_spec_modal import NewSpecModal
 from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.widgets.fix_panel import FixPanel
@@ -83,12 +84,7 @@ class SpecsScreen(Screen):
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
         Binding("n", "new_spec", "New spec"),
-        # One binding per key: Textual expands a comma-joined pair into one
-        # binding each, drawing the footer entry twice.
-        Binding("down", "app.focus_next", "Move", key_display="↑↓"),
-        Binding("j", "app.focus_next", "Move", show=False),
-        Binding("up", "app.focus_previous", "Move", show=False),
-        Binding("k", "app.focus_previous", "Move", show=False),
+        *MOVE,
     ]
 
     def compose(self) -> ComposeResult:

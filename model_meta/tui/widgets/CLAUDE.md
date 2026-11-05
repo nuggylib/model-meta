@@ -19,7 +19,8 @@ in the screen that owns it.
   screen lists for the user to pick: a model on the Models screen (`key` is
   its `Path`, `label` its path relative to the configured directory), a spec
   on the Specs screen (`key` is its `SpecEntry`, `label` its `model_type`,
-  `marker` the unreadable / mismatched note). `enter` posts
+  `marker` the unreadable / mismatched note), a root check on the model
+  dashboard (`key` is its results file key, `label` its icon and text). `enter` posts
   `SelectableRow.Selected`, whose `row` (also `control`) carries `key`. It
   carries a key rather than a screen name because what a selection does is
   the screen's call. `render` builds a Rich `Text`: `▸ <label>` as plain text,

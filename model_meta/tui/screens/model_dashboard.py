@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import aclosing
 from dataclasses import replace
 from functools import partial
@@ -15,6 +15,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.screen import Screen
+from textual.signal import Signal
 from textual.widgets import Footer, Header, Static
 
 from model_meta.checks import mesh_roles
@@ -29,12 +30,11 @@ from model_meta.core.blender_bridge import (
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import Results
 from model_meta.core.spec import MeshRole, Spec
+from model_meta.tui.bindings import MOVE
+from model_meta.tui.screens.check_detail import CheckDetailScreen
+from model_meta.tui.status import REFRESHING, icon, most_severe, status_of
+from model_meta.tui.widgets.selectable_row import SelectableRow
 
-# A row with no check result in the results file.
-_PENDING = "🟡"
-_REFRESHING = "🔄"
-_PASS = "✅"
-_FAIL = "❌"
 _NOT_FOUND = "not found"
 _NONE = "None"
 _LIVE_MODE = "Live Mode"
@@ -45,8 +45,11 @@ _LIVE_HINT = "Results update when you load a file, or save one, in Blender."
 _REFRESH_HINT = "Press r to refresh."
 _INACTIVE_HINT = "Start Blender, then press r to refresh."
 
-# A row's status in the results file: `None` when it was never checked.
-Status = Callable[[Results], bool | None]
+# Each root row's results file key, and the title its detail screen shows.
+_ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modifiers"}
+
+# depth, text, and the row's key path in the results file (`None`: never checked).
+Row = tuple[int, str, tuple[str, ...] | None]
 
 
 class ModelDashboardScreen(Screen):
@@ -55,6 +58,7 @@ class ModelDashboardScreen(Screen):
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
         ("r", "refresh", "Refresh"),
+        *MOVE,
     ]
 
     is_refreshing: reactive[bool] = reactive(False)
@@ -68,9 +72,10 @@ class ModelDashboardScreen(Screen):
         self.model = model
         self.spec_path = spec_path
         self.results_path = results_path
+        self.results_changed: Signal[Results | None] = Signal(self, "results_changed")
         self._armature = ""
         self._roles: dict[str, MeshRole] = {}
-        self._rows: list[tuple[int, str, Status]] = []
+        self._rows: list[Row] = []
 
     def compose(self) -> ComposeResult:
         try:
@@ -104,13 +109,16 @@ class ModelDashboardScreen(Screen):
                 classes="model-item",
                 markup=False,
             )
-            for index, (depth, text, status) in enumerate(self._rows):
-                yield Static(
-                    f"{self._emoji(status)} {text}",
-                    id=f"model-item-{index}",
-                    classes=f"model-item model-item-depth-{depth}",
-                    markup=False,
-                )
+            for index, (depth, _, path) in enumerate(self._rows):
+                options = {
+                    "id": f"model-item-{index}",
+                    "classes": f"model-item model-item-depth-{depth}",
+                }
+                label = self._label(index)
+                if depth == 0:
+                    yield SelectableRow(path[0], label, **options)
+                else:
+                    yield Static(label, markup=False, **options)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -119,6 +127,14 @@ class ModelDashboardScreen(Screen):
     def action_refresh(self) -> None:
         self._load_results()
         self._refresh()
+
+    def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
+        field = message.row.key
+        self.app.push_screen(
+            CheckDetailScreen(
+                self.model, field, _ROOTS[field], self.results, self.results_changed
+            )
+        )
 
     @work(exclusive=True, group="blender-check")
     async def _refresh(self) -> None:
@@ -168,6 +184,7 @@ class ModelDashboardScreen(Screen):
 
     def watch_results(self) -> None:
         self._update_rows()
+        self.results_changed.publish(self.results)
 
     def _load_results(self) -> None:
         try:
@@ -198,12 +215,15 @@ class ModelDashboardScreen(Screen):
         self._update_connection()
 
     def _update_rows(self) -> None:
-        for index, (_, text, status) in enumerate(self._rows):
+        for index in range(len(self._rows)):
             try:
-                row = self.query_one(f"#model-item-{index}", Static)
+                row = self.query_one(f"#model-item-{index}")
             except NoMatches:
                 return
-            row.update(f"{self._emoji(status)} {text}")
+            if isinstance(row, SelectableRow):
+                row.label = self._label(index)
+            elif isinstance(row, Static):
+                row.update(self._label(index))
 
     def _update_connection(self) -> None:
         try:
@@ -229,55 +249,52 @@ class ModelDashboardScreen(Screen):
             status.update(_MANUAL_MODE if running else _INACTIVE)
         hint.update(_INACTIVE_HINT if running is False else _REFRESH_HINT)
 
-    def _emoji(self, status: Status) -> str:
+    def _label(self, index: int) -> str:
+        text = self._rows[index][1]
         if self.is_refreshing:
-            return _REFRESHING
-        passed = None if self.results is None else status(self.results)
-        if passed is None:
-            return _PENDING
-        return _PASS if passed else _FAIL
+            return f"{REFRESHING} {text}"
+        data = None if self.results is None else self.results.to_dict()
+        return f"{icon(self._status(index, data))} {text}"
 
-    def _items(self) -> list[tuple[int, str, Status]]:
+    def _status(self, index: int, data: dict | None) -> bool | None:
+        """A row with rows beneath it shows the most severe of theirs."""
+        path = self._rows[index][2]
+        if data is None or path is None or (value := _lookup(data, path)) is None:
+            return None
+        children = list(self._children(index))
+        if children:
+            return most_severe(self._status(child, data) for child in children)
+        return status_of(value)
+
+    def _children(self, index: int) -> Iterator[int]:
+        depth = self._rows[index][0]
+        for child in range(index + 1, len(self._rows)):
+            if self._rows[child][0] <= depth:
+                return
+            if self._rows[child][0] == depth + 1:
+                yield child
+
+    def _items(self) -> list[Row]:
         return [
-            (0, f"Armature: {self._armature or _NOT_FOUND}", _armature),
-            (0, "Mesh Roles:", self._all_roles),
-            *((1, name, partial(_role, name)) for name in self._roles),
-            (0, "Modifiers", _unchecked),
-            (1, "Required:", _unchecked),
-            (2, "Skinned Meshes", _unchecked),
-            (1, f"Warnings: {_NONE}", _unchecked),
-            (1, f"Blocked: {_NONE}", _unchecked),
+            (0, f"{_ROOTS['armature']}: {self._armature or _NOT_FOUND}", ("armature",)),
+            (0, f"{_ROOTS['mesh_roles']}:", ("mesh_roles",)),
+            *((1, name, ("mesh_roles", name)) for name in self._roles),
+            (0, _ROOTS["modifiers"], ("modifiers",)),
+            (1, "Required:", None),
+            (2, "Skinned Meshes", None),
+            (1, f"Warnings: {_NONE}", None),
+            (1, f"Blocked: {_NONE}", None),
         ]
 
-    def _all_roles(self, results: Results) -> bool | None:
-        if results.mesh_roles is None:
+
+def _lookup(data: dict, path: tuple[str, ...]) -> object:
+    """The value at `path`, or `None` when any key is missing."""
+    value: object = data
+    for key in path:
+        if not isinstance(value, dict) or key not in value:
             return None
-        return _most_severe(_role(name, results) for name in self._roles)
-
-
-def _armature(results: Results) -> bool | None:
-    return results.armature
-
-
-def _role(name: str, results: Results) -> bool | None:
-    role = (results.mesh_roles or {}).get(name)
-    if role is None:
-        return None
-    return all(check.passed for check in role.checks.values())
-
-
-def _unchecked(_results: Results) -> None:
-    return None
-
-
-def _most_severe(statuses: Iterable[bool | None]) -> bool | None:
-    """A failure, else a pending row, else a pass."""
-    statuses = list(statuses)
-    if False in statuses:
-        return False
-    if None in statuses:
-        return None
-    return True
+        value = value[key]
+    return value
 
 
 def _is_model(open_file: str | None, model: Path) -> bool:

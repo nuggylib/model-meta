@@ -124,17 +124,25 @@ in the app (analogous to a route in a web app).
   `Required:` → `Skinned Meshes`, `Warnings: None` and `Blocked: None`. The
   spec is read inline in `compose`; a spec `Spec.load` rejects shows `not
   found` and no roles.
+  **Roots open the detail screen:** the three depth-0 rows are `SelectableRow`s
+  keyed by their results file key (`_ROOTS`: `armature`, `mesh_roles`,
+  `modifiers`, each with its title). They are the only focus stops (`MOVE`
+  steps through them), and the nested rows are plain `Static`s. `enter`
+  pushes `CheckDetailScreen(model, key, title, results, results_changed)`.
+  `results_changed` is a Textual `Signal` that `watch_results` publishes, so
+  the detail screen follows live results while the worker keeps running
+  beneath it. Nested rows are indented past the root rows' rail and `▸ `.
   **Icons always come from the results file**, in every mode (Live, Wrong
-  File, Manual, Inactive): ✅ for `True`, ❌ for `False`, and `_PENDING` for
-  a check never run or a results file that can't be read. The loaded file is
-  the `results` reactive. It is read in `compose` and again on `r`. Each row
-  in `_rows` carries a `Status` (`Results` → `bool | None`) that reads its
-  result. `Armature` reads `armature`. A role row passes when every
-  `FieldCheck` in its `MeshRoleResult` passes, and is pending when the role
-  has none. `Mesh Roles:` shows the most severe status beneath it (a failure,
-  else a pending role, else a pass) and is pending until `mesh_roles` is
-  stored. Every role keeps its own row. Failures are never shown here, only
-  their icons. The `Modifiers` rows aren't checked yet.
+  File, Manual, Inactive): ✅ for `True`, ❌ for `False`, and 🟡 for a check
+  never run or a results file that can't be read. The loaded file is the
+  `results` reactive. It is read in `compose` and again on `r`. Each `Row`
+  carries its key path in `Results.to_dict()` (`None` for a row nothing
+  checks yet). A row whose path is missing is pending. A row with rows
+  beneath it shows `tui.status.most_severe` of theirs (a failure, else a
+  pending row, else a pass). Any other row shows `tui.status.status_of` of
+  its value, so a role passes when every check in it passes. Every role
+  keeps its own row. Failures are never shown here, only their icons; the
+  detail screen lists them. The `Modifiers` rows aren't checked yet.
   **Connection:** on mount and on `r` (**Refresh**), the
   `@work(exclusive=True, group="blender-check")` worker runs both
   `core.blender_bridge` subscriptions in one `asyncio.TaskGroup`, each through
@@ -167,6 +175,22 @@ in the app (analogous to a route in a web app).
   on the wrong file, "Results update when you load a file, or save one, in
   Blender." in Live Mode, "Press r to refresh.", or "Start Blender, then press
   r to refresh." when `Inactive`. Every watcher is `NoMatches`-guarded.
+- `check_detail.py` — `CheckDetailScreen(model, field, heading, results,
+  updates)`, one root field's results for one model, pushed by `enter` on a
+  model dashboard root row. Not in `SCREENS`. One class serves every field: it
+  reads nothing per field and lays out `Results.to_dict()[field]` by its
+  shape, mirroring the JSON. A container's keys are headings with their
+  children indented beneath (a top-level container's children start the page,
+  since the title names the field). A bool or a `{passed, failures}` check is
+  an icon line (`tui.status`), and a container's icon is the most severe
+  beneath it. Every failure's facts are listed under its check as `key: value`
+  lines, the first marked `- `. Lists render via `format_list`, other values
+  as `key: value`. Depth is `.check-depth-{n}` (deepest today: 2). A missing
+  field or unreadable file shows `No results yet.` The `FixPanel` shows one
+  `_FIX_STEPS` entry per failing check key (deduped, file order). A new
+  field's fix text is an entry there, never a new screen. It subscribes to
+  `updates` on mount and redraws on each publish. Only `escape` is bound;
+  `#check-lines` keeps its default focus so long lists scroll.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
@@ -389,7 +413,8 @@ in the app (analogous to a route in a web app).
   reads no settings at all — only `self.app.specs_dir` — so it works in every
   config state.
   `spec_detail.py`, `armature_form.py`, `mesh_roles_form.py`,
-  `mesh_role_form.py`, `modifiers_form.py` and `model_dashboard.py` are the
+  `mesh_role_form.py`, `modifiers_form.py`, `model_dashboard.py` and
+  `check_detail.py` are the
   named exemptions: they are *per spec* (or per model), with no app-level "current spec" to read, so they take
   the spec as a constructor argument and are **not** registered in `SCREENS` — the
   `SetupWizard` / `NewSpecModal` shape, minus the return value. Adding a
@@ -409,7 +434,8 @@ in the app (analogous to a route in a web app).
   matters.** Textual expands `Binding("down,j", …)` into a separate binding per
   key, each carrying the same `description` and `key_display` — so a shown pair
   draws its footer entry twice. Bind the aliases separately with `show=False`
-  and let one entry speak for the action.
+  and let one entry speak for the action. The list-navigation set is
+  `tui.bindings.MOVE`; spread it (`*MOVE`) rather than copying it.
 - A screen that must not honor the app's global `q`-quit binding shadows it with
   its own `q` binding (a hidden no-op action). A focused `Input` already swallows
   a typed `q` as text, but a focused `Button` would let `q` bubble to the app —

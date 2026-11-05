@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, cast
 from rich.markup import escape
 from textual import work
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import Screen
@@ -30,6 +29,7 @@ from model_meta.core.spec import Spec
 from model_meta.models import discovery
 from model_meta.specs import store
 from model_meta.specs.store import SpecState
+from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.link_spec_modal import LinkSpecModal
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 from model_meta.tui.widgets.fix_panel import FixPanel
@@ -94,12 +94,7 @@ class ModelsScreen(Screen):
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
-        # One binding per key: Textual expands a comma-joined pair into one
-        # binding each, drawing the footer entry twice.
-        Binding("down", "app.focus_next", "Move", key_display="↑↓"),
-        Binding("j", "app.focus_next", "Move", show=False),
-        Binding("up", "app.focus_previous", "Move", show=False),
-        Binding("k", "app.focus_previous", "Move", show=False),
+        *MOVE,
     ]
 
     def compose(self) -> ComposeResult:

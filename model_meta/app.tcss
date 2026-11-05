@@ -31,6 +31,21 @@ SelectableRow:focus {
     background: $boost;
 }
 
+/* A sibling of its page's 1fr scroller, not docked: a docked container with auto
+   height renders at one row. Capped so it can't crowd out the list. */
+FixPanel {
+    width: 100%;
+    height: auto;
+    max-height: 50%;
+    padding: 0 2;
+    border-top: solid $panel;
+}
+
+FixPanel .fix-step {
+    width: 100%;
+    height: auto;
+}
+
 /* Shown in place of the sections when there is no valid config. */
 #setup-prompt {
     width: auto;
@@ -97,11 +112,32 @@ ModelDashboardScreen #connection-status {
     margin-left: 1;
 }
 
+/* Root rows are SelectableRows: rail, padding and "▸ " put their text 4 columns
+   in, so nested rows start there too. */
 ModelDashboardScreen .model-item-depth-1 {
-    padding-left: 3;
+    padding-left: 7;
 }
 
 ModelDashboardScreen .model-item-depth-2 {
+    padding-left: 10;
+}
+
+/* -- check detail screen ------------------------------------------------- */
+
+CheckDetailScreen #check-title {
+    padding: 1 2 0 2;
+}
+
+CheckDetailScreen #check-lines {
+    height: 1fr;
+    padding: 1 2;
+}
+
+CheckDetailScreen .check-depth-1 {
+    padding-left: 3;
+}
+
+CheckDetailScreen .check-depth-2 {
     padding-left: 6;
 }
 
@@ -151,26 +187,11 @@ SpecsScreen #specs-empty {
     margin-bottom: 1;
 }
 
-SpecsScreen .fix-step {
-    width: 100%;
-    height: auto;
-}
-
 /* The spec list scrolls; `height: 1fr` gives it whatever is left between the
    header, the fix block, and the footer. `can_focus=False` on the container
    (set in Python) keeps it out of the row focus chain. */
 SpecsScreen #detail-panel {
     height: 1fr;
-}
-
-/* Sibling of the 1fr scroller, not docked: a docked container with auto height
-   renders at one row. Capped so it can't crowd out the list. */
-SpecsScreen #fix-panel {
-    width: 100%;
-    height: auto;
-    max-height: 50%;
-    padding: 0 2;
-    border-top: solid $panel;
 }
 
 /* -- Models screen ------------------------------------------------------- */
@@ -194,26 +215,11 @@ ModelsScreen .models-files {
     height: auto;
 }
 
-ModelsScreen .fix-step {
-    width: 100%;
-    height: auto;
-}
-
 /* The model list scrolls; `height: 1fr` gives it whatever is left between the
    header, the docked fix block, and the footer. `can_focus=False` on the
    container (set in Python) keeps it out of the row focus chain. */
 ModelsScreen #detail-panel {
     height: 1fr;
-}
-
-/* Sibling of the 1fr scroller, not docked: a docked container with auto height
-   renders at one row. Capped so it can't crowd out the list. */
-ModelsScreen #fix-panel {
-    width: 100%;
-    height: auto;
-    max-height: 50%;
-    padding: 0 2;
-    border-top: solid $panel;
 }
 
 /* -- armature, mesh-roles, mesh-role and modifiers forms ----------------- */
