@@ -58,9 +58,13 @@ normal checkout. Do not commit or hand-edit it.
   the typed, atomically-written JSON document base, and `Spec`, the spec
   document built on it; `AppConnection`, the base for an external app at a path,
   `BlenderConnection` (executable detection and `--version` probe), the
-  `blender_bridge` client for the Blender add-on's armature subscription, and
+  `blender_bridge` client for the Blender add-on's armature and mesh
+  subscriptions, and
   `GodotConnection` (a bounded scan for `project.godot` under the projects
   root). No Textual, no UI.
+- `checks/` — pure checks comparing the bridge's scene data against a spec
+  (`mesh_roles.plan` / `evaluate`), building the results `core.results`
+  stores. No I/O, no Textual, no UI.
 - `tui/` — Textual screens (`tui/screens/`) and the reusable widgets they are
   assembled from (`tui/widgets/`).
 - `config/` — persistence: the on-disk config first-time setup writes and every

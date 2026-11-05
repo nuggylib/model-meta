@@ -26,7 +26,7 @@ from model_meta.tui.screens.mesh_roles_form import MeshRolesFormScreen
 from model_meta.tui.screens.modifiers_form import ModifiersFormScreen
 from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.screens.specs import SpecsScreen
-from model_meta.tui.widgets.spec_row import SpecRow
+from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _BODY_ROLE = MeshRole(vtx_grp="body", mesh_regex="^m$", count=1, weight=1.0)
 
@@ -85,7 +85,7 @@ async def _open_specs(pilot, app):
 async def _open_spec(pilot, app):
     """Navigate to the Specs screen and `enter` on its first row."""
     await _open_specs(pilot, app)
-    assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, SpecRow))
+    assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, SelectableRow))
     await pilot.press("enter")
     assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecDetailScreen))
 
@@ -100,11 +100,11 @@ async def test_spec_detail_opens_for_the_selected_row(tmp_path, monkeypatch):
     async with app.run_test() as pilot:
         await _open_specs(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 2)
-        assert await _wait_for(pilot, lambda: isinstance(screen.focused, SpecRow))
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 2)
+        assert await _wait_for(pilot, lambda: isinstance(screen.focused, SelectableRow))
 
         await pilot.press("down")  # character → vehicle
-        assert screen.focused.model_type == "vehicle"
+        assert screen.focused.key.model_type == "vehicle"
         await pilot.press("enter")
 
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecDetailScreen))
@@ -160,8 +160,8 @@ async def test_spec_detail_escape_returns_to_the_specs_screen(tmp_path, monkeypa
         await pilot.press("escape")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecsScreen))
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 2)
-        assert [row.model_type for row in screen.query(SpecRow)] == [
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 2)
+        assert [row.key.model_type for row in screen.query(SelectableRow)] == [
             "character",
             "vehicle",
         ]
@@ -190,7 +190,9 @@ async def test_spec_detail_opens_without_a_valid_config(tmp_path):
 
         await pilot.press("enter")  # Specs is the only card there is
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecsScreen))
-        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, SpecRow))
+        assert await _wait_for(
+            pilot, lambda: isinstance(app.screen.focused, SelectableRow)
+        )
         await pilot.press("enter")
 
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecDetailScreen))

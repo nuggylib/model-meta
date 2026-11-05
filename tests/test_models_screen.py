@@ -23,7 +23,7 @@ from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.link_spec_modal import LinkSpecModal
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 from model_meta.tui.screens.models import ModelsScreen
-from model_meta.tui.widgets.model_row import ModelRow
+from model_meta.tui.widgets.selectable_row import SelectableRow
 
 
 def _text(widget):
@@ -90,7 +90,11 @@ def _state_lines(screen):
 
 
 def _row_labels(screen):
-    return [_text(row) for row in screen.query(ModelRow)]
+    return [_text(row) for row in screen.query(SelectableRow)]
+
+
+def _row_focused(app):
+    return isinstance(app.screen.focused, SelectableRow)
 
 
 async def test_models_screen_lists_models_per_directory(tmp_path, monkeypatch):
@@ -113,7 +117,7 @@ async def test_models_screen_lists_models_per_directory(tmp_path, monkeypatch):
         await _open_models(pilot, app)
         screen = app.screen
 
-        assert await _wait_for(pilot, lambda: len(screen.query(ModelRow)) == 3)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 3)
         assert _row_labels(screen) == ["▸ sedan.blend", "▸ truck.blend", "▸ hero.blend"]
 
         directories = [_text(line) for line in screen.query(".models-directory")]
@@ -185,7 +189,7 @@ async def test_models_screen_distinguishes_the_four_directory_states(
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(ModelRow)) == 1)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 1)
 
         populated_state, empty_state, unreadable_state, missing_state = _state_lines(
             screen
@@ -220,7 +224,7 @@ async def test_models_screen_shows_nested_models_relative_to_their_directory(
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(ModelRow)) == 1)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 1)
         assert _row_labels(screen) == [f"▸ {Path('civilian') / 'sedan.blend'}"]
 
 
@@ -300,7 +304,7 @@ async def test_models_screen_hides_the_fix_block_when_all_is_well(
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(ModelRow)) == 1)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 1)
 
         assert not screen.query_one("#fix-panel").display
         assert _fix_steps(screen) == []
@@ -327,7 +331,7 @@ async def test_models_screen_fix_block_stays_visible_under_a_long_list(
     async with app.run_test(size=(80, 16)) as pilot:
         await _open_models(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(ModelRow)) == 40)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 40)
         assert await _wait_for(pilot, lambda: len(_fix_steps(screen)) == 1)
 
         def drawn():
@@ -364,18 +368,18 @@ async def test_models_screen_navigates_and_selects_rows(tmp_path, monkeypatch):
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(ModelRow)) == 2)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 2)
 
         # The scan focuses the first row once there is one to focus.
-        assert await _wait_for(pilot, lambda: isinstance(screen.focused, ModelRow))
-        assert screen.focused.path.name == "sedan.blend"
+        assert await _wait_for(pilot, lambda: isinstance(screen.focused, SelectableRow))
+        assert screen.focused.key.name == "sedan.blend"
 
         await pilot.press("down")
-        assert screen.focused.path.name == "truck.blend"
+        assert screen.focused.key.name == "truck.blend"
         await pilot.press("j")  # wraps, and the vim alias is bound
-        assert screen.focused.path.name == "sedan.blend"
+        assert screen.focused.key.name == "sedan.blend"
         await pilot.press("k")
-        assert screen.focused.path.name == "truck.blend"
+        assert screen.focused.key.name == "truck.blend"
 
         await pilot.press("enter")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, LinkSpecModal))
@@ -404,7 +408,7 @@ async def test_enter_on_an_unlinked_model_links_it_then_opens_its_dashboard(
     (app.specs_dir / "broken.json").write_text("{", encoding="utf-8")
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
-        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        assert await _wait_for(pilot, lambda: _row_focused(app))
         await pilot.press("enter")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, LinkSpecModal))
         assert app.screen.specs == ["vehicle"]
@@ -429,7 +433,7 @@ async def test_enter_on_a_linked_model_skips_the_modal(tmp_path, monkeypatch):
     ).create()
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
-        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        assert await _wait_for(pilot, lambda: _row_focused(app))
         await pilot.press("enter")
         assert await _wait_for(
             pilot, lambda: isinstance(app.screen, ModelDashboardScreen)
@@ -443,7 +447,7 @@ async def test_cancelling_the_modal_writes_nothing(tmp_path, monkeypatch):
     _write_spec(app, "vehicle")
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
-        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        assert await _wait_for(pilot, lambda: _row_focused(app))
         await pilot.press("enter")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, LinkSpecModal))
         await pilot.press("escape")
@@ -460,7 +464,7 @@ async def test_an_unreadable_results_file_is_reported_not_overwritten(
     results_path.write_text("{", encoding="utf-8")
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
-        assert await _wait_for(pilot, lambda: isinstance(app.screen.focused, ModelRow))
+        assert await _wait_for(pilot, lambda: _row_focused(app))
         await pilot.press("enter")
         await pilot.pause()
         notices = [str(notification.message) for notification in app._notifications]
@@ -480,12 +484,12 @@ async def test_models_screen_scroller_is_not_a_focus_stop(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open_models(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(ModelRow)) == 1)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 1)
 
         assert not screen.query_one("#detail-panel").can_focus
         # One model means one stop: `down` leaves focus exactly where it was.
         await pilot.press("down")
-        assert screen.focused.path.name == "sedan.blend"
+        assert screen.focused.key.name == "sedan.blend"
 
 
 async def test_models_screen_returns_to_dashboard_on_escape(tmp_path, monkeypatch):

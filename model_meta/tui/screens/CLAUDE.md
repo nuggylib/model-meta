@@ -59,7 +59,8 @@ in the app (analogous to a route in a web app).
   category inside `@work(exclusive=True, group="models-scan")` via
   `asyncio.to_thread`, per directory, sequentially — few directories, ordered
   output, and `exclusive` means a recompose-driven rescan cancels the one in
-  flight rather than racing it. Rows are `ModelRow`s labeled with the model's
+  flight rather than racing it. Rows are `SelectableRow`s keyed by the model's
+  `Path` and labeled with its
   path *relative to* its configured directory, so a model in a subfolder keeps
   that context; they are the screen's only focus stops, which is why the
   `VerticalScroll` wrapper passes `can_focus=False` (`ScrollableContainer` opts
@@ -74,7 +75,8 @@ in the app (analogous to a route in a web app).
   an invalid spec name in it, or a failed write is a notice; the file is never
   overwritten.
 - `specs.py` — `SpecsScreen` (`specs` in `SCREENS`), the Specs page: the
-  validation specs in `specs/`, one focusable `SpecRow` each. Follows
+  validation specs in `specs/`, one focusable `SelectableRow` each, keyed by
+  its `SpecEntry`. Follows
   `models.py`'s page shape — a `VerticalScroll` of rows (`can_focus=False`, so
   the rows are the only focus stops) plus a `FixPanel` **outside** the scroller.
   The listing parses JSON per file, so it runs in
@@ -96,7 +98,7 @@ in the app (analogous to a route in a web app).
   than its contents, so the page lists and works identically in every config
   state.
 - `spec_detail.py` — `SpecDetailScreen(model_type, path)`, the per-spec detail
-  view opened by `enter` on a `SpecRow`. Not in `SCREENS` (see Conventions).
+  view opened by `enter` on a spec row. Not in `SCREENS` (see Conventions).
   Summarizes each root field in a non-focusable `FieldSummary` box — Armature
   shows `Name` (`object_name`, or `not set`) and `Bones` (a count); Mesh roles
   lists the role names (`items`, numbered, columns of 10; `No mesh roles yet.` when
@@ -122,27 +124,48 @@ in the app (analogous to a route in a web app).
   `Required:` → `Skinned Meshes`, `Warnings: None` and `Blocked: None`. The
   spec is read inline in `compose`; a spec `Spec.load` rejects shows `not
   found` and no roles.
+  **Roots open the detail screen:** the three depth-0 rows are `SelectableRow`s
+  keyed by their results file key (`_ROOTS`: `armature`, `mesh_roles`,
+  `modifiers`, each with its title). They are the only focus stops (`MOVE`
+  steps through them), and the nested rows are plain `Static`s. `enter`
+  pushes `CheckDetailScreen(model, (key,), (title,), results, results_changed)`.
+  `results_changed` is a Textual `Signal` that `watch_results` publishes, so
+  the detail screen follows live results while the worker keeps running
+  beneath it. Nested rows are indented past the root rows' rail and `▸ `.
   **Icons always come from the results file**, in every mode (Live, Wrong
-  File, Manual, Inactive): ✅ for `True`, ❌ for `False`, and `_PENDING` for
-  a check never run or a results file that can't be read. Today only
-  `armature` is stored, in the `armature_passed` reactive; every other row is
-  `_PENDING`. The file is read in `compose` and again on `r`.
+  File, Manual, Inactive): ✅ for `True`, ❌ for `False`, and 🟡 for a check
+  never run or a results file that can't be read. The loaded file is the
+  `results` reactive. It is read in `compose` and again on `r`. Each `Row`
+  carries its key path in `Results.to_dict()` (`None` for a row nothing
+  checks yet). A row whose path is missing is pending. A row with rows
+  beneath it shows `tui.status.most_severe` of theirs (a failure, else a
+  pending row, else a pass). Any other row shows `tui.status.status_of` of
+  its value, so a role passes when every check in it passes. Every role
+  keeps its own row. Failures are never shown here, only their icons; the
+  detail screen lists them. The `Modifiers` rows aren't checked yet.
   **Connection:** on mount and on `r` (**Refresh**), the
-  `@work(exclusive=True, group="blender-check")` worker first subscribes
-  through `core.blender_bridge.subscribe_armatures` and stays subscribed. Each
-  message sets `live`; each `OpenFile` sets `wrong_file` unless its path is the
-  model (`Path.samefile`, so a symlink or a case difference still matches; a
-  never-saved `None` or a missing file is wrong). An armature list is checked
-  only once an `OpenFile` has confirmed the model is open: the check passes when
-  the spec's `object_name` is in the list (a blank `object_name` fails). The
-  result is saved to the results file (load right before, save only when it
-  changed, other keys kept), and then `armature_passed` is updated. A failed
-  load or save is an error notice, and the icon keeps the stored result. A
-  `busy` `None` checks nothing. With the wrong file open, armature lists are
-  ignored and nothing is written; the icons keep showing the results file.
-  When the bridge raises `BridgeError` (unreachable or dropped), `live` and
-  `wrong_file` reset (the icons keep the stored results) and the worker falls back to the **Manual Mode** check: `BlenderConnection.is_running`
-  via `asyncio.to_thread`, which only asks whether Blender is running. While
+  `@work(exclusive=True, group="blender-check")` worker runs both
+  `core.blender_bridge` subscriptions in one `asyncio.TaskGroup`, each through
+  `_follow(messages, check)`: `subscribe_armatures` with `_check_armature`,
+  and `subscribe_meshes(partial(mesh_roles.plan, roles))` with
+  `_check_mesh_roles`. Each message sets `live`. Each `OpenFile` sets
+  `wrong_file` unless its path is the model (`Path.samefile`, so a symlink or
+  a case difference still matches; a never-saved `None` or a missing file is
+  wrong). A connection's results are checked only once that connection's
+  own `OpenFile` has confirmed the model is open. The armature check passes
+  when the spec's `object_name` is in the list (a blank `object_name` fails).
+  The mesh check stores `checks.mesh_roles.evaluate(roles, report)`. Both go
+  through `_save(**checks)`: load right before, `replace` those fields, save
+  only when something changed (other keys kept), then set `results`. A failed
+  load or save is an error notice, and the icons keep the stored results. A
+  `busy` `None` armature list checks nothing. With the wrong file open,
+  results are ignored and nothing is written; the icons keep showing the
+  results file.
+  When either subscription raises `BridgeError` (unreachable or dropped), the
+  `TaskGroup` cancels the other, `live` and `wrong_file` reset (the icons keep
+  the stored results), and the worker falls back to the **Manual Mode**
+  check: `BlenderConnection.is_running` via `asyncio.to_thread`, which only
+  asks whether Blender is running. While
   connecting or checking, the `is_refreshing` reactive swaps every row's
   prefix to 🔄. The muted `#connection-status` beside the heading reads
   `Wrong File` in Live Mode on the wrong file, `Live Mode`, else from
@@ -152,6 +175,30 @@ in the app (analogous to a route in a web app).
   on the wrong file, "Results update when you load a file, or save one, in
   Blender." in Live Mode, "Press r to refresh.", or "Start Blender, then press
   r to refresh." when `Inactive`. Every watcher is `NoMatches`-guarded.
+- `check_detail.py` — `CheckDetailScreen(model, path, headings, results,
+  updates)`, one model's results at a key path in `Results.to_dict()`
+  (`tui.status.lookup`), pushed by `enter` on a model dashboard root row and
+  by `enter` on its own rows. Not in `SCREENS`. The title is `Models - <model
+  stem>` then each of `headings`. One class serves every path: it reads
+  nothing per field and lays the value out by its shape, mirroring the JSON.
+  - **A container of containers** (`mesh_roles`): one `SelectableRow` per
+    key, `<icon> <key>`, the icon the most severe status beneath it. They are
+    the focus stops (`MOVE`; `#check-lines` gets `can_focus=False`), and the
+    first is focused. `enter` pushes another `CheckDetailScreen` at
+    `(*path, key)`, sharing `updates`. A publish with the same keys relabels
+    the rows in place, so focus stays put; other keys remount them.
+  - **Any other container** (a role): one bordered `.check-section` per key,
+    the key as its `border_title`. A bool or a check shows `✅ passing`, or
+    `❌ failing` with every failure's facts as `key: value` lines (the first
+    marked `- `) and then its `_FIX_STEPS` entry as `How to fix: ...`
+    (`.check-fix`). A list (`meshes`) shows `format_list`. Only set fields
+    have a check, so only they get a section.
+  - **A bool or a check** (`armature`): that one section, titled by its key.
+  A missing value, an empty container or an unreadable file shows `No results
+  yet.` A new field's fix text is a `_FIX_STEPS` entry, never a new screen.
+  It subscribes to `updates` on mount and redraws on each publish. Only
+  `escape` and `MOVE` are bound; outside the row list, `#check-lines` keeps
+  its focus so long pages scroll.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on
@@ -374,7 +421,8 @@ in the app (analogous to a route in a web app).
   reads no settings at all — only `self.app.specs_dir` — so it works in every
   config state.
   `spec_detail.py`, `armature_form.py`, `mesh_roles_form.py`,
-  `mesh_role_form.py`, `modifiers_form.py` and `model_dashboard.py` are the
+  `mesh_role_form.py`, `modifiers_form.py`, `model_dashboard.py` and
+  `check_detail.py` are the
   named exemptions: they are *per spec* (or per model), with no app-level "current spec" to read, so they take
   the spec as a constructor argument and are **not** registered in `SCREENS` — the
   `SetupWizard` / `NewSpecModal` shape, minus the return value. Adding a
@@ -394,7 +442,8 @@ in the app (analogous to a route in a web app).
   matters.** Textual expands `Binding("down,j", …)` into a separate binding per
   key, each carrying the same `description` and `key_display` — so a shown pair
   draws its footer entry twice. Bind the aliases separately with `show=False`
-  and let one entry speak for the action.
+  and let one entry speak for the action. The list-navigation set is
+  `tui.bindings.MOVE`; spread it (`*MOVE`) rather than copying it.
 - A screen that must not honor the app's global `q`-quit binding shadows it with
   its own `q` binding (a hidden no-op action). A focused `Input` already swallows
   a typed `q` as text, but a focused `Button` would let `q` bubble to the app —

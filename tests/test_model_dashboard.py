@@ -6,10 +6,19 @@ import pytest
 from textual.app import App
 from textual.widgets import Static
 
-from model_meta.core.blender_bridge import Armatures, BridgeError, OpenFile
+from model_meta.core.blender_bridge import (
+    Armatures,
+    BridgeError,
+    MeshReport,
+    MeshTextures,
+    MeshWeight,
+    OpenFile,
+    SceneMesh,
+)
 from model_meta.core.blender_connection import BlenderConnection
-from model_meta.core.results import Results
+from model_meta.core.results import FieldCheck, MeshRoleResult, Results
 from model_meta.tui.screens import model_dashboard
+from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 
 _DROP = object()
@@ -25,7 +34,7 @@ class _Host(App):
 
 
 def _text(widget):
-    return str(widget.render())
+    return str(widget.render()).removeprefix("▸ ")
 
 
 async def _wait_for(pilot, predicate, tries=100):
@@ -52,19 +61,50 @@ def _fake_running(monkeypatch, *answers):
     return calls
 
 
-def _fake_bridge(monkeypatch, *, reachable=True):
-    """Each put is yielded to the screen, a list as `Armatures`; `_DROP` closes the connection."""
+def _fake_subscription(monkeypatch, name, wrap, *, reachable=True):
+    """Each put is yielded to the screen, as `wrap(put, *args)` unless it is an `OpenFile`.
+
+    `_DROP` closes the connection.
+    """
     pushes = asyncio.Queue()
 
-    async def subscribe_armatures(port=7417, timeout=2.0):
+    async def subscribe(*args, port=7417, timeout=2.0):
         if not reachable:
             raise BridgeError("The Blender add-on isn't reachable.")
         while (message := await pushes.get()) is not _DROP:
-            yield message if isinstance(message, OpenFile) else Armatures(message)
+            yield message if isinstance(message, OpenFile) else wrap(message, *args)
         raise BridgeError("The Blender add-on closed the connection.")
 
-    monkeypatch.setattr(model_dashboard, "subscribe_armatures", subscribe_armatures)
+    monkeypatch.setattr(model_dashboard, name, subscribe)
     return pushes
+
+
+def _passing_report(meshes, plan):
+    """Every planned weight and texture passes, so only the scene meshes decide."""
+    weights, textures = plan(meshes)
+    return MeshReport(
+        meshes,
+        [MeshWeight(t.mesh, t.vertex_group, 10, 10, 10) for t in weights],
+        [MeshTextures(t.mesh, dict.fromkeys(t.maps, True)) for t in textures],
+    )
+
+
+def _fake_bridge(monkeypatch, *, reachable=True):
+    """Returns the armature pushes (a list is yielded as `Armatures`).
+
+    The mesh subscription waits for pushes nobody sends; `_fake_meshes` replaces it.
+    """
+    _fake_meshes(monkeypatch, reachable=reachable)
+    return _fake_subscription(
+        monkeypatch, "subscribe_armatures", Armatures, reachable=reachable
+    )
+
+
+def _fake_meshes(monkeypatch, *, reachable=True):
+    """Returns the mesh pushes: a list of `SceneMesh` is yielded as a passing report."""
+    return _fake_subscription(
+        monkeypatch, "subscribe_meshes", _passing_report, reachable=reachable
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -72,16 +112,43 @@ def _no_bridge(monkeypatch):
     _fake_bridge(monkeypatch, reachable=False)
 
 
-def _screen(tmp_path, armature=None, passed=None):
-    """`passed` is the armature result already in the results file."""
+_ROLES = {
+    "wheels": {
+        "mesh_regex": r"wheel_hub\.(front|rear)\.[LR]",
+        "vtx_grp": "wheel_hub.{1}.{2}",
+        "count": 4,
+        "weight": 1.0,
+        "material_slots": ["rubber"],
+    },
+    "body": {"mesh_regex": "body", "vtx_grp": "body", "count": 1, "weight": 1.0},
+}
+_WHEELS = [
+    SceneMesh(name, [name], ["rubber"])
+    for name in (
+        "wheel_hub.front.L",
+        "wheel_hub.front.R",
+        "wheel_hub.rear.L",
+        "wheel_hub.rear.R",
+    )
+]
+_SCENE = [SceneMesh("body", ["body"], ["paint"]), *_WHEELS]
+
+
+def _screen(tmp_path, armature=None, passed=None, roles=None, role_results=None):
+    """`passed` / `role_results` are the results already in the results file."""
     path = tmp_path / "vehicle.json"
-    if armature is not None:
-        path.write_text(json.dumps({"armature": {"object_name": armature}}))
+    if armature is not None or roles is not None:
+        spec = {"armature": {"object_name": armature or ""}, "mesh_roles": roles or {}}
+        path.write_text(json.dumps(spec))
     model = tmp_path / "sedan.blend"
     model.touch()
     results_path = tmp_path / "sedan-results.json"
     Results(
-        model_file=str(model), spec="vehicle", armature=passed, path=results_path
+        model_file=str(model),
+        spec="vehicle",
+        armature=passed,
+        mesh_roles=role_results,
+        path=results_path,
     ).create()
     return ModelDashboardScreen(model, path, results_path)
 
@@ -104,6 +171,13 @@ def _hint(screen):
 
 def _rows(screen):
     return [_text(row) for row in screen.query(".model-item-depth-0")]
+
+
+def _role_rows(screen):
+    """The `Mesh Roles:` heading, then one row per role."""
+    rows = [_text(row) for row in screen.query(".model-item") if row.id != "model-type"]
+    start = next(i for i, row in enumerate(rows) if row.endswith(" Mesh Roles:"))
+    return rows[start : start + 3]
 
 
 async def test_running_blender_shows_manual_mode(tmp_path, monkeypatch):
@@ -391,3 +465,139 @@ async def test_opening_the_model_file_clears_the_wrong_file(tmp_path, monkeypatc
     assert not await _wrong_file_after(
         tmp_path, monkeypatch, OpenFile(None), _on_model(tmp_path)
     )
+
+
+async def _push_scene(tmp_path, monkeypatch, scene, expected, open_file=None):
+    """Pushes `scene` on the mesh connection and waits for the role rows to read `expected`."""
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(open_file or _on_model(tmp_path))
+        meshes.put_nowait(scene)
+        assert await _wait_for(pilot, meshes.empty)
+        assert await _wait_for(pilot, lambda: _role_rows(screen) == expected)
+    return Results.load(screen.results_path).mesh_roles
+
+
+async def test_matching_scene_passes_every_role_and_is_saved(tmp_path, monkeypatch):
+    saved = await _push_scene(
+        tmp_path, monkeypatch, _SCENE, ["✅ Mesh Roles:", "✅ wheels", "✅ body"]
+    )
+    assert list(saved) == ["wheels", "body"]
+    assert saved["wheels"].meshes == [mesh.name for mesh in _WHEELS]
+    assert all(check.passed for check in saved["wheels"].checks.values())
+
+
+async def test_failing_role_fails_its_row_and_the_heading(tmp_path, monkeypatch):
+    bare = SceneMesh("wheel_hub.rear.R", ["wheel_hub.rear.R"], [])
+    saved = await _push_scene(
+        tmp_path,
+        monkeypatch,
+        [*_SCENE[:-1], bare],
+        ["❌ Mesh Roles:", "❌ wheels", "✅ body"],
+    )
+    assert saved["wheels"].checks["material_slots"] == FieldCheck(
+        [{"mesh": "wheel_hub.rear.R", "missing": ["rubber"]}]
+    )
+
+
+async def test_mesh_report_on_the_wrong_file_is_not_saved(tmp_path, monkeypatch):
+    saved = await _push_scene(
+        tmp_path,
+        monkeypatch,
+        _SCENE,
+        ["🟡 Mesh Roles:", "🟡 wheels", "🟡 body"],
+        open_file=OpenFile(None),
+    )
+    assert saved is None
+
+
+@pytest.mark.parametrize(
+    ("wheels", "expected"),
+    [
+        (
+            [{"expected": 4, "matched": 3}],
+            ["❌ Mesh Roles:", "❌ wheels", "🟡 body"],
+        ),
+        ([], ["🟡 Mesh Roles:", "✅ wheels", "🟡 body"]),
+    ],
+)
+async def test_inactive_shows_the_saved_role_results(
+    tmp_path, monkeypatch, wheels, expected
+):
+    _fake_running(monkeypatch, False)
+    role_results = {"wheels": MeshRoleResult([], {"count": FieldCheck(wheels)})}
+    screen = _screen(tmp_path, "Rig", roles=_ROLES, role_results=role_results)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        assert _role_rows(screen) == expected
+
+
+async def test_root_rows_are_the_only_focus_stops(tmp_path, monkeypatch):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        seen = []
+        for _ in range(4):
+            seen.append(screen.focused.key)
+            await pilot.press("down")
+        assert seen == ["armature", "mesh_roles", "modifiers", "armature"]
+
+
+@pytest.mark.parametrize(
+    ("presses", "field", "title"),
+    [
+        (0, "armature", "Armature"),
+        (1, "mesh_roles", "Mesh Roles"),
+        (2, "modifiers", "Modifiers"),
+    ],
+)
+async def test_enter_on_a_root_opens_its_check_detail(
+    tmp_path, monkeypatch, presses, field, title
+):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        for _ in range(presses):
+            await pilot.press("down")
+        await pilot.press("enter")
+        app = screen.app
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, CheckDetailScreen))
+        assert app.screen.path == (field,)
+        heading = _text(app.screen.query_one("#check-title"))
+        assert heading == f"Models - sedan - {title}"
+
+
+async def test_check_detail_follows_live_results(tmp_path, monkeypatch):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        assert await _wait_for(pilot, lambda: _status(screen) == "Live Mode")
+        await pilot.press("down", "enter")
+        app = screen.app
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, CheckDetailScreen))
+        detail = app.screen
+
+        def lines():
+            return [_text(line) for line in detail.query("#check-lines Static")]
+
+        assert lines() == ["No results yet."]
+        meshes.put_nowait(_SCENE)
+        assert await _wait_for(pilot, lambda: "✅ wheels" in lines())
+
+
+async def test_dropped_mesh_connection_falls_back_to_manual_mode(tmp_path, monkeypatch):
+    _fake_running(monkeypatch, True)
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        assert await _wait_for(pilot, lambda: _status(screen) == "Live Mode")
+        meshes.put_nowait(_DROP)
+        assert await _wait_for(pilot, lambda: _status(screen) == "Manual Mode")

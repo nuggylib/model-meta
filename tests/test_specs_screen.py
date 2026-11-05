@@ -23,7 +23,7 @@ from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.new_spec_modal import NewSpecModal
 from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.screens.specs import SpecsScreen
-from model_meta.tui.widgets.spec_row import SpecRow
+from model_meta.tui.widgets.selectable_row import SelectableRow
 
 
 def _text(widget):
@@ -81,7 +81,7 @@ def _app(tmp_path, monkeypatch, specs=(), broken=()):
 
 
 def _row_labels(screen):
-    return [_text(row) for row in screen.query(SpecRow)]
+    return [_text(row) for row in screen.query(SelectableRow)]
 
 
 def _fix_steps(screen):
@@ -95,7 +95,7 @@ async def test_specs_screen_lists_the_specs_on_disk(tmp_path, monkeypatch):
         await _open_specs(pilot, app)
         screen = app.screen
 
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 3)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 3)
         assert _row_labels(screen) == ["▸ character", "▸ prop", "▸ vehicle"]
         assert _text(screen.query_one("#specs-summary", Static)) == "3 specs"
         assert _fix_steps(screen) == []
@@ -122,7 +122,7 @@ async def test_specs_screen_empty_state_is_a_note_not_a_problem(tmp_path, monkey
         note = _text(screen.query_one("#specs-empty", Static))
         assert "No specs yet" in note
         assert "n" in note  # says how to make one
-        assert not screen.query(SpecRow)
+        assert not screen.query(SelectableRow)
         assert _fix_steps(screen) == []
         assert not screen.query_one("#fix-panel").display
         # Read-only: listing an absent directory must not create it.
@@ -143,7 +143,7 @@ async def test_specs_screen_marks_an_unreadable_spec_and_keeps_the_good_ones(
         await _open_specs(pilot, app)
         screen = app.screen
 
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 3)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 3)
         labels = _row_labels(screen)
         assert labels[0].startswith("▸ broken")
         assert "unreadable" in labels[0]
@@ -153,7 +153,7 @@ async def test_specs_screen_marks_an_unreadable_spec_and_keeps_the_good_ones(
         assert "unreadable" in step
         assert "JSON" in step
         # The good rows are still focus stops.
-        assert all(row.can_focus for row in screen.query(SpecRow))
+        assert all(row.can_focus for row in screen.query(SelectableRow))
 
 
 async def test_specs_screen_marks_a_name_mismatch(tmp_path, monkeypatch):
@@ -168,7 +168,7 @@ async def test_specs_screen_marks_a_name_mismatch(tmp_path, monkeypatch):
         await _open_specs(pilot, app)
         screen = app.screen
 
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 1)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 1)
         (label,) = _row_labels(screen)
         assert "mismatch" in label
 
@@ -208,7 +208,7 @@ async def test_specs_screen_escapes_markup_in_a_spec_name(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await _open_specs(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 1)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 1)
         assert _row_labels(screen) == ["▸ mech[v2]"]
 
 
@@ -219,18 +219,18 @@ async def test_specs_screen_focus_chain_is_exactly_the_rows(tmp_path, monkeypatc
     async with app.run_test() as pilot:
         await _open_specs(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 2)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 2)
 
         assert not screen.query_one("#detail-panel").can_focus
-        assert await _wait_for(pilot, lambda: isinstance(screen.focused, SpecRow))
-        assert screen.focused.model_type == "character"
+        assert await _wait_for(pilot, lambda: isinstance(screen.focused, SelectableRow))
+        assert screen.focused.key.model_type == "character"
 
         await pilot.press("down")
-        assert screen.focused.model_type == "vehicle"
+        assert screen.focused.key.model_type == "vehicle"
         await pilot.press("j")  # wraps, and the vim alias is bound
-        assert screen.focused.model_type == "character"
+        assert screen.focused.key.model_type == "character"
         await pilot.press("k")
-        assert screen.focused.model_type == "vehicle"
+        assert screen.focused.key.model_type == "vehicle"
 
 
 async def test_specs_screen_enter_on_a_row_opens_its_detail_screen(
@@ -241,7 +241,7 @@ async def test_specs_screen_enter_on_a_row_opens_its_detail_screen(
     async with app.run_test() as pilot:
         await _open_specs(pilot, app)
         screen = app.screen
-        assert await _wait_for(pilot, lambda: isinstance(screen.focused, SpecRow))
+        assert await _wait_for(pilot, lambda: isinstance(screen.focused, SelectableRow))
 
         before = config_store.load(app._config_path)
         await pilot.press("enter")
@@ -313,7 +313,7 @@ async def test_new_spec_creates_the_file_and_focuses_its_row(tmp_path, monkeypat
     app = _app(tmp_path, monkeypatch, specs=("vehicle",))
     async with app.run_test() as pilot:
         await _open_specs(pilot, app)
-        assert await _wait_for(pilot, lambda: len(app.screen.query(SpecRow)) == 1)
+        assert await _wait_for(pilot, lambda: len(app.screen.query(SelectableRow)) == 1)
 
         await _open_modal(pilot, app)
         app.screen.query_one("#spec-name", Input).value = "Space Ship"
@@ -330,13 +330,13 @@ async def test_new_spec_creates_the_file_and_focuses_its_row(tmp_path, monkeypat
         assert json.loads(created.read_text()) == schema.skeleton("space-ship")
 
         screen = app.screen
-        assert await _wait_for(pilot, lambda: len(screen.query(SpecRow)) == 2)
+        assert await _wait_for(pilot, lambda: len(screen.query(SelectableRow)) == 2)
         assert _row_labels(screen) == ["▸ space-ship", "▸ vehicle"]
         assert await _wait_for(
             pilot,
             lambda: (
-                isinstance(screen.focused, SpecRow)
-                and screen.focused.model_type == "space-ship"
+                isinstance(screen.focused, SelectableRow)
+                and screen.focused.key.model_type == "space-ship"
             ),
         )
         notices = [str(notification.message) for notification in app._notifications]
@@ -462,7 +462,7 @@ async def test_new_spec_escape_cancels_and_writes_nothing(tmp_path, monkeypatch)
         await pilot.press("escape")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecsScreen))
         assert not (tmp_path / "specs").exists()
-        assert not app.screen.query(SpecRow)
+        assert not app.screen.query(SelectableRow)
 
 
 async def test_new_spec_cancel_button_writes_nothing(tmp_path, monkeypatch):

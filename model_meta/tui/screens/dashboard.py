@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING, cast
 from rich.markup import escape
 from textual import work
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical
 from textual.css.query import NoMatches
 from textual.screen import Screen
@@ -36,6 +35,7 @@ from textual.widgets import Footer, Header, Static
 
 from model_meta.core.app_connection import PathState
 from model_meta.specs import store as specs_store
+from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.specs import plural_specs
 from model_meta.tui.widgets.section_card import SectionCard
 
@@ -66,12 +66,7 @@ class DashboardScreen(Screen):
 
     BINDINGS = [
         ("s", "app.open_setup", "Setup"),
-        # One binding per key: Textual expands a comma-joined pair into one
-        # binding each, drawing the footer entry twice. Only one is shown.
-        Binding("down", "app.focus_next", "Move", key_display="↑↓"),
-        Binding("j", "app.focus_next", "Move", show=False),
-        Binding("up", "app.focus_previous", "Move", show=False),
-        Binding("k", "app.focus_previous", "Move", show=False),
+        *MOVE,
     ]
 
     def compose(self) -> ComposeResult:

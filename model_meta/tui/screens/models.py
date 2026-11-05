@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, cast
 from rich.markup import escape
 from textual import work
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import Screen
@@ -30,10 +29,11 @@ from model_meta.core.spec import Spec
 from model_meta.models import discovery
 from model_meta.specs import store
 from model_meta.specs.store import SpecState
+from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.link_spec_modal import LinkSpecModal
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 from model_meta.tui.widgets.fix_panel import FixPanel
-from model_meta.tui.widgets.model_row import ModelRow
+from model_meta.tui.widgets.selectable_row import SelectableRow
 
 if TYPE_CHECKING:
     from model_meta.app import ModelMetaApp
@@ -87,19 +87,14 @@ def _plural(count: int, noun: str, plural: str | None = None) -> str:
 class ModelsScreen(Screen):
     """Detail view for the configured source-model directories.
 
-    Navigation mirrors the dashboard: rows are focusable (`ModelRow`), `↑`/`↓`
+    Navigation mirrors the dashboard: rows are focusable (`SelectableRow`), `↑`/`↓`
     and `j`/`k` step through them, `enter` opens one. Only the model rows are
     focus stops — the directory headings and state lines are plain `Static`s.
     """
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
-        # One binding per key: Textual expands a comma-joined pair into one
-        # binding each, drawing the footer entry twice.
-        Binding("down", "app.focus_next", "Move", key_display="↑↓"),
-        Binding("j", "app.focus_next", "Move", show=False),
-        Binding("up", "app.focus_previous", "Move", show=False),
-        Binding("k", "app.focus_previous", "Move", show=False),
+        *MOVE,
     ]
 
     def compose(self) -> ComposeResult:
@@ -194,8 +189,7 @@ class ModelsScreen(Screen):
             except NoMatches:
                 return  # recomposed away mid-scan
             await container.mount_all(
-                ModelRow(model, self._label(model, path), classes="model-row")
-                for model in found
+                SelectableRow(model, self._label(model, path)) for model in found
             )
         summary = (
             f"{_plural(len(settings.models_directories), 'directory', 'directories')}"
@@ -224,16 +218,16 @@ class ModelsScreen(Screen):
 
     def _focus_first_row(self) -> None:
         """Focus the first model, unless the user already focused one."""
-        if isinstance(self.focused, ModelRow):
+        if isinstance(self.focused, SelectableRow):
             return
-        rows = self.query(ModelRow)
+        rows = self.query(SelectableRow)
         if rows:
             rows.first().focus()
 
     # -- selection ---------------------------------------------------------
 
-    def on_model_row_selected(self, message: ModelRow.Selected) -> None:
-        self._open_model(message.path)
+    def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
+        self._open_model(message.row.key)
 
     @work(exclusive=True, group="open-model")
     async def _open_model(self, model: Path) -> None:
