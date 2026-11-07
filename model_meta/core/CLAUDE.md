@@ -52,20 +52,24 @@ storage, and connections to the external apps Model Meta validates against.
     and after a save/load that changes the list), with `names` `None` for
     `busy`. It ignores the version.
   - `subscribe_meshes(plan, port, timeout)` yields `OpenFile`, then one
-    `MeshReport(meshes, weights, textures, uvs)` per pushed `meshes_revision` (on
-    subscribe and after every save/load). A `_Fetch` follows every page of
-    `get_meshes`, then calls `plan(meshes)` for the `WeightTarget`s,
-    `TextureTarget`s and `UvTarget`s and pages through `get_mesh_weights` /
-    `get_mesh_textures` / `get_mesh_uvs` for them, in order (an empty list isn't
-    requested). UVs are fetched only when the add-on's version is at least
-    `UVS_VERSION` (0.2.0, which added `get_mesh_uvs`); otherwise `uvs` is
-    `None`. A missing or unparseable version counts as older. `MeshUvs` keeps
-    only `has_default_uv_map`; the add-on's face count and UV maps are
-    dropped.
+    `MeshReport(meshes, weights, textures, uvs, modifiers)` per pushed
+    `meshes_revision` (on subscribe and after every save/load). A `_Fetch`
+    follows every page of `get_meshes`, then calls `plan(meshes)` for the
+    `WeightTarget`s, `TextureTarget`s, and the UV and modifier `MeshTarget`s,
+    and pages through `get_mesh_weights` / `get_mesh_textures` /
+    `get_mesh_uvs` / `get_mesh_modifiers` for them, in order (an empty list
+    isn't requested). `_ADDED` names the add-on version each optional request
+    arrived in: UVs need `UVS_VERSION` (0.2.0) and modifiers
+    `MODIFIERS_VERSION` (0.4.0). An older add-on skips the request and leaves
+    `uvs` / `modifiers` `None`. A missing or unparseable version counts as
+    older. `MeshUvs` keeps only `has_default_uv_map`; the add-on's face count
+    and UV maps are dropped. `MeshModifiers` lists each Blender modifier type
+    in stack order, repeats included.
     Only one request is in flight at a time. A newer revision restarts the
     fetch from cursor 0 once the in-flight reply lands, whether that reply is
     an old page or `stale`. `busy` yields nothing: queued requests are answered
-    when Blender unlocks. A `MeshWeight` / `MeshTextures` / `MeshUvs` with
+    when Blender unlocks. A `MeshWeight` / `MeshTextures` / `MeshUvs` /
+    `MeshModifiers` with
     `error` set (`no mesh`, `no vertex group`, `in edit mode`) is an item, not
     a raise.
 - `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the

@@ -6,9 +6,10 @@ Textual, no UI.
 
 ## Files
 - `mesh_roles.py` — the `mesh_roles` check.
-  - `plan(roles, meshes)`: the `WeightTarget`s, `TextureTarget`s and
-    `UvTarget`s to fetch, deduped, with one texture target per mesh that holds
-    every role's maps and one UV target per textured mesh. The screen passes
+  - `plan(roles, meshes)`: the `WeightTarget`s, `TextureTarget`s, and UV and
+    modifier `MeshTarget`s to fetch, deduped, with one texture target per mesh
+    that holds every role's maps, one UV target per textured mesh, and one
+    modifier target per mesh any role matches. The screen passes
     `functools.partial(plan, roles)` to `subscribe_meshes`.
   - `evaluate(roles, report)`: one `MeshRoleResult` per role. It re-runs `plan`
     to line the report's items up with their targets, so the report must come

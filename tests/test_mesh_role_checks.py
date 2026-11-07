@@ -5,12 +5,12 @@ import pytest
 from model_meta.checks import mesh_roles
 from model_meta.core.blender_bridge import (
     MeshReport,
+    MeshTarget,
     MeshTextures,
     MeshUvs,
     MeshWeight,
     SceneMesh,
     TextureTarget,
-    UvTarget,
     WeightTarget,
 )
 from model_meta.core.results import FieldCheck, MeshRoleResult
@@ -71,12 +71,13 @@ def _evaluate(
 ):
     """Answers each planned target with `weight(target)` / `textures(target)` /
     `uvs(target)`. A `None` `uvs` reports an add-on that predates `get_mesh_uvs`."""
-    weights, maps, uv_targets = mesh_roles.plan(roles, meshes)
+    weights, maps, uv_targets, _ = mesh_roles.plan(roles, meshes)
     report = MeshReport(
         meshes,
         [weight(target) for target in weights],
         [(textures or _passing_textures)(target) for target in maps],
         None if uvs is None else [uvs(target) for target in uv_targets],
+        None,
     )
     return mesh_roles.evaluate(roles, report)
 
@@ -85,14 +86,15 @@ def _failures(result):
     return {field: check.failures for field, check in result.checks.items()}
 
 
-def test_plan_targets_every_matching_group_and_each_mesh_maps_and_uvs():
-    weights, textures, uvs = mesh_roles.plan(ROLES, SCENE)
+def test_plan_targets_every_matching_group_and_each_mesh_maps_uvs_and_modifiers():
+    weights, textures, uvs, modifiers = mesh_roles.plan(ROLES, SCENE)
     assert weights == [
         *(WeightTarget(name, name, 1.0) for name in WHEEL_NAMES),
         WeightTarget("body", "body", 1.0),
     ]
     assert textures == [TextureTarget(name, ["albedo", "orm"]) for name in WHEEL_NAMES]
-    assert uvs == [UvTarget(name) for name in WHEEL_NAMES]
+    assert uvs == [MeshTarget(name) for name in WHEEL_NAMES]
+    assert modifiers == [MeshTarget(name) for name in [*WHEEL_NAMES, "body"]]
 
 
 def test_plan_dedupes_targets_shared_by_two_roles():
@@ -102,19 +104,22 @@ def test_plan_dedupes_targets_shared_by_two_roles():
         weight=1.0,
         texture_maps=["normal", "albedo"],
     )
-    weights, textures, uvs = mesh_roles.plan({"wheels": WHEELS, "hubs": hubs}, SCENE)
+    plan = mesh_roles.plan({"wheels": WHEELS, "hubs": hubs}, SCENE)
+    weights, textures, uvs, modifiers = plan
     front_left = "wheel_hub.front.L"
     assert weights.count(WeightTarget(front_left, front_left, 1.0)) == 1
     assert textures[0] == TextureTarget(front_left, ["albedo", "orm", "normal"])
-    assert uvs.count(UvTarget(front_left)) == 1
+    assert uvs.count(MeshTarget(front_left)) == 1
+    assert modifiers.count(MeshTarget(front_left)) == 1
 
 
-def test_plan_skips_roles_with_nothing_to_fetch():
+def test_plan_fetches_only_modifiers_for_roles_without_weights_or_maps():
     roles = {
         "unweighted": replace(WHEELS, weight=None, texture_maps=None),
         "no_regex": replace(WHEELS, mesh_regex=None),
     }
-    assert mesh_roles.plan(roles, SCENE) == ([], [], [])
+    modifiers = [MeshTarget(name) for name in WHEEL_NAMES]
+    assert mesh_roles.plan(roles, SCENE) == ([], [], [], modifiers)
 
 
 def test_a_matching_scene_passes_every_set_field():

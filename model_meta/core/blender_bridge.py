@@ -9,6 +9,7 @@ HOST = "127.0.0.1"
 PORT = 7417
 PROTOCOL = 1
 UVS_VERSION = (0, 2, 0)
+MODIFIERS_VERSION = (0, 4, 0)
 
 
 class BridgeError(Exception):
@@ -50,7 +51,7 @@ class TextureTarget:
 
 
 @dataclass(frozen=True)
-class UvTarget:
+class MeshTarget:
     mesh: str
 
 
@@ -85,19 +86,35 @@ class MeshUvs:
 
 
 @dataclass(frozen=True)
+class MeshModifiers:
+    """Blender modifier types in stack order. With `error` set (`"no mesh"`), it's empty."""
+
+    mesh: str
+    modifiers: list[str]
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class MeshReport:
-    """`weights`, `textures` and `uvs` answer the plan's targets, in order. `uvs` is
-    `None` when the add-on predates `UVS_VERSION`."""
+    """`weights`, `textures`, `uvs` and `modifiers` answer the plan's targets, in order.
+    `uvs` / `modifiers` are `None` when the add-on predates `UVS_VERSION` /
+    `MODIFIERS_VERSION`."""
 
     meshes: list[SceneMesh]
     weights: list[MeshWeight]
     textures: list[MeshTextures]
     uvs: list[MeshUvs] | None
+    modifiers: list[MeshModifiers] | None
 
 
 MeshPlan = Callable[
     [list[SceneMesh]],
-    tuple[Sequence[WeightTarget], Sequence[TextureTarget], Sequence[UvTarget]],
+    tuple[
+        Sequence[WeightTarget],
+        Sequence[TextureTarget],
+        Sequence[MeshTarget],
+        Sequence[MeshTarget],
+    ],
 ]
 
 
@@ -153,11 +170,11 @@ async def subscribe_meshes(
     """Yields the open file, then a `MeshReport` after each save/load; a new `OpenFile` whenever
     another file opens.
 
-    `plan(meshes)` picks the weight, texture and UV targets to fetch. Raises like
-    `subscribe_armatures`.
+    `plan(meshes)` picks the weight, texture, UV and modifier targets to fetch. Raises
+    like `subscribe_armatures`.
     """
     async with _subscription("subscribe_meshes", port, timeout) as bridge:
-        uvs = False
+        version = None
         latest = None
         fetch = None
         while True:
@@ -167,19 +184,19 @@ async def subscribe_meshes(
             elif message is _Status.BUSY:
                 continue
             elif isinstance(message, _Version):
-                uvs = _at_least(message.version, UVS_VERSION)
+                version = message.version
             elif isinstance(message, _Revision):
                 latest = message.revision
                 # One request at a time: an in-flight one is restarted when its reply lands.
                 if fetch is None:
-                    fetch = _Fetch(latest, plan, uvs)
+                    fetch = _Fetch(latest, plan, version)
                     await bridge.send(fetch.request())
             elif fetch is None or not (
                 message is _Status.STALE or isinstance(message, _Page)
             ):
                 raise _unexpected()
             elif fetch.revision != latest:
-                fetch = _Fetch(latest, plan, uvs)
+                fetch = _Fetch(latest, plan, version)
                 await bridge.send(fetch.request())
             elif message is _Status.STALE:
                 # The new revision hasn't arrived yet; it starts the next fetch.
@@ -196,16 +213,23 @@ _PAGED = {
     "get_mesh_weights": "mesh_weights",
     "get_mesh_textures": "mesh_textures",
     "get_mesh_uvs": "mesh_uvs",
+    "get_mesh_modifiers": "mesh_modifiers",
 }
+
+# The add-on version that added each request; an older one leaves its list `None`.
+_ADDED = {"get_mesh_uvs": UVS_VERSION, "get_mesh_modifiers": MODIFIERS_VERSION}
 
 
 class _Fetch:
-    """One revision's pages: the meshes, then the planned weights, textures and UVs."""
+    """One revision's pages: the meshes, then the planned weights, textures, UVs and
+    modifiers."""
 
-    def __init__(self, revision: int, plan: MeshPlan, uvs: bool) -> None:
+    def __init__(self, revision: int, plan: MeshPlan, version: str | None) -> None:
         self.revision = revision
         self._plan = plan
-        self._uvs = uvs
+        self._unsupported = {
+            kind for kind, added in _ADDED.items() if not _at_least(version, added)
+        }
         self._queue: list[tuple[str, dict]] = [("get_meshes", {})]
         self._cursor = 0
         self._items: dict[str, list] = {key: [] for key in _PAGED.values()}
@@ -231,15 +255,16 @@ class _Fetch:
         self._queue.pop(0)
         self._cursor = 0
         if kind == "get_meshes":
-            weights, textures, uvs = self._plan(self._items["meshes"])
+            weights, textures, uvs, modifiers = self._plan(self._items["meshes"])
             self._queue += [
                 (request_type, {"meshes": [asdict(target) for target in targets]})
                 for request_type, targets in (
                     ("get_mesh_weights", weights),
                     ("get_mesh_textures", textures),
-                    ("get_mesh_uvs", uvs if self._uvs else []),
+                    ("get_mesh_uvs", uvs),
+                    ("get_mesh_modifiers", modifiers),
                 )
-                if targets
+                if targets and request_type not in self._unsupported
             ]
         if self._queue:
             return None
@@ -247,8 +272,12 @@ class _Fetch:
             self._items["meshes"],
             self._items["mesh_weights"],
             self._items["mesh_textures"],
-            self._items["mesh_uvs"] if self._uvs else None,
+            self._optional("get_mesh_uvs"),
+            self._optional("get_mesh_modifiers"),
         )
+
+    def _optional(self, kind: str) -> list | None:
+        return None if kind in self._unsupported else self._items[_PAGED[kind]]
 
 
 @asynccontextmanager
@@ -411,11 +440,21 @@ def _mesh_uvs(item: dict) -> MeshUvs | None:
     return MeshUvs(mesh, default) if isinstance(default, bool) else None
 
 
+def _mesh_modifiers(item: dict) -> MeshModifiers | None:
+    mesh, modifiers, error = item.get("mesh"), item.get("modifiers"), item.get("error")
+    if not isinstance(mesh, str):
+        return None
+    if "error" in item:
+        return MeshModifiers(mesh, [], error) if isinstance(error, str) else None
+    return MeshModifiers(mesh, modifiers) if _is_str_list(modifiers) else None
+
+
 _ITEMS = {
     "meshes": _scene_mesh,
     "mesh_weights": _mesh_weight,
     "mesh_textures": _mesh_textures,
     "mesh_uvs": _mesh_uvs,
+    "mesh_modifiers": _mesh_modifiers,
 }
 
 

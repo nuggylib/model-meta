@@ -6,12 +6,12 @@ from dataclasses import asdict, dataclass
 
 from model_meta.core.blender_bridge import (
     MeshReport,
+    MeshTarget,
     MeshTextures,
     MeshUvs,
     MeshWeight,
     SceneMesh,
     TextureTarget,
-    UvTarget,
     WeightTarget,
 )
 from model_meta.core.results import FieldCheck, MeshRoleResult
@@ -25,28 +25,35 @@ Failures = list[dict[str, object]]
 
 def plan(
     roles: Mapping[str, MeshRole], meshes: Sequence[SceneMesh]
-) -> tuple[list[WeightTarget], list[TextureTarget], list[UvTarget]]:
-    """The bridge targets `evaluate` needs: deduped, and one texture and UV target per
-    mesh."""
+) -> tuple[list[WeightTarget], list[TextureTarget], list[MeshTarget], list[MeshTarget]]:
+    """The bridge targets `evaluate` needs: deduped, one texture and UV target per
+    textured mesh, and one modifier target per matched mesh."""
     weights: dict[WeightTarget, None] = {}
     maps: dict[str, dict[str, None]] = {}
+    matched_names: dict[str, None] = {}
     for role in roles.values():
         matched, _ = _matched(role, meshes)
         for mesh in matched:
+            matched_names[mesh.name] = None
             if role.weight is not None and role.vtx_grp is not None:
                 for group in _groups(role.vtx_grp, mesh):
                     weights[WeightTarget(mesh.name, group, role.weight)] = None
             for name in role.texture_maps or []:
                 maps.setdefault(mesh.name, {})[name] = None
     textures = [TextureTarget(mesh, list(names)) for mesh, names in maps.items()]
-    return list(weights), textures, [UvTarget(mesh) for mesh in maps]
+    return (
+        list(weights),
+        textures,
+        [MeshTarget(mesh) for mesh in maps],
+        [MeshTarget(mesh) for mesh in matched_names],
+    )
 
 
 def evaluate(
     roles: Mapping[str, MeshRole], report: MeshReport
 ) -> dict[str, MeshRoleResult]:
     """Pass a `report` fetched with `plan(roles, ...)`, so its items line up."""
-    weight_targets, texture_targets, uv_targets = plan(roles, report.meshes)
+    weight_targets, texture_targets, uv_targets, _ = plan(roles, report.meshes)
     scene = _Scene(
         dict(zip(weight_targets, report.weights, strict=True)),
         {
