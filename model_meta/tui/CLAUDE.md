@@ -11,11 +11,14 @@ The Textual UI layer: everything the user sees and interacts with.
   issues" block; `FieldSummary`, the per-root-field box on the spec detail
   screen; `FieldList`, the selectable read-only field on the armature,
   mesh-roles, mesh-role and modifiers forms).
-- `status.py` — check status from a results file's JSON: the icons (`PENDING`,
-  `REFRESHING`, `PASS`, `FAIL`, `icon(status)`), `is_check` (a
-  `{passed, failures}` object), `status_of(value)` (a bool, a check's
-  `passed`, a container's most severe, else `None`), `most_severe` and
-  `lookup(data, path)` (the value at a key path, `None` when missing). Shared
+- `status.py` — check status from a results file's JSON. A `Status` is `True`
+  (pass), `WARNING`, `False` (fail) or `None` (pending). The icons are
+  `PENDING`, `REFRESHING`, `PASS`, `WARN` (⚠️, written as escapes) and `FAIL`,
+  via `icon(status)`. `is_check` matches a `{passed, failures}` object with an
+  optional `warning`. `status_of(value)` returns a bool, a check's `passed`
+  (`WARNING` for a failing `warning` check), a container's most severe, else
+  `None`. `most_severe` ranks fail, then warning, then pending, then pass.
+  `lookup(data, path)` is the value at a key path, `None` when missing. Shared
   by the model dashboard and the check detail screen.
 - `bindings.py` — `MOVE`, the `↑↓` / `j` / `k` focus bindings every screen
   with a list of focus stops spreads into its `BINDINGS`.

@@ -32,11 +32,17 @@ from model_meta.core.results import Results
 from model_meta.core.spec import MeshRole, Modifiers, Spec
 from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.check_detail import CheckDetailScreen
-from model_meta.tui.status import REFRESHING, icon, lookup, most_severe, status_of
+from model_meta.tui.status import (
+    REFRESHING,
+    Status,
+    icon,
+    lookup,
+    most_severe,
+    status_of,
+)
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _NOT_FOUND = "not found"
-_NONE = "None"
 _LIVE_MODE = "Live Mode"
 _MANUAL_MODE = "Manual Mode"
 _INACTIVE = "Inactive"
@@ -268,7 +274,7 @@ class ModelDashboardScreen(Screen):
         data = None if self.results is None else self.results.to_dict()
         return f"{icon(self._status(index, data))} {text}"
 
-    def _status(self, index: int, data: dict | None) -> bool | None:
+    def _status(self, index: int, data: dict | None) -> Status:
         """A row with rows beneath it shows the most severe of theirs."""
         path = self._rows[index][2]
         if data is None or path is None or (value := lookup(data, path)) is None:
@@ -292,10 +298,10 @@ class ModelDashboardScreen(Screen):
             (0, f"{_ROOTS['mesh_roles']}:", ("mesh_roles",)),
             *((1, name, ("mesh_roles", name)) for name in self._roles),
             (0, _ROOTS["modifiers"], ("modifiers",)),
-            (1, "Required:", None),
-            (2, "Skinned Meshes", None),
-            (1, f"Warnings: {_NONE}", None),
-            (1, f"Blocked: {_NONE}", None),
+            (1, "Required:", ("modifiers", "required")),
+            (2, "Skinned Meshes", ("modifiers", "required", "skinned_meshes")),
+            (1, "Warnings", ("modifiers", "warn")),
+            (1, "Blocked", ("modifiers", "fail")),
         ]
 
 

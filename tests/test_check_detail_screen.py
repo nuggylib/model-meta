@@ -4,7 +4,12 @@ from textual.app import App
 from textual.signal import Signal
 from textual.widgets import Static
 
-from model_meta.core.results import FieldCheck, MeshRoleResult, Results
+from model_meta.core.results import (
+    FieldCheck,
+    MeshRoleResult,
+    ModifiersResult,
+    Results,
+)
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
@@ -206,6 +211,64 @@ async def test_published_results_relabel_the_role_rows_in_place():
                 break
         assert str(app.screen.query(SelectableRow).first().render()) == "▸ 🟡 wheels"
         assert app.screen.query(SelectableRow).last() is body
+
+
+_MODIFIERS = ModifiersResult(
+    {"skinned_meshes": FieldCheck([{"mesh": "body", "missing": ["ARMATURE"]}])},
+    FieldCheck([{"mesh": "body", "modifiers": ["MIRROR", "SUBSURF"]}], warning=True),
+    FieldCheck([]),
+)
+_MODIFIER_SECTIONS = {
+    "required > skinned_meshes": [
+        "❌ failing",
+        "- mesh: body",
+        "  missing: ARMATURE",
+        "How to fix: Add each missing modifier to the listed mesh in its Modifier "
+        "Properties.",
+    ],
+    "warn": [
+        "⚠️ warning",
+        "- mesh: body",
+        "  modifiers: MIRROR, SUBSURF",
+        "How to fix: Confirm each listed modifier belongs on the mesh, or apply or "
+        "remove it before export.",
+    ],
+    "fail": ["✅ passing"],
+}
+
+
+async def test_modifiers_show_a_section_per_list_titled_by_its_path():
+    app = _Host(("modifiers",), _results(modifiers=_MODIFIERS))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app) == _MODIFIER_SECTIONS
+
+
+async def test_a_role_shows_its_own_modifier_sections():
+    roles = {"body": MeshRoleResult(["body"], {}, _MODIFIERS)}
+    app = _Host(("mesh_roles", "body"), _results(mesh_roles=roles))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app) == {
+            "meshes": ["body"],
+            **{
+                f"modifiers > {key}": lines for key, lines in _MODIFIER_SECTIONS.items()
+            },
+        }
+
+
+async def test_a_role_with_only_a_warning_has_a_warning_row():
+    warned = ModifiersResult(
+        {"skinned_meshes": FieldCheck([])},
+        FieldCheck([{"mesh": "body", "modifiers": ["MIRROR"]}], warning=True),
+        FieldCheck([]),
+    )
+    roles = {**_ROLES, "body": MeshRoleResult(["body"], {}, warned)}
+    app = _Host(("mesh_roles",), _results(mesh_roles=roles))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        rows = [str(row.render()) for row in app.screen.query(SelectableRow)]
+        assert rows == ["▸ ❌ wheels", "▸ ⚠️ body"]
 
 
 async def test_published_results_replace_the_page():
