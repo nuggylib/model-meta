@@ -35,6 +35,13 @@ _FIX_STEPS = {
     "material_slots": "Add a material slot for each missing name to the listed mesh.",
 }
 
+# Keyed by a failure's fact; shown once when any failure has it set to `True`.
+_WARNINGS = {
+    "has_default_uv_map": "A mesh with `has_default_uv_map: True` may not be "
+    "unwrapped yet: its UVs match a primitive's default layout. Check them before "
+    "baking.",
+}
+
 
 class CheckDetailScreen(Screen):
     """Pushed as an instance, per model and key path. `headings` title each key in
@@ -137,9 +144,18 @@ def _section(key: str, value: object) -> Vertical:
     if isinstance(value, bool) or is_check(value):
         passed = status_of(value)
         lines = [f"{icon(passed)} {_PASSING if passed else _FAILING}"]
-        if is_check(value):
-            lines += _failure_lines(value["failures"])
+        failures = value["failures"] if is_check(value) else []
+        lines += _failure_lines(failures)
         children: list[Widget] = _statics(lines)
+        children += [
+            Static(
+                f"Warning: {text}",
+                classes="config-detail check-warning",
+                markup=False,
+            )
+            for fact, text in _WARNINGS.items()
+            if any(failure.get(fact) is True for failure in failures)
+        ]
         if not passed and key in _FIX_STEPS:
             children.append(
                 Static(

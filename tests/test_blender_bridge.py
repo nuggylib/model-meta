@@ -9,10 +9,12 @@ from model_meta.core.blender_bridge import (
     BridgeError,
     MeshReport,
     MeshTextures,
+    MeshUvs,
     MeshWeight,
     OpenFile,
     SceneMesh,
     TextureTarget,
+    UvTarget,
     WeightTarget,
     subscribe_armatures,
     subscribe_meshes,
@@ -20,8 +22,10 @@ from model_meta.core.blender_bridge import (
 
 _PAIR = [
     {"protocol": 1, "type": "get_filepath"},
+    {"protocol": 1, "type": "get_version"},
     {"protocol": 1, "type": "subscribe_armatures"},
 ]
+_OLD_ADDON = 'unknown type: "get_version"'
 
 
 def _line(body):
@@ -67,20 +71,25 @@ async def _serve(respond):
     return server, server.sockets[0].getsockname()[1], requests
 
 
-def _subscriptions(*replies):
+def _subscriptions(*replies, version):
     """Answers each subscribe with the next reply, then closes after the last."""
     remaining = list(replies)
 
     def respond(request):
         if request["type"] == "get_filepath":
             return []
+        if request["type"] == "get_version":
+            return [version]
         return [*remaining.pop(0), *([] if remaining else [None])]
 
     return respond
 
 
-async def _collect(*replies):
-    server, port, requests = await _serve(_subscriptions(*replies))
+_VERSION = _result({"version": "0.3.0"})
+
+
+async def _collect(*replies, version=_VERSION):
+    server, port, requests = await _serve(_subscriptions(*replies, version=version))
     seen = []
     async with server:
         with pytest.raises(BridgeError) as info:
@@ -89,9 +98,16 @@ async def _collect(*replies):
     return seen, str(info.value), requests
 
 
-async def test_sends_filepath_then_subscribe_requests():
+async def test_sends_filepath_version_then_subscribe_requests():
     _, _, requests = await _collect([])
     assert requests == _PAIR
+
+
+async def test_an_addon_without_get_version_still_yields_armatures():
+    seen, _, _ = await _collect(
+        [_filepath(None), _success("Rig")], version=_error(_OLD_ADDON)
+    )
+    assert seen == [OpenFile(None), Armatures(["Rig"])]
 
 
 async def test_yields_the_open_file_then_each_armature_list():
@@ -168,6 +184,7 @@ async def test_unsupported_protocol_raises(version):
         {"status": "success", "result": {"armatures": [1]}},
         {"status": "success", "result": {"filepath": 1}},
         {"status": "success", "result": {"meshes_revision": 1}},
+        {"status": "success", "result": {"version": 1}},
         {"status": "error", "message": "stale"},
     ],
 )
@@ -201,16 +218,19 @@ _SCENE_BODY = SceneMesh("body", ["body"], ["paint", "glass"])
 class _FakeAddon:
     """Answers mesh requests one item per page, so every list takes several pages.
 
-    `saves` maps a request's index to `"before"` or `"after"`: a save/load bumps the
-    revision and pushes it before or after that request's answer. `answers` maps a
-    request type to `f(lines)`, which returns what to send in place of `lines`.
+    `reports` maps a targeted request type to each target's item fields, keyed by the
+    target's `(mesh,)` or `(mesh, vertex_group)`. `saves` maps a request's index to
+    `"before"` or `"after"`: a save/load bumps the revision and pushes it before or
+    after that request's answer. `answers` maps a request type to `f(lines)`, which
+    returns what to send in place of `lines`. A `None` `version` answers `get_version`
+    like an add-on that predates it.
     """
 
-    def __init__(self, meshes, weights=None, textures=None, saves=None, answers=None):
+    def __init__(self, meshes, reports=None, saves=None, answers=None, version="0.3.0"):
         self.revision = 1
         self.meshes = meshes
-        self.weights = weights or {}
-        self.textures = textures or {}
+        self.reports = reports or {}
+        self.version = version
         self.saves = saves or {}
         self.answers = answers or {}
         self._index = 0
@@ -232,16 +252,16 @@ class _FakeAddon:
         kind = request["type"]
         if kind == "get_filepath":
             return [_filepath("/models/sedan.blend")]
+        if kind == "get_version":
+            if self.version is None:
+                return [_error(_OLD_ADDON)]
+            return [_result({"version": self.version})]
         if kind == "subscribe_meshes":
             return [_result({"meshes_revision": self.revision})]
         if request["revision"] != self.revision:
             return [_error("stale")]
-        key, build = {
-            "get_meshes": ("meshes", lambda _request: self.meshes),
-            "get_mesh_weights": ("mesh_weights", self._weights),
-            "get_mesh_textures": ("mesh_textures", self._textures),
-        }[kind]
-        items = build(request)
+        key = kind.removeprefix("get_")
+        items = self.meshes if kind == "get_meshes" else self._items(request)
         cursor = request["cursor"]
         more = cursor + 1 < len(items)
         return [
@@ -255,25 +275,17 @@ class _FakeAddon:
             )
         ]
 
-    def _weights(self, request):
-        return [
-            {
-                "mesh": target["mesh"],
-                "vertex_group": target["vertex_group"],
-                **self.weights[target["mesh"], target["vertex_group"]],
-            }
-            for target in request["meshes"]
-        ]
-
-    def _textures(self, request):
-        return [
-            {"mesh": target["mesh"], **self.textures[target["mesh"]]}
-            for target in request["meshes"]
-        ]
+    def _items(self, request):
+        reports = self.reports[request["type"]]
+        items = []
+        for target in request["meshes"]:
+            named = {k: target[k] for k in ("mesh", "vertex_group") if k in target}
+            items.append({**named, **reports[tuple(named.values())]})
+        return items
 
 
 def _no_targets(_meshes):
-    return [], []
+    return [], [], []
 
 
 async def _collect_meshes(addon, plan=_no_targets, count=2):
@@ -298,8 +310,9 @@ def _paged(requests):
 
 async def test_meshes_subscribes_then_follows_every_page():
     seen, requests = await _collect_meshes(_FakeAddon([_BODY, _WHEEL]))
-    assert requests[:2] == [
+    assert requests[:3] == [
         {"protocol": 1, "type": "get_filepath"},
+        {"protocol": 1, "type": "get_version"},
         {"protocol": 1, "type": "subscribe_meshes"},
     ]
     assert _paged(requests) == [("get_meshes", 1, 0), ("get_meshes", 1, 1)]
@@ -314,13 +327,14 @@ async def test_meshes_subscribes_then_follows_every_page():
             ],
             [],
             [],
+            [],
         ),
     ]
 
 
 async def test_no_meshes_is_a_report():
     seen, _ = await _collect_meshes(_FakeAddon([]))
-    assert seen[1] == MeshReport([], [], [])
+    assert seen[1] == MeshReport([], [], [], [])
 
 
 async def test_plan_targets_are_fetched_in_order():
@@ -334,19 +348,31 @@ async def test_plan_targets_are_fetched_in_order():
                 WeightTarget("body", "body", 0.5),
             ],
             [TextureTarget("wheel_hub.front.L", ["albedo", "orm"])],
+            [UvTarget("wheel_hub.front.L")],
         )
 
     addon = _FakeAddon(
         [_BODY, _WHEEL],
-        weights={
-            ("wheel_hub.front.L", "wheel_hub.front.L"): {
-                "vertices": 340,
-                "assigned": 328,
-                "at_weight": 300,
+        reports={
+            "get_mesh_weights": {
+                ("wheel_hub.front.L", "wheel_hub.front.L"): {
+                    "vertices": 340,
+                    "assigned": 328,
+                    "at_weight": 300,
+                },
+                ("body", "body"): {"error": "no vertex group"},
             },
-            ("body", "body"): {"error": "no vertex group"},
+            "get_mesh_textures": {
+                ("wheel_hub.front.L",): {"maps": {"albedo": True, "orm": False}}
+            },
+            "get_mesh_uvs": {
+                ("wheel_hub.front.L",): {
+                    "faces": 6,
+                    "has_default_uv_map": True,
+                    "uv_maps": [{"name": "UVMap", "zero_area": 0}],
+                }
+            },
         },
-        textures={"wheel_hub.front.L": {"maps": {"albedo": True, "orm": False}}},
     )
     seen, requests = await _collect_meshes(addon, plan)
     assert [mesh.name for mesh in planned[0]] == ["body", "wheel_hub.front.L"]
@@ -363,6 +389,7 @@ async def test_plan_targets_are_fetched_in_order():
         ("get_mesh_weights", 1, 0),
         ("get_mesh_weights", 1, 1),
         ("get_mesh_textures", 1, 0),
+        ("get_mesh_uvs", 1, 0),
     ]
     assert seen[1].weights == [
         MeshWeight("wheel_hub.front.L", "wheel_hub.front.L", 340, 328, 300),
@@ -371,29 +398,53 @@ async def test_plan_targets_are_fetched_in_order():
     assert seen[1].textures == [
         MeshTextures("wheel_hub.front.L", {"albedo": True, "orm": False})
     ]
+    assert seen[1].uvs == [MeshUvs("wheel_hub.front.L", True)]
 
 
 async def test_a_mesh_gone_from_the_textures_is_an_error():
     def plan(_meshes):
-        return [], [TextureTarget("body", ["albedo"])]
+        return [], [TextureTarget("body", ["albedo"])], []
 
-    addon = _FakeAddon([_BODY], textures={"body": {"error": "no mesh"}})
+    addon = _FakeAddon(
+        [_BODY], reports={"get_mesh_textures": {("body",): {"error": "no mesh"}}}
+    )
     seen, _ = await _collect_meshes(addon, plan)
     assert seen[1].textures == [MeshTextures("body", {}, "no mesh")]
 
 
+async def test_a_mesh_in_edit_mode_is_a_uv_error():
+    def plan(_meshes):
+        return [], [], [UvTarget("body")]
+
+    addon = _FakeAddon(
+        [_BODY], reports={"get_mesh_uvs": {("body",): {"error": "in edit mode"}}}
+    )
+    seen, _ = await _collect_meshes(addon, plan)
+    assert seen[1].uvs == [MeshUvs("body", False, "in edit mode")]
+
+
+@pytest.mark.parametrize("version", [None, "0.1.0", "dev"])
+async def test_an_addon_before_uvs_skips_them(version):
+    def plan(_meshes):
+        return [], [], [UvTarget("body")]
+
+    seen, requests = await _collect_meshes(_FakeAddon([_BODY], version=version), plan)
+    assert _paged(requests) == [("get_meshes", 1, 0)]
+    assert seen[1] == MeshReport([_SCENE_BODY], [], [], None)
+
+
 async def test_each_save_sends_a_new_report():
-    # Request 2 is the only page; the save lands after it is answered.
-    addon = _FakeAddon([_BODY], saves={2: "after"})
+    # Request 3 is the only page; the save lands after it is answered.
+    addon = _FakeAddon([_BODY], saves={3: "after"})
     seen, requests = await _collect_meshes(addon, count=3)
     assert _paged(requests) == [("get_meshes", 1, 0), ("get_meshes", 2, 0)]
-    assert seen[1:] == [MeshReport([_SCENE_BODY], [], [])] * 2
+    assert seen[1:] == [MeshReport([_SCENE_BODY], [], [], [])] * 2
 
 
 @pytest.mark.parametrize("when", ["before", "after"])
 async def test_a_save_mid_fetch_starts_again_at_the_new_revision(when):
-    # Request 2 is the first of two pages.
-    addon = _FakeAddon([_BODY, _WHEEL], saves={2: when})
+    # Request 3 is the first of two pages.
+    addon = _FakeAddon([_BODY, _WHEEL], saves={3: when})
     seen, requests = await _collect_meshes(addon)
     # Saved after: page 1 was answered, so page 2 is asked for and comes back stale.
     first = [("get_meshes", 1, 0), *([("get_meshes", 1, 1)] if when == "after" else [])]
@@ -429,6 +480,7 @@ async def _meshes_error(meshes_answer):
         {"revision": 1, "meshes": [], "has_more": True, "next_cursor": None},
         {"revision": 1, "meshes": "body", **_LAST},
         {"revision": 1, "mesh_weights": [], **_LAST},
+        {"revision": 1, "mesh_uvs": [], **_LAST},
     ],
 )
 async def test_an_unexpected_page_raises(result):
