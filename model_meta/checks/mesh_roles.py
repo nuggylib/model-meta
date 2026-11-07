@@ -18,7 +18,7 @@ from model_meta.core.results import FieldCheck, MeshRoleResult
 from model_meta.core.spec import MeshRole
 from model_meta.specs import parenting
 
-_NO_MESHES = "no meshes matched"
+NO_MESHES = "no meshes matched"
 
 Failures = list[dict[str, object]]
 
@@ -92,7 +92,7 @@ def _role_result(
         if problem is not None:
             failures = [{"error": problem}]
         elif not matched and field != "count":
-            failures = [{"error": _NO_MESHES}]
+            failures = [{"error": NO_MESHES}]
         else:
             failures = check(role, matched, scene)
         checks[field] = FieldCheck(failures)

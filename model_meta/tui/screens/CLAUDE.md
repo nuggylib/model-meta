@@ -154,7 +154,10 @@ in the app (analogous to a route in a web app).
   wrong). A connection's results are checked only once that connection's
   own `OpenFile` has confirmed the model is open. The armature check passes
   when the spec's `object_name` is in the list (a blank `object_name` fails).
-  The mesh check stores `checks.mesh_roles.evaluate(roles, report)`. Both go
+  The mesh check stores `checks.mesh_roles.evaluate(roles, report)`, then
+  `checks.modifiers.evaluate` over those roles: the root `modifiers` and each
+  role's. A report with no `modifiers` (an add-on before 0.4.0) saves the
+  roles alone and keeps the stored modifier results. Both go
   through `_save(**checks)`: load right before, `replace` those fields, save
   only when something changed (other keys kept), then set `results`. A failed
   load or save is an error notice, and the icons keep the stored results. A

@@ -37,8 +37,22 @@ Textual, no UI.
       forgotten unwrap. Neither key is added when the report's `uvs` is
       `None` (an add-on before 0.2.0).
   - When nothing matched, every field but `count` fails with
-    `"no meshes matched"`. A missing or non-compiling `mesh_regex` fails every
-    set field with that reason.
+    `"no meshes matched"` (`NO_MESHES`). A missing or non-compiling
+    `mesh_regex` fails every set field with that reason.
+- `modifiers.py` — the `modifiers` check, over the meshes the roles matched
+  (a mesh no role matches is scenery, lighting or effects, and isn't checked).
+  - `evaluate(mods, roles, report)` takes the spec's `Modifiers`, the
+    `mesh_roles.evaluate` results (for each role's `meshes`) and the report's
+    `MeshModifiers`. It returns the root `ModifiersResult` over every role's
+    meshes, each listed once, and the roles with their own meshes'
+    `ModifiersResult` set.
+  - `required.skinned_meshes`: `{"mesh", "missing"}` for a mesh lacking any.
+  - `warn` / `fail`: `{"mesh", "modifiers"}`, the listed types on the mesh,
+    deduped in stack order. `warn` is a `warning` check.
+  - `allowed` and unlisted modifiers check nothing.
+  - A mesh the bridge reports an `error` for is `{"mesh", "error"}` in every
+    check. A role with no meshes fails every check with `NO_MESHES`; the root
+    with no meshes passes.
 
 ## Conventions
 - A new field's check is one `_CHECKS` entry. A new root field's check is a

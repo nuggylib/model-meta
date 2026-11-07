@@ -9,6 +9,7 @@ from textual.widgets import Static
 from model_meta.core.blender_bridge import (
     Armatures,
     BridgeError,
+    MeshModifiers,
     MeshReport,
     MeshTextures,
     MeshUvs,
@@ -81,14 +82,15 @@ def _fake_subscription(monkeypatch, name, wrap, *, reachable=True):
 
 
 def _passing_report(meshes, plan):
-    """Every planned weight and texture passes, so only the scene meshes decide."""
-    weights, textures, uvs, _ = plan(meshes)
+    """Every planned weight, texture and modifier passes, so only the scene meshes
+    decide."""
+    weights, textures, uvs, modifiers = plan(meshes)
     return MeshReport(
         meshes,
         [MeshWeight(t.mesh, t.vertex_group, 10, 10, 10) for t in weights],
         [MeshTextures(t.mesh, dict.fromkeys(t.maps, True)) for t in textures],
         [MeshUvs(t.mesh, False) for t in uvs],
-        None,
+        [MeshModifiers(t.mesh, ["ARMATURE"]) for t in modifiers],
     )
 
 
@@ -503,6 +505,18 @@ async def test_failing_role_fails_its_row_and_the_heading(tmp_path, monkeypatch)
     assert saved["wheels"].checks["material_slots"] == FieldCheck(
         [{"mesh": "wheel_hub.rear.R", "missing": ["rubber"]}]
     )
+
+
+async def test_modifier_results_are_saved_at_the_root_and_per_role(
+    tmp_path, monkeypatch
+):
+    saved = await _push_scene(
+        tmp_path, monkeypatch, _SCENE, ["✅ Mesh Roles:", "✅ wheels", "✅ body"]
+    )
+    results = Results.load(tmp_path / "sedan-results.json")
+    assert results.modifiers.required["skinned_meshes"] == FieldCheck([])
+    assert results.modifiers.warn == FieldCheck([], warning=True)
+    assert saved["body"].modifiers == results.modifiers
 
 
 async def test_mesh_report_on_the_wrong_file_is_not_saved(tmp_path, monkeypatch):
