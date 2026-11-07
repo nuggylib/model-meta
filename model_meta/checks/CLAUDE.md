@@ -29,8 +29,9 @@ Textual, no UI.
       with `"vtx_grp not set"`.
     - `texture_maps` / `material_slots`: `{"mesh", "missing"}`, or the
       bridge's `error` for textures. Extra slots and their order don't matter.
-    - A `texture_maps` failure with `missing` also gets the bridge's
-      `has_default_uv_map` for that mesh, or its `uv_error`. It is a hint,
+    - A `texture_maps` failure with `missing` also gets
+      `"has_default_uv_map": True` when the bridge reports one for that mesh
+      (a `False` is left out as noise), or its `uv_error`. It is a hint,
       not a check: the add-on's match can't tell a deliberate layout from a
       forgotten unwrap. Neither key is added when the report's `uvs` is
       `None` (an add-on before 0.2.0).

@@ -204,7 +204,7 @@ def test_missing_texture_maps_are_named_per_mesh():
 
     failures = _failures(_evaluate(textures=textures)["wheels"])
     assert failures["texture_maps"] == [
-        {"mesh": "wheel_hub.rear.L", "missing": ["orm"], "has_default_uv_map": False},
+        {"mesh": "wheel_hub.rear.L", "missing": ["orm"]},
         {"mesh": "wheel_hub.rear.R", "error": "no mesh"},
     ]
 
@@ -225,9 +225,9 @@ def test_a_missing_map_carries_the_meshes_uv_report():
     missing = {"missing": ["albedo"]}
     assert failures["texture_maps"] == [
         {"mesh": "wheel_hub.front.L", **missing, "has_default_uv_map": True},
-        {"mesh": "wheel_hub.front.R", **missing, "has_default_uv_map": False},
+        {"mesh": "wheel_hub.front.R", **missing},
         {"mesh": "wheel_hub.rear.L", **missing, "uv_error": "in edit mode"},
-        {"mesh": "wheel_hub.rear.R", **missing, "has_default_uv_map": False},
+        {"mesh": "wheel_hub.rear.R", **missing},
     ]
 
 

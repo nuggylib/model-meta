@@ -144,7 +144,7 @@ def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
     result = scene.uvs[mesh]
     if result.error is not None:
         return {"uv_error": result.error}
-    return {"has_default_uv_map": result.has_default_uv_map}
+    return {"has_default_uv_map": True} if result.has_default_uv_map else {}
 
 
 def _material_slots(

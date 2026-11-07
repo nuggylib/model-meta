@@ -167,7 +167,7 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
 
 
 async def test_no_default_uv_map_shows_no_warning():
-    failure = {"mesh": "body", "missing": ["orm"], "has_default_uv_map": False}
+    failure = {"mesh": "body", "missing": ["orm"]}
     roles = {"body": MeshRoleResult(["body"], {"texture_maps": FieldCheck([failure])})}
     app = _Host(("mesh_roles", "body"), _results(mesh_roles=roles))
     async with app.run_test() as pilot:
