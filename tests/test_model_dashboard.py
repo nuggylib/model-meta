@@ -11,6 +11,7 @@ from model_meta.core.blender_bridge import (
     BridgeError,
     MeshReport,
     MeshTextures,
+    MeshUvs,
     MeshWeight,
     OpenFile,
     SceneMesh,
@@ -81,11 +82,12 @@ def _fake_subscription(monkeypatch, name, wrap, *, reachable=True):
 
 def _passing_report(meshes, plan):
     """Every planned weight and texture passes, so only the scene meshes decide."""
-    weights, textures = plan(meshes)
+    weights, textures, uvs = plan(meshes)
     return MeshReport(
         meshes,
         [MeshWeight(t.mesh, t.vertex_group, 10, 10, 10) for t in weights],
         [MeshTextures(t.mesh, dict.fromkeys(t.maps, True)) for t in textures],
+        [MeshUvs(t.mesh, False, ["UVMap"]) for t in uvs],
     )
 
 

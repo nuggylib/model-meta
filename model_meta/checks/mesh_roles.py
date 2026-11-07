@@ -7,9 +7,11 @@ from dataclasses import asdict, dataclass
 from model_meta.core.blender_bridge import (
     MeshReport,
     MeshTextures,
+    MeshUvs,
     MeshWeight,
     SceneMesh,
     TextureTarget,
+    UvTarget,
     WeightTarget,
 )
 from model_meta.core.results import FieldCheck, MeshRoleResult
@@ -23,8 +25,9 @@ Failures = list[dict[str, object]]
 
 def plan(
     roles: Mapping[str, MeshRole], meshes: Sequence[SceneMesh]
-) -> tuple[list[WeightTarget], list[TextureTarget]]:
-    """The bridge targets `evaluate` needs: deduped, and one texture target per mesh."""
+) -> tuple[list[WeightTarget], list[TextureTarget], list[UvTarget]]:
+    """The bridge targets `evaluate` needs: deduped, and one texture and UV target per
+    mesh."""
     weights: dict[WeightTarget, None] = {}
     maps: dict[str, dict[str, None]] = {}
     for role in roles.values():
@@ -36,19 +39,25 @@ def plan(
             for name in role.texture_maps or []:
                 maps.setdefault(mesh.name, {})[name] = None
     textures = [TextureTarget(mesh, list(names)) for mesh, names in maps.items()]
-    return list(weights), textures
+    return list(weights), textures, [UvTarget(mesh) for mesh in maps]
 
 
 def evaluate(
     roles: Mapping[str, MeshRole], report: MeshReport
 ) -> dict[str, MeshRoleResult]:
     """Pass a `report` fetched with `plan(roles, ...)`, so its items line up."""
-    weight_targets, texture_targets = plan(roles, report.meshes)
+    weight_targets, texture_targets, uv_targets = plan(roles, report.meshes)
     scene = _Scene(
         dict(zip(weight_targets, report.weights, strict=True)),
         {
             target.mesh: result
             for target, result in zip(texture_targets, report.textures, strict=True)
+        },
+        None
+        if report.uvs is None
+        else {
+            target.mesh: result
+            for target, result in zip(uv_targets, report.uvs, strict=True)
         },
     )
     return {
@@ -58,8 +67,11 @@ def evaluate(
 
 @dataclass(frozen=True)
 class _Scene:
+    """`uvs` is `None` when the add-on predates `get_mesh_uvs`."""
+
     weights: dict[WeightTarget, MeshWeight]
     textures: dict[str, MeshTextures]
+    uvs: dict[str, MeshUvs] | None
 
 
 def _role_result(
@@ -120,8 +132,19 @@ def _texture_maps(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Fa
             continue
         missing = [name for name in role.texture_maps if not result.maps.get(name)]
         if missing:
-            failures.append({"mesh": mesh.name, "missing": missing})
+            failures.append(
+                {"mesh": mesh.name, "missing": missing, **_unwrap(mesh.name, scene)}
+            )
     return failures
+
+
+def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
+    if scene.uvs is None:
+        return {}
+    result = scene.uvs[mesh]
+    if result.error is not None:
+        return {"uv_error": result.error}
+    return {"may_need_unwrap": result.has_default_uv_map or not result.uv_maps}
 
 
 def _material_slots(

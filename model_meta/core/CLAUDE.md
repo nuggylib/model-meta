@@ -35,10 +35,13 @@ storage, and connections to the external apps Model Meta validates against.
   protocol (TCP `127.0.0.1:7417`, one JSON object per line, `"protocol": 1`).
   Each subscription is an async generator on its own connection, opened by
   `_subscription(kind)`, which yields a `_Bridge`. The `_Bridge` sends
-  `get_filepath` and the subscribe request in one write, so the add-on answers
-  both in the same tick and the path is the file the subscription is on. When
+  `get_filepath`, `get_version` and the subscribe request in one write, so the
+  add-on answers them in the same tick: the path is the file the subscription
+  is on, and the version arrives before any result. An add-on older than
+  `get_version` (pre-0.3.0) answers `unknown type: "get_version"`, read as
+  version `None`, not a raise. When
   a save/load leaves Blender on another file, the add-on pushes the new path
-  and ends the subscription; `_Bridge.receive` sends the pair again and returns
+  and ends the subscription; `_Bridge.receive` sends the three again and returns
   only the reply's `OpenFile`, so both generators stay subscribed across files.
   `_parse` reads every reply shape. Neither generator ends normally: an
   unreachable add-on, an error line other than `busy` / `stale`, a malformed
@@ -47,18 +50,24 @@ storage, and connections to the external apps Model Meta validates against.
   - `subscribe_armatures(port, timeout)` yields `OpenFile(path)` (`None` for a
     never-saved file), then each pushed `Armatures(names)` (pushed on subscribe
     and after a save/load that changes the list), with `names` `None` for
-    `busy`.
+    `busy`. It ignores the version.
   - `subscribe_meshes(plan, port, timeout)` yields `OpenFile`, then one
-    `MeshReport(meshes, weights, textures)` per pushed `meshes_revision` (on
+    `MeshReport(meshes, weights, textures, uvs)` per pushed `meshes_revision` (on
     subscribe and after every save/load). A `_Fetch` follows every page of
-    `get_meshes`, then calls `plan(meshes)` for the `WeightTarget`s and
-    `TextureTarget`s and pages through `get_mesh_weights` /
-    `get_mesh_textures` for them, in order (an empty list isn't requested).
+    `get_meshes`, then calls `plan(meshes)` for the `WeightTarget`s,
+    `TextureTarget`s and `UvTarget`s and pages through `get_mesh_weights` /
+    `get_mesh_textures` / `get_mesh_uvs` for them, in order (an empty list isn't
+    requested). UVs are fetched only when the add-on's version is at least
+    `UVS_VERSION` (0.2.0, which added `get_mesh_uvs`); otherwise `uvs` is
+    `None`. A missing or unparseable version counts as older. `MeshUvs` keeps
+    `has_default_uv_map` and the UV map names; the add-on's face and zero-area
+    counts are dropped.
     Only one request is in flight at a time. A newer revision restarts the
     fetch from cursor 0 once the in-flight reply lands, whether that reply is
     an old page or `stale`. `busy` yields nothing: queued requests are answered
-    when Blender unlocks. A `MeshWeight` / `MeshTextures` with `error` set
-    (`no mesh`, `no vertex group`) is an item, not a raise.
+    when Blender unlocks. A `MeshWeight` / `MeshTextures` / `MeshUvs` with
+    `error` set (`no mesh`, `no vertex group`, `in edit mode`) is an item, not
+    a raise.
 - `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the
   projects root, and `_accepts` takes a directory. `find_projects(max_depth=4)`
   returns the absolute, sorted directories under it holding a `project.godot`.

@@ -8,6 +8,7 @@ from enum import Enum
 HOST = "127.0.0.1"
 PORT = 7417
 PROTOCOL = 1
+UVS_VERSION = (0, 2, 0)
 
 
 class BridgeError(Exception):
@@ -49,6 +50,11 @@ class TextureTarget:
 
 
 @dataclass(frozen=True)
+class UvTarget:
+    mesh: str
+
+
+@dataclass(frozen=True)
 class MeshWeight:
     """With `error` set (`"no mesh"` / `"no vertex group"`), the counts are 0."""
 
@@ -70,22 +76,42 @@ class MeshTextures:
 
 
 @dataclass(frozen=True)
+class MeshUvs:
+    """With `error` set (`"no mesh"` / `"in edit mode"`), the rest is empty."""
+
+    mesh: str
+    has_default_uv_map: bool
+    uv_maps: list[str]
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class MeshReport:
-    """`weights` and `textures` answer the plan's targets, in order."""
+    """`weights`, `textures` and `uvs` answer the plan's targets, in order. `uvs` is
+    `None` when the add-on predates `UVS_VERSION`."""
 
     meshes: list[SceneMesh]
     weights: list[MeshWeight]
     textures: list[MeshTextures]
+    uvs: list[MeshUvs] | None
 
 
 MeshPlan = Callable[
-    [list[SceneMesh]], tuple[Sequence[WeightTarget], Sequence[TextureTarget]]
+    [list[SceneMesh]],
+    tuple[Sequence[WeightTarget], Sequence[TextureTarget], Sequence[UvTarget]],
 ]
 
 
 class _Status(Enum):
     BUSY = "busy"
     STALE = "stale"
+
+
+@dataclass(frozen=True)
+class _Version:
+    """`version` is `None` for an add-on older than `get_version`."""
+
+    version: str | None
 
 
 @dataclass(frozen=True)
@@ -116,6 +142,8 @@ async def subscribe_armatures(
                 yield Armatures(None)
             elif isinstance(message, OpenFile | Armatures):
                 yield message
+            elif isinstance(message, _Version):
+                continue
             else:
                 raise _unexpected()
 
@@ -126,10 +154,11 @@ async def subscribe_meshes(
     """Yields the open file, then a `MeshReport` after each save/load; a new `OpenFile` whenever
     another file opens.
 
-    `plan(meshes)` picks the weight and texture targets to fetch. Raises like
+    `plan(meshes)` picks the weight, texture and UV targets to fetch. Raises like
     `subscribe_armatures`.
     """
     async with _subscription("subscribe_meshes", port, timeout) as bridge:
+        uvs = False
         latest = None
         fetch = None
         while True:
@@ -138,18 +167,20 @@ async def subscribe_meshes(
                 yield message
             elif message is _Status.BUSY:
                 continue
+            elif isinstance(message, _Version):
+                uvs = _at_least(message.version, UVS_VERSION)
             elif isinstance(message, _Revision):
                 latest = message.revision
                 # One request at a time: an in-flight one is restarted when its reply lands.
                 if fetch is None:
-                    fetch = _Fetch(latest, plan)
+                    fetch = _Fetch(latest, plan, uvs)
                     await bridge.send(fetch.request())
             elif fetch is None or not (
                 message is _Status.STALE or isinstance(message, _Page)
             ):
                 raise _unexpected()
             elif fetch.revision != latest:
-                fetch = _Fetch(latest, plan)
+                fetch = _Fetch(latest, plan, uvs)
                 await bridge.send(fetch.request())
             elif message is _Status.STALE:
                 # The new revision hasn't arrived yet; it starts the next fetch.
@@ -165,15 +196,17 @@ _PAGED = {
     "get_meshes": "meshes",
     "get_mesh_weights": "mesh_weights",
     "get_mesh_textures": "mesh_textures",
+    "get_mesh_uvs": "mesh_uvs",
 }
 
 
 class _Fetch:
-    """One revision's pages: the meshes, then the planned weights and textures."""
+    """One revision's pages: the meshes, then the planned weights, textures and UVs."""
 
-    def __init__(self, revision: int, plan: MeshPlan) -> None:
+    def __init__(self, revision: int, plan: MeshPlan, uvs: bool) -> None:
         self.revision = revision
         self._plan = plan
+        self._uvs = uvs
         self._queue: list[tuple[str, dict]] = [("get_meshes", {})]
         self._cursor = 0
         self._items: dict[str, list] = {key: [] for key in _PAGED.values()}
@@ -199,12 +232,13 @@ class _Fetch:
         self._queue.pop(0)
         self._cursor = 0
         if kind == "get_meshes":
-            weights, textures = self._plan(self._items["meshes"])
+            weights, textures, uvs = self._plan(self._items["meshes"])
             self._queue += [
                 (request_type, {"meshes": [asdict(target) for target in targets]})
                 for request_type, targets in (
                     ("get_mesh_weights", weights),
                     ("get_mesh_textures", textures),
+                    ("get_mesh_uvs", uvs if self._uvs else []),
                 )
                 if targets
             ]
@@ -214,6 +248,7 @@ class _Fetch:
             self._items["meshes"],
             self._items["mesh_weights"],
             self._items["mesh_textures"],
+            self._items["mesh_uvs"] if self._uvs else None,
         )
 
 
@@ -243,9 +278,11 @@ class _Bridge:
         self._subscribed = False
 
     async def subscribe(self) -> None:
-        # One write, so the add-on reads both in the same tick: the path it reports is the
-        # file the subscription is on.
-        await self.send({"type": "get_filepath"}, {"type": self._kind})
+        # One write, so the add-on reads them in the same tick: the path it reports is the
+        # file the subscription is on, and the version arrives before any result.
+        await self.send(
+            {"type": "get_filepath"}, {"type": "get_version"}, {"type": self._kind}
+        )
         self._subscribed = False
 
     async def send(self, *requests: dict) -> None:
@@ -289,15 +326,15 @@ def _parse(line: bytes):
     if isinstance(version, bool) or version != PROTOCOL:  # bool is an int
         raise BridgeError(f"Unsupported add-on protocol: {json.dumps(version)}.")
     if message.get("status") == "error":
-        text = message.get("message")
-        if text in ("busy", "stale"):
-            return _Status(text)
-        raise BridgeError(f"The Blender add-on reported: {text}")
+        return _error(message.get("message"))
     result = message.get("result")
     if isinstance(result, dict):
         path = result.get("filepath")
         if "filepath" in result and (path is None or isinstance(path, str)):
             return OpenFile(path)
+        version = result.get("version")
+        if isinstance(version, str):
+            return _Version(version)
         armatures = result.get("armatures")
         if _is_str_list(armatures):
             return Armatures(armatures)
@@ -307,6 +344,14 @@ def _parse(line: bytes):
         if (page := _page(result)) is not None:
             return page
     raise _unexpected()
+
+
+def _error(text: object) -> _Status | _Version:
+    if text in ("busy", "stale"):
+        return _Status(text)
+    if text == 'unknown type: "get_version"':
+        return _Version(None)
+    raise BridgeError(f"The Blender add-on reported: {text}")
 
 
 def _page(result: dict) -> _Page | None:
@@ -357,10 +402,27 @@ def _mesh_textures(item: dict) -> MeshTextures | None:
     return None
 
 
+def _mesh_uvs(item: dict) -> MeshUvs | None:
+    mesh, maps, error = item.get("mesh"), item.get("uv_maps"), item.get("error")
+    default = item.get("has_default_uv_map")
+    if not isinstance(mesh, str):
+        return None
+    if "error" in item:
+        return MeshUvs(mesh, False, [], error) if isinstance(error, str) else None
+    if (
+        isinstance(default, bool)
+        and isinstance(maps, list)
+        and all(isinstance(m, dict) and isinstance(m.get("name"), str) for m in maps)
+    ):
+        return MeshUvs(mesh, default, [m["name"] for m in maps])
+    return None
+
+
 _ITEMS = {
     "meshes": _scene_mesh,
     "mesh_weights": _mesh_weight,
     "mesh_textures": _mesh_textures,
+    "mesh_uvs": _mesh_uvs,
 }
 
 
@@ -370,6 +432,16 @@ def _is_str_list(value: object) -> bool:
 
 def _is_whole(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _at_least(version: str | None, minimum: tuple[int, ...]) -> bool:
+    """`False` for a missing or unparseable version."""
+    if version is None:
+        return False
+    try:
+        return tuple(int(part) for part in version.split(".")) >= minimum
+    except ValueError:
+        return False
 
 
 def _unexpected() -> BridgeError:

@@ -29,8 +29,16 @@ _ROLES = {
             "weight": FieldCheck([_WEIGHT_FAILURE]),
             "texture_maps": FieldCheck(
                 [
-                    {"mesh": "wheel_hub.front.L", "missing": ["orm"]},
-                    {"mesh": "wheel_hub.front.R", "missing": ["albedo", "orm"]},
+                    {
+                        "mesh": "wheel_hub.front.L",
+                        "missing": ["orm"],
+                        "may_need_unwrap": True,
+                    },
+                    {
+                        "mesh": "wheel_hub.front.R",
+                        "missing": ["albedo", "orm"],
+                        "uv_error": "in edit mode",
+                    },
                 ]
             ),
         },
@@ -145,10 +153,14 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "❌ failing",
             "- mesh: wheel_hub.front.L",
             "  missing: orm",
+            "  may_need_unwrap: True",
             "- mesh: wheel_hub.front.R",
             "  missing: albedo, orm",
+            "  uv_error: in edit mode",
             "How to fix: Bake each missing map, save it as `<mesh>_<map>.png`, and "
-            "load it in an Image Texture node of the mesh's material.",
+            "load it in an Image Texture node of the mesh's material. If "
+            "`may_need_unwrap` is `True`, check the mesh's UVs before baking; it may "
+            "still hold a primitive's default layout.",
         ],
     }
 

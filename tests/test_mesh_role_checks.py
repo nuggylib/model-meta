@@ -6,9 +6,11 @@ from model_meta.checks import mesh_roles
 from model_meta.core.blender_bridge import (
     MeshReport,
     MeshTextures,
+    MeshUvs,
     MeshWeight,
     SceneMesh,
     TextureTarget,
+    UvTarget,
     WeightTarget,
 )
 from model_meta.core.results import FieldCheck, MeshRoleResult
@@ -60,13 +62,21 @@ def _passing_textures(target):
     return MeshTextures(target.mesh, {name: True for name in target.maps})
 
 
-def _evaluate(roles=ROLES, meshes=SCENE, weight=_passing_weight, textures=None):
-    """Answers each planned target with `weight(target)` / `textures(target)`."""
-    weights, maps = mesh_roles.plan(roles, meshes)
+def _unwrapped(target):
+    return MeshUvs(target.mesh, False, ["UVMap"])
+
+
+def _evaluate(
+    roles=ROLES, meshes=SCENE, weight=_passing_weight, textures=None, uvs=_unwrapped
+):
+    """Answers each planned target with `weight(target)` / `textures(target)` /
+    `uvs(target)`. A `None` `uvs` reports an add-on that predates `get_mesh_uvs`."""
+    weights, maps, uv_targets = mesh_roles.plan(roles, meshes)
     report = MeshReport(
         meshes,
         [weight(target) for target in weights],
         [(textures or _passing_textures)(target) for target in maps],
+        None if uvs is None else [uvs(target) for target in uv_targets],
     )
     return mesh_roles.evaluate(roles, report)
 
@@ -75,13 +85,14 @@ def _failures(result):
     return {field: check.failures for field, check in result.checks.items()}
 
 
-def test_plan_targets_every_matching_group_and_each_mesh_maps():
-    weights, textures = mesh_roles.plan(ROLES, SCENE)
+def test_plan_targets_every_matching_group_and_each_mesh_maps_and_uvs():
+    weights, textures, uvs = mesh_roles.plan(ROLES, SCENE)
     assert weights == [
         *(WeightTarget(name, name, 1.0) for name in WHEEL_NAMES),
         WeightTarget("body", "body", 1.0),
     ]
     assert textures == [TextureTarget(name, ["albedo", "orm"]) for name in WHEEL_NAMES]
+    assert uvs == [UvTarget(name) for name in WHEEL_NAMES]
 
 
 def test_plan_dedupes_targets_shared_by_two_roles():
@@ -91,10 +102,11 @@ def test_plan_dedupes_targets_shared_by_two_roles():
         weight=1.0,
         texture_maps=["normal", "albedo"],
     )
-    weights, textures = mesh_roles.plan({"wheels": WHEELS, "hubs": hubs}, SCENE)
+    weights, textures, uvs = mesh_roles.plan({"wheels": WHEELS, "hubs": hubs}, SCENE)
     front_left = "wheel_hub.front.L"
     assert weights.count(WeightTarget(front_left, front_left, 1.0)) == 1
     assert textures[0] == TextureTarget(front_left, ["albedo", "orm", "normal"])
+    assert uvs.count(UvTarget(front_left)) == 1
 
 
 def test_plan_skips_roles_with_nothing_to_fetch():
@@ -102,7 +114,7 @@ def test_plan_skips_roles_with_nothing_to_fetch():
         "unweighted": replace(WHEELS, weight=None, texture_maps=None),
         "no_regex": replace(WHEELS, mesh_regex=None),
     }
-    assert mesh_roles.plan(roles, SCENE) == ([], [])
+    assert mesh_roles.plan(roles, SCENE) == ([], [], [])
 
 
 def test_a_matching_scene_passes_every_set_field():
@@ -192,8 +204,38 @@ def test_missing_texture_maps_are_named_per_mesh():
 
     failures = _failures(_evaluate(textures=textures)["wheels"])
     assert failures["texture_maps"] == [
-        {"mesh": "wheel_hub.rear.L", "missing": ["orm"]},
+        {"mesh": "wheel_hub.rear.L", "missing": ["orm"], "may_need_unwrap": False},
         {"mesh": "wheel_hub.rear.R", "error": "no mesh"},
+    ]
+
+
+def _missing_albedo(target):
+    return MeshTextures(target.mesh, {"albedo": False, "orm": True})
+
+
+def test_a_missing_map_flags_a_mesh_that_may_need_an_unwrap():
+    def uvs(target):
+        if target.mesh == "wheel_hub.front.L":
+            return MeshUvs(target.mesh, True, ["UVMap"])
+        if target.mesh == "wheel_hub.front.R":
+            return MeshUvs(target.mesh, False, [])
+        if target.mesh == "wheel_hub.rear.L":
+            return MeshUvs(target.mesh, False, [], "in edit mode")
+        return _unwrapped(target)
+
+    failures = _failures(_evaluate(textures=_missing_albedo, uvs=uvs)["wheels"])
+    assert failures["texture_maps"] == [
+        {"mesh": "wheel_hub.front.L", "missing": ["albedo"], "may_need_unwrap": True},
+        {"mesh": "wheel_hub.front.R", "missing": ["albedo"], "may_need_unwrap": True},
+        {"mesh": "wheel_hub.rear.L", "missing": ["albedo"], "uv_error": "in edit mode"},
+        {"mesh": "wheel_hub.rear.R", "missing": ["albedo"], "may_need_unwrap": False},
+    ]
+
+
+def test_an_addon_without_uvs_leaves_the_unwrap_out():
+    failures = _failures(_evaluate(textures=_missing_albedo, uvs=None)["wheels"])
+    assert failures["texture_maps"] == [
+        {"mesh": name, "missing": ["albedo"]} for name in WHEEL_NAMES
     ]
 
 

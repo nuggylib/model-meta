@@ -31,7 +31,9 @@ _FIX_STEPS = {
     "weight": "In Weight Paint mode, assign every vertex of each listed mesh to its "
     "group at the role's `weight`.",
     "texture_maps": "Bake each missing map, save it as `<mesh>_<map>.png`, and load it "
-    "in an Image Texture node of the mesh's material.",
+    "in an Image Texture node of the mesh's material. If `may_need_unwrap` is `True`, "
+    "check the mesh's UVs before baking; it may still hold a primitive's default "
+    "layout.",
     "material_slots": "Add a material slot for each missing name to the listed mesh.",
 }
 

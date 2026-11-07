@@ -191,7 +191,9 @@ in the app (analogous to a route in a web app).
     the key as its `border_title`. A bool or a check shows `✅ passing`, or
     `❌ failing` with every failure's facts as `key: value` lines (the first
     marked `- `) and then its `_FIX_STEPS` entry as `How to fix: ...`
-    (`.check-fix`). A list (`meshes`) shows `format_list`. Only set fields
+    (`.check-fix`). So a `texture_maps` failure's `may_need_unwrap` /
+    `uv_error` is one more line under its mesh, and the fix text hedges it.
+    A list (`meshes`) shows `format_list`. Only set fields
     have a check, so only they get a section.
   - **A bool or a check** (`armature`): that one section, titled by its key.
   A missing value, an empty container or an unreadable file shows `No results
