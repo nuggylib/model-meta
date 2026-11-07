@@ -32,7 +32,7 @@ _ROLES = {
                     {
                         "mesh": "wheel_hub.front.L",
                         "missing": ["orm"],
-                        "may_need_unwrap": True,
+                        "has_default_uv_map": True,
                     },
                     {
                         "mesh": "wheel_hub.front.R",
@@ -153,16 +153,26 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "❌ failing",
             "- mesh: wheel_hub.front.L",
             "  missing: orm",
-            "  may_need_unwrap: True",
+            "  has_default_uv_map: True",
             "- mesh: wheel_hub.front.R",
             "  missing: albedo, orm",
             "  uv_error: in edit mode",
+            "Warning: A mesh with `has_default_uv_map: True` may not be unwrapped "
+            "yet: its UVs match a primitive's default layout. Check them before "
+            "baking.",
             "How to fix: Bake each missing map, save it as `<mesh>_<map>.png`, and "
-            "load it in an Image Texture node of the mesh's material. If "
-            "`may_need_unwrap` is `True`, check the mesh's UVs before baking; it may "
-            "still hold a primitive's default layout.",
+            "load it in an Image Texture node of the mesh's material.",
         ],
     }
+
+
+async def test_no_default_uv_map_shows_no_warning():
+    failure = {"mesh": "body", "missing": ["orm"], "has_default_uv_map": False}
+    roles = {"body": MeshRoleResult(["body"], {"texture_maps": FieldCheck([failure])})}
+    app = _Host(("mesh_roles", "body"), _results(mesh_roles=roles))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert not app.screen.query(".check-warning")
 
 
 async def test_a_passing_field_is_its_section_and_one_passing_line():

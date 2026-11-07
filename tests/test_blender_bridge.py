@@ -398,7 +398,7 @@ async def test_plan_targets_are_fetched_in_order():
     assert seen[1].textures == [
         MeshTextures("wheel_hub.front.L", {"albedo": True, "orm": False})
     ]
-    assert seen[1].uvs == [MeshUvs("wheel_hub.front.L", True, ["UVMap"])]
+    assert seen[1].uvs == [MeshUvs("wheel_hub.front.L", True)]
 
 
 async def test_a_mesh_gone_from_the_textures_is_an_error():
@@ -420,7 +420,7 @@ async def test_a_mesh_in_edit_mode_is_a_uv_error():
         [_BODY], reports={"get_mesh_uvs": {("body",): {"error": "in edit mode"}}}
     )
     seen, _ = await _collect_meshes(addon, plan)
-    assert seen[1].uvs == [MeshUvs("body", False, [], "in edit mode")]
+    assert seen[1].uvs == [MeshUvs("body", False, "in edit mode")]
 
 
 @pytest.mark.parametrize("version", [None, "0.1.0", "dev"])

@@ -63,7 +63,7 @@ def _passing_textures(target):
 
 
 def _unwrapped(target):
-    return MeshUvs(target.mesh, False, ["UVMap"])
+    return MeshUvs(target.mesh, False)
 
 
 def _evaluate(
@@ -204,7 +204,7 @@ def test_missing_texture_maps_are_named_per_mesh():
 
     failures = _failures(_evaluate(textures=textures)["wheels"])
     assert failures["texture_maps"] == [
-        {"mesh": "wheel_hub.rear.L", "missing": ["orm"], "may_need_unwrap": False},
+        {"mesh": "wheel_hub.rear.L", "missing": ["orm"], "has_default_uv_map": False},
         {"mesh": "wheel_hub.rear.R", "error": "no mesh"},
     ]
 
@@ -213,22 +213,21 @@ def _missing_albedo(target):
     return MeshTextures(target.mesh, {"albedo": False, "orm": True})
 
 
-def test_a_missing_map_flags_a_mesh_that_may_need_an_unwrap():
+def test_a_missing_map_carries_the_meshes_uv_report():
     def uvs(target):
         if target.mesh == "wheel_hub.front.L":
-            return MeshUvs(target.mesh, True, ["UVMap"])
-        if target.mesh == "wheel_hub.front.R":
-            return MeshUvs(target.mesh, False, [])
+            return MeshUvs(target.mesh, True)
         if target.mesh == "wheel_hub.rear.L":
-            return MeshUvs(target.mesh, False, [], "in edit mode")
+            return MeshUvs(target.mesh, False, "in edit mode")
         return _unwrapped(target)
 
     failures = _failures(_evaluate(textures=_missing_albedo, uvs=uvs)["wheels"])
+    missing = {"missing": ["albedo"]}
     assert failures["texture_maps"] == [
-        {"mesh": "wheel_hub.front.L", "missing": ["albedo"], "may_need_unwrap": True},
-        {"mesh": "wheel_hub.front.R", "missing": ["albedo"], "may_need_unwrap": True},
-        {"mesh": "wheel_hub.rear.L", "missing": ["albedo"], "uv_error": "in edit mode"},
-        {"mesh": "wheel_hub.rear.R", "missing": ["albedo"], "may_need_unwrap": False},
+        {"mesh": "wheel_hub.front.L", **missing, "has_default_uv_map": True},
+        {"mesh": "wheel_hub.front.R", **missing, "has_default_uv_map": False},
+        {"mesh": "wheel_hub.rear.L", **missing, "uv_error": "in edit mode"},
+        {"mesh": "wheel_hub.rear.R", **missing, "has_default_uv_map": False},
     ]
 
 

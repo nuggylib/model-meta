@@ -60,8 +60,8 @@ storage, and connections to the external apps Model Meta validates against.
     requested). UVs are fetched only when the add-on's version is at least
     `UVS_VERSION` (0.2.0, which added `get_mesh_uvs`); otherwise `uvs` is
     `None`. A missing or unparseable version counts as older. `MeshUvs` keeps
-    `has_default_uv_map` and the UV map names; the add-on's face and zero-area
-    counts are dropped.
+    only `has_default_uv_map`; the add-on's face count and UV maps are
+    dropped.
     Only one request is in flight at a time. A newer revision restarts the
     fetch from cursor 0 once the in-flight reply lands, whether that reply is
     an old page or `stale`. `busy` yields nothing: queued requests are answered

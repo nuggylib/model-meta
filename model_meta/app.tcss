@@ -148,6 +148,11 @@ CheckDetailScreen .check-fix {
     margin-top: 1;
 }
 
+CheckDetailScreen .check-warning {
+    margin-top: 1;
+    color: $warning;
+}
+
 /* -- spec detail screen -------------------------------------------------- */
 
 /* One box per spec root field (FieldSummary); the field name sits in the border. */

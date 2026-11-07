@@ -29,12 +29,11 @@ Textual, no UI.
       with `"vtx_grp not set"`.
     - `texture_maps` / `material_slots`: `{"mesh", "missing"}`, or the
       bridge's `error` for textures. Extra slots and their order don't matter.
-    - A `texture_maps` failure with `missing` also gets the mesh's UVs:
-      `may_need_unwrap` (`True` when the mesh has no UV map or one still
-      matches a primitive's default layout), or the bridge's `uv_error`. It is
-      a hint, not a check: the add-on's match can't tell a deliberate layout
-      from a forgotten unwrap. Neither key is added when the report's `uvs`
-      is `None` (an add-on before 0.2.0).
+    - A `texture_maps` failure with `missing` also gets the bridge's
+      `has_default_uv_map` for that mesh, or its `uv_error`. It is a hint,
+      not a check: the add-on's match can't tell a deliberate layout from a
+      forgotten unwrap. Neither key is added when the report's `uvs` is
+      `None` (an add-on before 0.2.0).
   - When nothing matched, every field but `count` fails with
     `"no meshes matched"`. A missing or non-compiling `mesh_regex` fails every
     set field with that reason.

@@ -81,7 +81,6 @@ class MeshUvs:
 
     mesh: str
     has_default_uv_map: bool
-    uv_maps: list[str]
     error: str | None = None
 
 
@@ -403,19 +402,13 @@ def _mesh_textures(item: dict) -> MeshTextures | None:
 
 
 def _mesh_uvs(item: dict) -> MeshUvs | None:
-    mesh, maps, error = item.get("mesh"), item.get("uv_maps"), item.get("error")
+    mesh, error = item.get("mesh"), item.get("error")
     default = item.get("has_default_uv_map")
     if not isinstance(mesh, str):
         return None
     if "error" in item:
-        return MeshUvs(mesh, False, [], error) if isinstance(error, str) else None
-    if (
-        isinstance(default, bool)
-        and isinstance(maps, list)
-        and all(isinstance(m, dict) and isinstance(m.get("name"), str) for m in maps)
-    ):
-        return MeshUvs(mesh, default, [m["name"] for m in maps])
-    return None
+        return MeshUvs(mesh, False, error) if isinstance(error, str) else None
+    return MeshUvs(mesh, default) if isinstance(default, bool) else None
 
 
 _ITEMS = {

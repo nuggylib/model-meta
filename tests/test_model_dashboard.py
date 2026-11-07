@@ -87,7 +87,7 @@ def _passing_report(meshes, plan):
         meshes,
         [MeshWeight(t.mesh, t.vertex_group, 10, 10, 10) for t in weights],
         [MeshTextures(t.mesh, dict.fromkeys(t.maps, True)) for t in textures],
-        [MeshUvs(t.mesh, False, ["UVMap"]) for t in uvs],
+        [MeshUvs(t.mesh, False) for t in uvs],
     )
 
 
