@@ -7,14 +7,15 @@ import pytest
 from model_meta.core.blender_bridge import (
     Armatures,
     BridgeError,
+    MeshModifiers,
     MeshReport,
+    MeshTarget,
     MeshTextures,
     MeshUvs,
     MeshWeight,
     OpenFile,
     SceneMesh,
     TextureTarget,
-    UvTarget,
     WeightTarget,
     subscribe_armatures,
     subscribe_meshes,
@@ -226,7 +227,7 @@ class _FakeAddon:
     like an add-on that predates it.
     """
 
-    def __init__(self, meshes, reports=None, saves=None, answers=None, version="0.3.0"):
+    def __init__(self, meshes, reports=None, saves=None, answers=None, version="0.4.0"):
         self.revision = 1
         self.meshes = meshes
         self.reports = reports or {}
@@ -285,7 +286,7 @@ class _FakeAddon:
 
 
 def _no_targets(_meshes):
-    return [], [], []
+    return [], [], [], []
 
 
 async def _collect_meshes(addon, plan=_no_targets, count=2):
@@ -328,13 +329,14 @@ async def test_meshes_subscribes_then_follows_every_page():
             [],
             [],
             [],
+            [],
         ),
     ]
 
 
 async def test_no_meshes_is_a_report():
     seen, _ = await _collect_meshes(_FakeAddon([]))
-    assert seen[1] == MeshReport([], [], [], [])
+    assert seen[1] == MeshReport([], [], [], [], [])
 
 
 async def test_plan_targets_are_fetched_in_order():
@@ -348,7 +350,8 @@ async def test_plan_targets_are_fetched_in_order():
                 WeightTarget("body", "body", 0.5),
             ],
             [TextureTarget("wheel_hub.front.L", ["albedo", "orm"])],
-            [UvTarget("wheel_hub.front.L")],
+            [MeshTarget("wheel_hub.front.L")],
+            [MeshTarget("wheel_hub.front.L"), MeshTarget("body")],
         )
 
     addon = _FakeAddon(
@@ -372,6 +375,10 @@ async def test_plan_targets_are_fetched_in_order():
                     "uv_maps": [{"name": "UVMap", "zero_area": 0}],
                 }
             },
+            "get_mesh_modifiers": {
+                ("wheel_hub.front.L",): {"modifiers": ["ARMATURE", "MIRROR"]},
+                ("body",): {"modifiers": []},
+            },
         },
     )
     seen, requests = await _collect_meshes(addon, plan)
@@ -390,6 +397,8 @@ async def test_plan_targets_are_fetched_in_order():
         ("get_mesh_weights", 1, 1),
         ("get_mesh_textures", 1, 0),
         ("get_mesh_uvs", 1, 0),
+        ("get_mesh_modifiers", 1, 0),
+        ("get_mesh_modifiers", 1, 1),
     ]
     assert seen[1].weights == [
         MeshWeight("wheel_hub.front.L", "wheel_hub.front.L", 340, 328, 300),
@@ -399,11 +408,15 @@ async def test_plan_targets_are_fetched_in_order():
         MeshTextures("wheel_hub.front.L", {"albedo": True, "orm": False})
     ]
     assert seen[1].uvs == [MeshUvs("wheel_hub.front.L", True)]
+    assert seen[1].modifiers == [
+        MeshModifiers("wheel_hub.front.L", ["ARMATURE", "MIRROR"]),
+        MeshModifiers("body", []),
+    ]
 
 
 async def test_a_mesh_gone_from_the_textures_is_an_error():
     def plan(_meshes):
-        return [], [TextureTarget("body", ["albedo"])], []
+        return [], [TextureTarget("body", ["albedo"])], [], []
 
     addon = _FakeAddon(
         [_BODY], reports={"get_mesh_textures": {("body",): {"error": "no mesh"}}}
@@ -414,7 +427,7 @@ async def test_a_mesh_gone_from_the_textures_is_an_error():
 
 async def test_a_mesh_in_edit_mode_is_a_uv_error():
     def plan(_meshes):
-        return [], [], [UvTarget("body")]
+        return [], [], [MeshTarget("body")], []
 
     addon = _FakeAddon(
         [_BODY], reports={"get_mesh_uvs": {("body",): {"error": "in edit mode"}}}
@@ -423,14 +436,38 @@ async def test_a_mesh_in_edit_mode_is_a_uv_error():
     assert seen[1].uvs == [MeshUvs("body", False, "in edit mode")]
 
 
-@pytest.mark.parametrize("version", [None, "0.1.0", "dev"])
-async def test_an_addon_before_uvs_skips_them(version):
+async def test_a_mesh_gone_from_the_modifiers_is_an_error():
     def plan(_meshes):
-        return [], [], [UvTarget("body")]
+        return [], [], [], [MeshTarget("body")]
 
-    seen, requests = await _collect_meshes(_FakeAddon([_BODY], version=version), plan)
+    addon = _FakeAddon(
+        [_BODY], reports={"get_mesh_modifiers": {("body",): {"error": "no mesh"}}}
+    )
+    seen, _ = await _collect_meshes(addon, plan)
+    assert seen[1].modifiers == [MeshModifiers("body", [], "no mesh")]
+
+
+def _uvs_and_modifiers(_meshes):
+    return [], [], [MeshTarget("body")], [MeshTarget("body")]
+
+
+@pytest.mark.parametrize("version", [None, "0.1.0", "dev"])
+async def test_an_addon_before_uvs_skips_uvs_and_modifiers(version):
+    addon = _FakeAddon([_BODY], version=version)
+    seen, requests = await _collect_meshes(addon, _uvs_and_modifiers)
     assert _paged(requests) == [("get_meshes", 1, 0)]
-    assert seen[1] == MeshReport([_SCENE_BODY], [], [], None)
+    assert seen[1] == MeshReport([_SCENE_BODY], [], [], None, None)
+
+
+async def test_an_addon_before_modifiers_skips_them():
+    addon = _FakeAddon(
+        [_BODY],
+        reports={"get_mesh_uvs": {("body",): {"has_default_uv_map": False}}},
+        version="0.3.0",
+    )
+    seen, requests = await _collect_meshes(addon, _uvs_and_modifiers)
+    assert _paged(requests) == [("get_meshes", 1, 0), ("get_mesh_uvs", 1, 0)]
+    assert seen[1] == MeshReport([_SCENE_BODY], [], [], [MeshUvs("body", False)], None)
 
 
 async def test_each_save_sends_a_new_report():
@@ -438,7 +475,7 @@ async def test_each_save_sends_a_new_report():
     addon = _FakeAddon([_BODY], saves={3: "after"})
     seen, requests = await _collect_meshes(addon, count=3)
     assert _paged(requests) == [("get_meshes", 1, 0), ("get_meshes", 2, 0)]
-    assert seen[1:] == [MeshReport([_SCENE_BODY], [], [], [])] * 2
+    assert seen[1:] == [MeshReport([_SCENE_BODY], [], [], [], [])] * 2
 
 
 @pytest.mark.parametrize("when", ["before", "after"])
@@ -481,6 +518,7 @@ async def _meshes_error(meshes_answer):
         {"revision": 1, "meshes": "body", **_LAST},
         {"revision": 1, "mesh_weights": [], **_LAST},
         {"revision": 1, "mesh_uvs": [], **_LAST},
+        {"revision": 1, "mesh_modifiers": [], **_LAST},
     ],
 )
 async def test_an_unexpected_page_raises(result):

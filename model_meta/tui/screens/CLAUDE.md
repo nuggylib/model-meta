@@ -121,7 +121,8 @@ in the app (analogous to a route in a web app).
   an unprefixed `Model type: <spec stem>`, then emoji-prefixed rows nested by
   depth (`.model-item-depth-{n}`): `Armature:` (`object_name`, or `not
   found`), `Mesh Roles:` with one row per role, and `Modifiers` with
-  `Required:` → `Skinned Meshes`, `Warnings: None` and `Blocked: None`. The
+  `Required:` → `Skinned Meshes`, `Warnings` and `Blocked` (the results'
+  `modifiers.required.skinned_meshes`, `warn` and `fail`). The
   spec is read inline in `compose`; a spec `Spec.load` rejects shows `not
   found` and no roles.
   **Roots open the detail screen:** the three depth-0 rows are `SelectableRow`s
@@ -133,16 +134,18 @@ in the app (analogous to a route in a web app).
   the detail screen follows live results while the worker keeps running
   beneath it. Nested rows are indented past the root rows' rail and `▸ `.
   **Icons always come from the results file**, in every mode (Live, Wrong
-  File, Manual, Inactive): ✅ for `True`, ❌ for `False`, and 🟡 for a check
-  never run or a results file that can't be read. The loaded file is the
+  File, Manual, Inactive): ✅ for `True`, ❌ for `False`, ⚠️ for a failing
+  `warning` check, and 🟡 for a check never run or a results file that can't
+  be read. The loaded file is the
   `results` reactive. It is read in `compose` and again on `r`. Each `Row`
   carries its key path in `Results.to_dict()` (`None` for a row nothing
   checks yet). A row whose path is missing is pending. A row with rows
   beneath it shows `tui.status.most_severe` of theirs (a failure, else a
-  pending row, else a pass). Any other row shows `tui.status.status_of` of
-  its value, so a role passes when every check in it passes. Every role
-  keeps its own row. Failures are never shown here, only their icons; the
-  detail screen lists them. The `Modifiers` rows aren't checked yet.
+  warning, else a pending row, else a pass). Any other row shows
+  `tui.status.status_of` of its value, so a role passes when every check in
+  it, its `modifiers` included, passes. Every role keeps its own row.
+  Failures are never shown here, only their icons; the detail screen lists
+  them.
   **Connection:** on mount and on `r` (**Refresh**), the
   `@work(exclusive=True, group="blender-check")` worker runs both
   `core.blender_bridge` subscriptions in one `asyncio.TaskGroup`, each through
@@ -154,7 +157,10 @@ in the app (analogous to a route in a web app).
   wrong). A connection's results are checked only once that connection's
   own `OpenFile` has confirmed the model is open. The armature check passes
   when the spec's `object_name` is in the list (a blank `object_name` fails).
-  The mesh check stores `checks.mesh_roles.evaluate(roles, report)`. Both go
+  The mesh check stores `checks.mesh_roles.evaluate(roles, report)`, then
+  `checks.modifiers.evaluate` over those roles: the root `modifiers` and each
+  role's. A report with no `modifiers` (an add-on before 0.4.0) saves the
+  roles alone and keeps the stored modifier results. Both go
   through `_save(**checks)`: load right before, `replace` those fields, save
   only when something changed (other keys kept), then set `results`. A failed
   load or save is an error notice, and the icons keep the stored results. A
@@ -187,11 +193,15 @@ in the app (analogous to a route in a web app).
     first is focused. `enter` pushes another `CheckDetailScreen` at
     `(*path, key)`, sharing `updates`. A publish with the same keys relabels
     the rows in place, so focus stays put; other keys remount them.
-  - **Any other container** (a role): one bordered `.check-section` per key,
-    the key as its `border_title`. A bool or a check shows `✅ passing`, or
-    `❌ failing` with every failure's facts as `key: value` lines (the first
-    marked `- `) and then its `_FIX_STEPS` entry as `How to fix: ...`
-    (`.check-fix`). A `_WARNINGS` entry, keyed by a failure fact, shows once
+  - **Any other container** (a role, `modifiers`): one bordered
+    `.check-section` per key, the key as its `border_title`. A nested
+    container (`modifiers`, `required`) gives each of its keys a section
+    instead, titled by the path from here (`required > skinned_meshes`, or
+    `modifiers > warn` on a role). A bool or a check shows `✅ passing`,
+    `⚠️ warning` (a failing `warning` check) or `❌ failing`. A warning or a
+    failure lists every failure's facts as `key: value` lines (the first
+    marked `- `) and then its `_FIX_STEPS` entry, keyed by the last key in
+    the path, as `How to fix: ...` (`.check-fix`). A `_WARNINGS` entry, keyed by a failure fact, shows once
     as `Warning: ...` (`.check-warning`) before the fix when any failure has
     that fact `True`; `texture_maps`' `has_default_uv_map` is the only one.
     A list (`meshes`) shows `format_list`. Only set fields

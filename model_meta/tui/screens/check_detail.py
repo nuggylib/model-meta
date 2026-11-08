@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 from textual.app import ComposeResult
@@ -15,12 +16,11 @@ from textual.widgets import Footer, Header, Static
 from model_meta.core.results import Results
 from model_meta.specs.modifiers import format_list
 from model_meta.tui.bindings import MOVE
-from model_meta.tui.status import icon, is_check, lookup, status_of
+from model_meta.tui.status import WARNING, icon, is_check, lookup, status_of
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _NO_RESULTS = "No results yet."
-_PASSING = "passing"
-_FAILING = "failing"
+_STATES = {True: "passing", WARNING: "warning", False: "failing"}
 
 # Keyed by a check's key in the results file, wherever it sits.
 _FIX_STEPS = {
@@ -33,6 +33,11 @@ _FIX_STEPS = {
     "texture_maps": "Bake each missing map, save it as `<mesh>_<map>.png`, and load it "
     "in an Image Texture node of the mesh's material.",
     "material_slots": "Add a material slot for each missing name to the listed mesh.",
+    "skinned_meshes": "Add each missing modifier to the listed mesh in its Modifier "
+    "Properties.",
+    "warn": "Confirm each listed modifier belongs on the mesh, or apply or remove it "
+    "before export.",
+    "fail": "Apply or remove each listed modifier from the mesh before export.",
 }
 
 # Keyed by a failure's fact; shown once when any failure has it set to `True`.
@@ -109,9 +114,9 @@ class CheckDetailScreen(Screen):
         if value is None or value == {}:
             await lines.mount(Static(_NO_RESULTS, classes="config-detail"))
         elif isinstance(value, dict) and not is_check(value):
-            await lines.mount_all(_section(key, child) for key, child in value.items())
+            await lines.mount_all(_sections(value))
         else:
-            await lines.mount(_section(self.path[-1], value))
+            await lines.mount(_section((self.path[-1],), value))
 
     async def _show_rows(self, lines: VerticalScroll, value: dict) -> None:
         labels = {
@@ -140,10 +145,20 @@ def _is_listing(value: object) -> bool:
     )
 
 
-def _section(key: str, value: object) -> Vertical:
+def _sections(value: dict, keys: tuple[str, ...] = ()) -> Iterator[Vertical]:
+    """One section per bool, check or list; a nested container's are titled by path."""
+    for key, child in value.items():
+        if isinstance(child, dict) and child and not is_check(child):
+            yield from _sections(child, (*keys, key))
+        else:
+            yield _section((*keys, key), child)
+
+
+def _section(keys: tuple[str, ...], value: object) -> Vertical:
+    key = keys[-1]
     if isinstance(value, bool) or is_check(value):
-        passed = status_of(value)
-        lines = [f"{icon(passed)} {_PASSING if passed else _FAILING}"]
+        status = status_of(value)
+        lines = [f"{icon(status)} {_STATES[status]}"]
         failures = value["failures"] if is_check(value) else []
         lines += _failure_lines(failures)
         children: list[Widget] = _statics(lines)
@@ -156,7 +171,7 @@ def _section(key: str, value: object) -> Vertical:
             for fact, text in _WARNINGS.items()
             if any(failure.get(fact) is True for failure in failures)
         ]
-        if not passed and key in _FIX_STEPS:
+        if status is not True and key in _FIX_STEPS:
             children.append(
                 Static(
                     f"How to fix: {_FIX_STEPS[key]}",
@@ -167,7 +182,7 @@ def _section(key: str, value: object) -> Vertical:
     else:
         children = _statics([_text(value)])
     section = Vertical(*children, classes="check-section")
-    section.border_title = key
+    section.border_title = " > ".join(keys)
     return section
 
 

@@ -9,6 +9,7 @@ from textual.widgets import Static
 from model_meta.core.blender_bridge import (
     Armatures,
     BridgeError,
+    MeshModifiers,
     MeshReport,
     MeshTextures,
     MeshUvs,
@@ -17,7 +18,12 @@ from model_meta.core.blender_bridge import (
     SceneMesh,
 )
 from model_meta.core.blender_connection import BlenderConnection
-from model_meta.core.results import FieldCheck, MeshRoleResult, Results
+from model_meta.core.results import (
+    FieldCheck,
+    MeshRoleResult,
+    ModifiersResult,
+    Results,
+)
 from model_meta.tui.screens import model_dashboard
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
@@ -81,13 +87,15 @@ def _fake_subscription(monkeypatch, name, wrap, *, reachable=True):
 
 
 def _passing_report(meshes, plan):
-    """Every planned weight and texture passes, so only the scene meshes decide."""
-    weights, textures, uvs = plan(meshes)
+    """Every planned weight, texture and modifier passes, so only the scene meshes
+    decide."""
+    weights, textures, uvs, modifiers = plan(meshes)
     return MeshReport(
         meshes,
         [MeshWeight(t.mesh, t.vertex_group, 10, 10, 10) for t in weights],
         [MeshTextures(t.mesh, dict.fromkeys(t.maps, True)) for t in textures],
         [MeshUvs(t.mesh, False) for t in uvs],
+        [MeshModifiers(t.mesh, ["ARMATURE"]) for t in modifiers],
     )
 
 
@@ -136,8 +144,8 @@ _WHEELS = [
 _SCENE = [SceneMesh("body", ["body"], ["paint"]), *_WHEELS]
 
 
-def _screen(tmp_path, armature=None, passed=None, roles=None, role_results=None):
-    """`passed` / `role_results` are the results already in the results file."""
+def _screen(tmp_path, armature=None, passed=None, roles=None, **saved):
+    """`passed` and `saved`'s `Results` fields are already in the results file."""
     path = tmp_path / "vehicle.json"
     if armature is not None or roles is not None:
         spec = {"armature": {"object_name": armature or ""}, "mesh_roles": roles or {}}
@@ -149,7 +157,7 @@ def _screen(tmp_path, armature=None, passed=None, roles=None, role_results=None)
         model_file=str(model),
         spec="vehicle",
         armature=passed,
-        mesh_roles=role_results,
+        **saved,
         path=results_path,
     ).create()
     return ModelDashboardScreen(model, path, results_path)
@@ -504,6 +512,18 @@ async def test_failing_role_fails_its_row_and_the_heading(tmp_path, monkeypatch)
     )
 
 
+async def test_modifier_results_are_saved_at_the_root_and_per_role(
+    tmp_path, monkeypatch
+):
+    saved = await _push_scene(
+        tmp_path, monkeypatch, _SCENE, ["✅ Mesh Roles:", "✅ wheels", "✅ body"]
+    )
+    results = Results.load(tmp_path / "sedan-results.json")
+    assert results.modifiers.required["skinned_meshes"] == FieldCheck([])
+    assert results.modifiers.warn == FieldCheck([], warning=True)
+    assert saved["body"].modifiers == results.modifiers
+
+
 async def test_mesh_report_on_the_wrong_file_is_not_saved(tmp_path, monkeypatch):
     saved = await _push_scene(
         tmp_path,
@@ -530,10 +550,63 @@ async def test_inactive_shows_the_saved_role_results(
 ):
     _fake_running(monkeypatch, False)
     role_results = {"wheels": MeshRoleResult([], {"count": FieldCheck(wheels)})}
-    screen = _screen(tmp_path, "Rig", roles=_ROLES, role_results=role_results)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES, mesh_roles=role_results)
     async with _Host(screen).run_test() as pilot:
         assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
         assert _role_rows(screen) == expected
+
+
+def _modifier_rows(screen):
+    rows = [_text(row) for row in screen.query(".model-item") if row.id != "model-type"]
+    return rows[-5:]
+
+
+@pytest.mark.parametrize(
+    ("fail", "expected"),
+    [
+        (
+            [],
+            [
+                "⚠️ Modifiers",
+                "✅ Required:",
+                "✅ Skinned Meshes",
+                "⚠️ Warnings",
+                "✅ Blocked",
+            ],
+        ),
+        (
+            [{"mesh": "body", "modifiers": ["BOOLEAN"]}],
+            [
+                "❌ Modifiers",
+                "✅ Required:",
+                "✅ Skinned Meshes",
+                "⚠️ Warnings",
+                "❌ Blocked",
+            ],
+        ),
+    ],
+)
+async def test_modifier_rows_show_the_saved_results(
+    tmp_path, monkeypatch, fail, expected
+):
+    _fake_running(monkeypatch, False)
+    saved = ModifiersResult(
+        {"skinned_meshes": FieldCheck([])},
+        FieldCheck([{"mesh": "body", "modifiers": ["MIRROR"]}], warning=True),
+        FieldCheck(fail),
+    )
+    screen = _screen(tmp_path, "Rig", roles=_ROLES, modifiers=saved)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        assert _modifier_rows(screen) == expected
+
+
+async def test_unchecked_modifier_rows_are_pending(tmp_path, monkeypatch):
+    _fake_running(monkeypatch, False)
+    screen = _screen(tmp_path, "Rig", roles=_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        assert await _wait_for(pilot, lambda: _status(screen) == "Inactive")
+        assert all(row.startswith("🟡 ") for row in _modifier_rows(screen))
 
 
 async def test_root_rows_are_the_only_focus_stops(tmp_path, monkeypatch):

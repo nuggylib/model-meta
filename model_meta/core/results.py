@@ -7,14 +7,16 @@ from typing import Self
 
 from model_meta.core.json_document import JsonDocument
 
-_RESULTS_KEYS = ("model_file", "spec", "armature", "mesh_roles")
+_RESULTS_KEYS = ("model_file", "spec", "armature", "mesh_roles", "modifiers")
 
 
 @dataclass(frozen=True)
 class FieldCheck:
-    """One spec field's check: a dict of facts per failure."""
+    """One spec field's check: a dict of facts per failure. A `warning` check's failures
+    are warnings."""
 
     failures: list[dict[str, object]]
+    warning: bool = False
 
     @property
     def passed(self) -> bool:
@@ -26,6 +28,7 @@ class FieldCheck:
         if not isinstance(data, dict):
             raise ValueError(f"`{where}` is not an object.")
         passed, failures = data.get("passed"), data.get("failures")
+        warning = data.get("warning", False)
         if not isinstance(passed, bool):
             raise ValueError(f"`{where}.passed` is not a boolean.")
         if not isinstance(failures, list) or not all(
@@ -34,22 +37,61 @@ class FieldCheck:
             raise ValueError(f"`{where}.failures` is not a list of objects.")
         if passed is bool(failures):
             raise ValueError(f"`{where}.passed` disagrees with its failures.")
-        return cls(failures)
+        if not isinstance(warning, bool):
+            raise ValueError(f"`{where}.warning` is not a boolean.")
+        return cls(failures, warning)
 
     def to_dict(self) -> dict:
-        return {"passed": self.passed, "failures": self.failures}
+        warning = {"warning": True} if self.warning else {}
+        return {"passed": self.passed, "failures": self.failures, **warning}
+
+
+@dataclass(frozen=True)
+class ModifiersResult:
+    """`required` holds one check per `modifiers.required` list, like `skinned_meshes`."""
+
+    required: dict[str, FieldCheck]
+    warn: FieldCheck
+    fail: FieldCheck
+
+    @classmethod
+    def from_dict(cls, data: object, *, where: str) -> Self:
+        """Raises `ValueError` naming `where`."""
+        if not isinstance(data, dict):
+            raise ValueError(f"`{where}` is not an object.")
+        required = data.get("required")
+        if not isinstance(required, dict):
+            raise ValueError(f"`{where}.required` is not an object.")
+        return cls(
+            {
+                key: FieldCheck.from_dict(check, where=f"{where}.required.{key}")
+                for key, check in required.items()
+            },
+            FieldCheck.from_dict(data.get("warn"), where=f"{where}.warn"),
+            FieldCheck.from_dict(data.get("fail"), where=f"{where}.fail"),
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "required": {key: check.to_dict() for key, check in self.required.items()},
+            "warn": self.warn.to_dict(),
+            "fail": self.fail.to_dict(),
+        }
 
 
 @dataclass(frozen=True)
 class MeshRoleResult:
-    """`meshes` are the names `mesh_regex` matched; `checks` holds only the role's set fields."""
+    """`meshes` are the names `mesh_regex` matched; `checks` holds only the role's set
+    fields. `modifiers` checks just those meshes, and is `None` until it has run."""
 
     meshes: list[str]
     checks: dict[str, FieldCheck]
+    modifiers: ModifiersResult | None = None
 
     @classmethod
     def from_dict(cls, data: object, *, where: str) -> Self:
-        """Every key but `meshes` is a field's check. Raises `ValueError` naming `where`."""
+        """Every key but `meshes` and `modifiers` is a field's check. Raises `ValueError`
+        naming `where`."""
         if not isinstance(data, dict):
             raise ValueError(f"`{where}` is not an object.")
         meshes = data.get("meshes")
@@ -60,13 +102,21 @@ class MeshRoleResult:
         checks = {
             field: FieldCheck.from_dict(check, where=f"{where}.{field}")
             for field, check in data.items()
-            if field != "meshes"
+            if field not in ("meshes", "modifiers")
         }
-        return cls(meshes, checks)
+        modifiers = None
+        if "modifiers" in data:
+            modifiers = ModifiersResult.from_dict(
+                data["modifiers"], where=f"{where}.modifiers"
+            )
+        return cls(meshes, checks, modifiers)
 
     def to_dict(self) -> dict:
         checks = {field: check.to_dict() for field, check in self.checks.items()}
-        return {"meshes": self.meshes, **checks}
+        modifiers = (
+            {} if self.modifiers is None else {"modifiers": self.modifiers.to_dict()}
+        )
+        return {"meshes": self.meshes, **checks, **modifiers}
 
 
 @dataclass
@@ -77,6 +127,7 @@ class Results(JsonDocument):
     spec: str
     armature: bool | None = None
     mesh_roles: dict[str, MeshRoleResult] | None = None
+    modifiers: ModifiersResult | None = None
     extra: dict[str, object] = field(default_factory=dict)
 
     @staticmethod
@@ -106,12 +157,16 @@ class Results(JsonDocument):
                 name: MeshRoleResult.from_dict(role, where=f"mesh_roles.{name}")
                 for name, role in roles.items()
             }
+        modifiers = None
+        if "modifiers" in data:
+            modifiers = ModifiersResult.from_dict(data["modifiers"], where="modifiers")
         extra = {key: value for key, value in data.items() if key not in _RESULTS_KEYS}
         return cls(
             model_file=model_file,
             spec=spec,
             armature=armature,
             mesh_roles=mesh_roles,
+            modifiers=modifiers,
             extra=extra,
             path=path,
         )
@@ -122,6 +177,7 @@ class Results(JsonDocument):
             "mesh_roles": None
             if self.mesh_roles is None
             else {name: role.to_dict() for name, role in self.mesh_roles.items()},
+            "modifiers": None if self.modifiers is None else self.modifiers.to_dict(),
         }
         checks = {key: value for key, value in known.items() if value is not None}
         return {

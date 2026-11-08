@@ -3,7 +3,12 @@ import re
 
 import pytest
 
-from model_meta.core.results import FieldCheck, MeshRoleResult, Results
+from model_meta.core.results import (
+    FieldCheck,
+    MeshRoleResult,
+    ModifiersResult,
+    Results,
+)
 
 
 def test_round_trips_with_extra_keys_after_the_known_ones(tmp_path):
@@ -174,6 +179,86 @@ def test_save_writes_the_mesh_role_results(tmp_path):
 def test_rejects_malformed_mesh_role_results(tmp_path, roles, message):
     with pytest.raises(ValueError, match=re.escape(message)):
         Results.from_dict(_with_roles(roles), path=tmp_path / "car.json")
+
+
+_PASSING = {"passed": True, "failures": []}
+_MODIFIERS = {
+    "required": {
+        "skinned_meshes": {
+            "passed": False,
+            "failures": [{"mesh": "body", "missing": ["ARMATURE"]}],
+        }
+    },
+    "warn": {
+        "passed": False,
+        "failures": [{"mesh": "body", "modifiers": ["MIRROR"]}],
+        "warning": True,
+    },
+    "fail": _PASSING,
+}
+_MODIFIERS_RESULT = ModifiersResult(
+    {"skinned_meshes": FieldCheck([{"mesh": "body", "missing": ["ARMATURE"]}])},
+    FieldCheck([{"mesh": "body", "modifiers": ["MIRROR"]}], warning=True),
+    FieldCheck([]),
+)
+
+
+def test_modifier_results_round_trip_at_the_root_and_in_a_role(tmp_path):
+    role = {"meshes": ["body"], "count": _PASSING, "modifiers": _MODIFIERS}
+    data = {**_with_roles({"body": role}), "modifiers": _MODIFIERS, "note": "x"}
+    results = Results.from_dict(data, path=tmp_path / "car.json")
+    assert results.modifiers == _MODIFIERS_RESULT
+    assert results.mesh_roles["body"] == MeshRoleResult(
+        ["body"], {"count": FieldCheck([])}, _MODIFIERS_RESULT
+    )
+    assert results.to_dict() == data
+    assert list(results.to_dict()) == [
+        "model_file",
+        "spec",
+        "mesh_roles",
+        "modifiers",
+        "note",
+    ]
+
+
+def test_unchecked_modifiers_are_none_and_omitted(tmp_path):
+    results = Results.from_dict(
+        _with_roles({"body": {"meshes": []}}), path=tmp_path / "car.json"
+    )
+    assert results.modifiers is None
+    assert results.mesh_roles["body"].modifiers is None
+    assert "modifiers" not in results.to_dict()
+    assert results.to_dict()["mesh_roles"]["body"] == {"meshes": []}
+
+
+def test_a_passing_warning_check_keeps_its_flag():
+    assert FieldCheck([], warning=True).to_dict() == {**_PASSING, "warning": True}
+    assert FieldCheck([]).to_dict() == _PASSING
+
+
+@pytest.mark.parametrize(
+    ("modifiers", "message"),
+    [
+        ([], "`modifiers` is not an object."),
+        (
+            {"warn": _PASSING, "fail": _PASSING},
+            "`modifiers.required` is not an object.",
+        ),
+        (
+            {"required": {"skinned_meshes": []}, "warn": _PASSING, "fail": _PASSING},
+            "`modifiers.required.skinned_meshes` is not an object.",
+        ),
+        ({"required": {}, "fail": _PASSING}, "`modifiers.warn` is not an object."),
+        (
+            {"required": {}, "warn": {**_PASSING, "warning": 1}, "fail": _PASSING},
+            "`modifiers.warn.warning` is not a boolean.",
+        ),
+    ],
+)
+def test_rejects_malformed_modifier_results(tmp_path, modifiers, message):
+    data = {"model_file": "/m/car.blend", "spec": "vehicle", "modifiers": modifiers}
+    with pytest.raises(ValueError, match=re.escape(message)):
+        Results.from_dict(data, path=tmp_path / "car.json")
 
 
 def test_path_for_is_stable_and_named_after_the_model(tmp_path):

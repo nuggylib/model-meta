@@ -63,7 +63,7 @@ normal checkout. Do not commit or hand-edit it.
   `GodotConnection` (a bounded scan for `project.godot` under the projects
   root). No Textual, no UI.
 - `checks/` — pure checks comparing the bridge's scene data against a spec
-  (`mesh_roles.plan` / `evaluate`), building the results `core.results`
+  (`mesh_roles.plan` / `evaluate`, `modifiers.evaluate`), building the results `core.results`
   stores. No I/O, no Textual, no UI.
 - `tui/` — Textual screens (`tui/screens/`) and the reusable widgets they are
   assembled from (`tui/widgets/`).

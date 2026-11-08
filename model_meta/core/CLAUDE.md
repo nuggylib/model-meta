@@ -52,20 +52,24 @@ storage, and connections to the external apps Model Meta validates against.
     and after a save/load that changes the list), with `names` `None` for
     `busy`. It ignores the version.
   - `subscribe_meshes(plan, port, timeout)` yields `OpenFile`, then one
-    `MeshReport(meshes, weights, textures, uvs)` per pushed `meshes_revision` (on
-    subscribe and after every save/load). A `_Fetch` follows every page of
-    `get_meshes`, then calls `plan(meshes)` for the `WeightTarget`s,
-    `TextureTarget`s and `UvTarget`s and pages through `get_mesh_weights` /
-    `get_mesh_textures` / `get_mesh_uvs` for them, in order (an empty list isn't
-    requested). UVs are fetched only when the add-on's version is at least
-    `UVS_VERSION` (0.2.0, which added `get_mesh_uvs`); otherwise `uvs` is
-    `None`. A missing or unparseable version counts as older. `MeshUvs` keeps
-    only `has_default_uv_map`; the add-on's face count and UV maps are
-    dropped.
+    `MeshReport(meshes, weights, textures, uvs, modifiers)` per pushed
+    `meshes_revision` (on subscribe and after every save/load). A `_Fetch`
+    follows every page of `get_meshes`, then calls `plan(meshes)` for the
+    `WeightTarget`s, `TextureTarget`s, and the UV and modifier `MeshTarget`s,
+    and pages through `get_mesh_weights` / `get_mesh_textures` /
+    `get_mesh_uvs` / `get_mesh_modifiers` for them, in order (an empty list
+    isn't requested). `_ADDED` names the add-on version each optional request
+    arrived in: UVs need `UVS_VERSION` (0.2.0) and modifiers
+    `MODIFIERS_VERSION` (0.4.0). An older add-on skips the request and leaves
+    `uvs` / `modifiers` `None`. A missing or unparseable version counts as
+    older. `MeshUvs` keeps only `has_default_uv_map`; the add-on's face count
+    and UV maps are dropped. `MeshModifiers` lists each Blender modifier type
+    in stack order, repeats included.
     Only one request is in flight at a time. A newer revision restarts the
     fetch from cursor 0 once the in-flight reply lands, whether that reply is
     an old page or `stale`. `busy` yields nothing: queued requests are answered
-    when Blender unlocks. A `MeshWeight` / `MeshTextures` / `MeshUvs` with
+    when Blender unlocks. A `MeshWeight` / `MeshTextures` / `MeshUvs` /
+    `MeshModifiers` with
     `error` set (`no mesh`, `no vertex group`, `in edit mode`) is an item, not
     a raise.
 - `godot_connection.py` — `GodotConnection(AppConnection)`; `path` is the
@@ -108,20 +112,25 @@ storage, and connections to the external apps Model Meta validates against.
 - `results.py` — `Results(JsonDocument)`, one model's results file:
   `model_file` (the model's absolute path) and `spec` (the spec's
   `model_type`), both required strings, then one check result per spec root
-  field, written in this order: `armature` (`True` passed, `False` failed)
-  and `mesh_roles` (role name → `MeshRoleResult`). A `None` check was never
-  run and is omitted on write. A present one must be well formed (a `null` is
-  rejected). It is the source of truth for the dashboard's icons: a new check
-  is a field here.
-  `MeshRoleResult(meshes, checks)` is one role's result: the names
-  `mesh_regex` matched, then a `FieldCheck(failures)` per set field, written
-  as `{"meshes": [...], "<field>": {"passed", "failures"}, ...}`. Every key
-  but `meshes` is a field's check. `FieldCheck.passed` is derived from
-  `failures` being empty, so it can't disagree in memory, and `from_dict`
-  rejects a file where it does. Failures are fact dicts, stored as given.
-  Both classes' `from_dict(data, where=)` raise `ValueError` naming the
-  dotted path, e.g. `mesh_roles.wheels.count.passed`.
-  `checks.mesh_roles.evaluate` builds them.
+  field, written in this order: `armature` (`True` passed, `False` failed),
+  `mesh_roles` (role name → `MeshRoleResult`) and `modifiers` (a
+  `ModifiersResult`). A `None` check was never run and is omitted on write. A
+  present one must be well formed (a `null` is rejected). It is the source of
+  truth for the dashboard's icons: a new check is a field here.
+  `MeshRoleResult(meshes, checks, modifiers)` is one role's result: the names
+  `mesh_regex` matched, then a `FieldCheck(failures)` per set field, then
+  that role's own `modifiers` (omitted while `None`), written as
+  `{"meshes": [...], "<field>": {"passed", "failures"}, ..., "modifiers":
+  {...}}`. Every key but `meshes` and `modifiers` is a field's check.
+  `ModifiersResult(required, warn, fail)` is written as `{"required":
+  {"skinned_meshes": <check>}, "warn": <check>, "fail": <check>}`.
+  `FieldCheck.passed` is derived from `failures` being empty, so it can't
+  disagree in memory, and `from_dict` rejects a file where it does.
+  `FieldCheck.warning` marks a check whose failures are warnings (`warn`), and
+  is written as `"warning": true` only when set. Failures are fact dicts,
+  stored as given. Every class's `from_dict(data, where=)` raises
+  `ValueError` naming the dotted path, e.g. `mesh_roles.wheels.count.passed`.
+  `checks.mesh_roles.evaluate` and `checks.modifiers.evaluate` build them.
   `Results.path_for(results_dir,
   model_file)` names it `<model stem>-<8-hex sha1 of the path>.json`, so
   same-named models in different directories get separate files.
