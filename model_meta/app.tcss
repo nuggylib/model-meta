@@ -148,9 +148,15 @@ CheckDetailScreen .check-fix {
     margin-top: 1;
 }
 
-/* Lines up with the failure's facts above it, past their "- ". */
-CheckDetailScreen .check-step {
-    padding-left: 2;
+/* One failure's numbered fixes, nested in its check's box and lined up with the
+   failure's facts, past their "- ". */
+CheckDetailScreen .check-steps {
+    width: auto;
+    height: auto;
+    margin: 0 0 0 2;
+    padding: 0 1;
+    border: round $panel;
+    border-title-color: $accent;
 }
 
 CheckDetailScreen .check-warning {

@@ -50,17 +50,13 @@ _WARNINGS = {
 
 
 def _texture_steps(failure: dict) -> list[str]:
-    # strict=False: a results file written before `expected` existed has none.
     return [
-        f"Mesh {failure['mesh']} is missing {name} - make sure it has an Image "
-        f'Texture node with an image file named "{file}".'
-        for name, file in zip(
-            failure.get("missing", []), failure.get("expected", []), strict=False
-        )
+        f"Bake a texture map named {file} for this mesh"
+        for file in failure.get("expected", [])
     ]
 
 
-# Keyed by a check's key: the steps listed under each failure, and the facts they
+# Keyed by a check's key: the numbered fixes under each failure, and the facts they
 # restate, which aren't listed again.
 _FAILURE_STEPS = {"texture_maps": (_texture_steps, {"expected"})}
 
@@ -221,10 +217,13 @@ def _section(
         for failure in failures:
             facts = {k: v for k, v in failure.items() if k not in restated}
             children += _statics(_fact_lines([facts]))
-            children += [
-                Static(text, classes="config-detail check-step", markup=False)
-                for text in steps(failure)
-            ]
+            if fixes := steps(failure):
+                box = Vertical(
+                    *_statics([f"{n}. {fix}" for n, fix in enumerate(fixes, 1)]),
+                    classes="check-steps",
+                )
+                box.border_title = "How to fix"
+                children.append(box)
         duplicates = value.get("duplicates", []) if is_check(value) else []
         if duplicates:
             children += _statics(["duplicates:"])

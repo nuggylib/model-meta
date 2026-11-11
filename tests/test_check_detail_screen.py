@@ -180,15 +180,12 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "- mesh: wheel_hub.front.L",
             "  missing: orm",
             "  has_default_uv_map: True",
-            "Mesh wheel_hub.front.L is missing orm - make sure it has an Image "
-            'Texture node with an image file named "wheel_hub.front.L_orm.png".',
+            "1. Bake a texture map named wheel_hub.front.L_orm.png for this mesh",
             "- mesh: wheel_hub.front.R",
             "  missing: albedo, orm",
             "  uv_error: in edit mode",
-            "Mesh wheel_hub.front.R is missing albedo - make sure it has an Image "
-            'Texture node with an image file named "wheel_hub.front.R_albedo.png".',
-            "Mesh wheel_hub.front.R is missing orm - make sure it has an Image "
-            'Texture node with an image file named "wheel_hub.front.R_orm.png".',
+            "1. Bake a texture map named wheel_hub.front.R_albedo.png for this mesh",
+            "2. Bake a texture map named wheel_hub.front.R_orm.png for this mesh",
             "duplicates:",
             "▸ wheel_hub.front.L, wheel_hub.front.R",
             _DUPLICATES_HELP,
@@ -216,11 +213,12 @@ async def test_texture_steps_name_the_override_file_and_skip_errors():
             "❌ failing",
             "- mesh: arm_top.FL",
             "  missing: albedo",
-            "Mesh arm_top.FL is missing albedo - make sure it has an Image Texture "
-            'node with an image file named "arm_top_albedo.png".',
+            "1. Bake a texture map named arm_top_albedo.png for this mesh",
             "- mesh: arm_top.FR",
             "  error: no mesh",
         ]
+        boxes = app.screen.query(".check-steps")
+        assert [box.border_title for box in boxes] == ["How to fix"]
 
 
 _DUPLICATES_HELP = (
