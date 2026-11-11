@@ -215,8 +215,14 @@ in the app (analogous to a route in a web app).
     `modifiers > warn` on a role). A bool or a check shows `✅ passing`,
     `⚠️ warning` (a failing `warning` check) or `❌ failing`. A warning or a
     failure lists every failure's facts as `key: value` lines (the first
-    marked `- `) and then its `_FIX_STEPS` entry, keyed by the last key in
-    the path, as `How to fix: ...` (`.check-fix`). A check with `duplicates`
+    marked `- `). A `_FAILURE_STEPS` entry, keyed by the check's key, adds
+    muted `.check-step` lines under each failure and drops the facts they
+    restate. `texture_maps` adds one line per missing map, naming its
+    `expected` file ("Mesh X is missing albedo - make sure it has an Image
+    Texture node with an image file named "X_albedo.png"."), and hides
+    `expected`. Then comes the check's `_FIX_STEPS` entry, keyed by the last
+    key in the path, as `How to fix: ...` (`.check-fix`). `texture_maps` has
+    no entry: its per-mesh steps replace it. A check with `duplicates`
     lists them after its failures, passing or not, as `duplicates:` and one
     `SelectableRow` per group, keyed by the group as a tuple, then
     `_DUPLICATES_HELP`. On a role's page, the `texture_maps` section then

@@ -148,6 +148,11 @@ CheckDetailScreen .check-fix {
     margin-top: 1;
 }
 
+/* Lines up with the failure's facts above it, past their "- ". */
+CheckDetailScreen .check-step {
+    padding-left: 2;
+}
+
 CheckDetailScreen .check-warning {
     margin-top: 1;
     color: $warning;

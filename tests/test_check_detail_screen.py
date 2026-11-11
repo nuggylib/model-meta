@@ -179,22 +179,48 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "❌ failing",
             "- mesh: wheel_hub.front.L",
             "  missing: orm",
-            "  expected: wheel_hub.front.L_orm.png",
             "  has_default_uv_map: True",
+            "Mesh wheel_hub.front.L is missing orm - make sure it has an Image "
+            'Texture node with an image file named "wheel_hub.front.L_orm.png".',
             "- mesh: wheel_hub.front.R",
             "  missing: albedo, orm",
-            "  expected: wheel_hub.front.R_albedo.png, wheel_hub.front.R_orm.png",
             "  uv_error: in edit mode",
+            "Mesh wheel_hub.front.R is missing albedo - make sure it has an Image "
+            'Texture node with an image file named "wheel_hub.front.R_albedo.png".',
+            "Mesh wheel_hub.front.R is missing orm - make sure it has an Image "
+            'Texture node with an image file named "wheel_hub.front.R_orm.png".',
             "duplicates:",
             "▸ wheel_hub.front.L, wheel_hub.front.R",
             _DUPLICATES_HELP,
             "Warning: A mesh with `has_default_uv_map: True` may not be unwrapped "
             "yet: its UVs match a primitive's default layout. Check them before "
             "baking.",
-            "How to fix: Bake each missing map, save it under its `expected` name, "
-            "and load it in an Image Texture node of the mesh's material.",
         ],
     }
+
+
+async def test_texture_steps_name_the_override_file_and_skip_errors():
+    failures = [
+        {
+            "mesh": "arm_top.FL",
+            "missing": ["albedo"],
+            "expected": ["arm_top_albedo.png"],
+        },
+        {"mesh": "arm_top.FR", "error": "no mesh"},
+    ]
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck(failures)})}
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["texture_maps"] == [
+            "❌ failing",
+            "- mesh: arm_top.FL",
+            "  missing: albedo",
+            "Mesh arm_top.FL is missing albedo - make sure it has an Image Texture "
+            'node with an image file named "arm_top_albedo.png".',
+            "- mesh: arm_top.FR",
+            "  error: no mesh",
+        ]
 
 
 _DUPLICATES_HELP = (

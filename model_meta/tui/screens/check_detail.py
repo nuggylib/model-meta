@@ -33,8 +33,6 @@ _FIX_STEPS = {
     "vtx_grp": "Add a vertex group matching the role's `vtx_grp` to each listed mesh.",
     "weight": "In Weight Paint mode, assign every vertex of each listed mesh to its "
     "group at the role's `weight`.",
-    "texture_maps": "Bake each missing map, save it under its `expected` name, and load "
-    "it in an Image Texture node of the mesh's material.",
     "material_slots": "Add a material slot for each missing name to the listed mesh.",
     "skinned_meshes": "Add each missing modifier to the listed mesh in its Modifier "
     "Properties.",
@@ -49,6 +47,22 @@ _WARNINGS = {
     "unwrapped yet: its UVs match a primitive's default layout. Check them before "
     "baking.",
 }
+
+
+def _texture_steps(failure: dict) -> list[str]:
+    # strict=False: a results file written before `expected` existed has none.
+    return [
+        f"Mesh {failure['mesh']} is missing {name} - make sure it has an Image "
+        f'Texture node with an image file named "{file}".'
+        for name, file in zip(
+            failure.get("missing", []), failure.get("expected", []), strict=False
+        )
+    ]
+
+
+# Keyed by a check's key: the steps listed under each failure, and the facts they
+# restate, which aren't listed again.
+_FAILURE_STEPS = {"texture_maps": (_texture_steps, {"expected"})}
 
 _DUPLICATES_HELP = (
     "The meshes in each `duplicates` group have the same shape, so they can share "
@@ -202,9 +216,15 @@ def _section(
     if isinstance(value, bool) or is_check(value):
         status = status_of(value)
         failures = value["failures"] if is_check(value) else []
-        children: list[Widget] = _statics(
-            [f"{icon(status)} {_STATES[status]}", *_fact_lines(failures)]
-        )
+        children: list[Widget] = _statics([f"{icon(status)} {_STATES[status]}"])
+        steps, restated = _FAILURE_STEPS.get(key, (lambda _failure: [], set()))
+        for failure in failures:
+            facts = {k: v for k, v in failure.items() if k not in restated}
+            children += _statics(_fact_lines([facts]))
+            children += [
+                Static(text, classes="config-detail check-step", markup=False)
+                for text in steps(failure)
+            ]
         duplicates = value.get("duplicates", []) if is_check(value) else []
         if duplicates:
             children += _statics(["duplicates:"])
