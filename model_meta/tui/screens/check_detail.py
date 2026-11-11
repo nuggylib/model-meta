@@ -299,7 +299,7 @@ def _fix_section(fixes: list[tuple[str, list[str]]]) -> Vertical:
             for n, item in enumerate(items, 1)
         ]
     section = Vertical(*children, classes="check-section check-fixes")
-    section.border_title = "How to fix"
+    section.border_title = "Needs Fixes"
     return section
 
 

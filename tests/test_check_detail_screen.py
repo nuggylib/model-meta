@@ -123,7 +123,7 @@ async def test_a_failing_bool_check_is_a_section_under_its_fix():
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app) == {
-            "How to fix": [
+            "Needs Fixes": [
                 "armature",
                 "1. Name the armature object in Blender as the spec's `object_name`.",
             ],
@@ -156,9 +156,9 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
     async with app.run_test() as pilot:
         await pilot.pause()
         sections = _sections(app)
-    assert list(sections)[0] == "How to fix"
+    assert list(sections)[0] == "Needs Fixes"
     assert sections == {
-        "How to fix": [
+        "Needs Fixes": [
             "count",
             "1. Rename the role's meshes so exactly `count` of them fully match its "
             "`mesh_regex`.",
@@ -214,7 +214,7 @@ async def test_texture_fixes_name_the_override_file_and_skip_errors():
     app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _sections(app)["How to fix"] == [
+        assert _sections(app)["Needs Fixes"] == [
             "texture_maps",
             "1. Bake a texture map named arm_top_albedo.png for arm_top.FL",
         ]
@@ -226,7 +226,7 @@ async def test_a_check_with_no_fix_text_adds_no_fix_section():
     app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert "How to fix" not in _sections(app)
+        assert "Needs Fixes" not in _sections(app)
 
 
 _DUPLICATES_HELP = (
@@ -400,7 +400,7 @@ async def test_modifiers_show_a_section_per_list_titled_by_its_path():
     app = _Host(("modifiers",), _results(modifiers=_MODIFIERS))
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _sections(app) == {"How to fix": _fix_lines(), **_MODIFIER_SECTIONS}
+        assert _sections(app) == {"Needs Fixes": _fix_lines(), **_MODIFIER_SECTIONS}
 
 
 async def test_a_role_shows_its_own_modifier_sections():
@@ -409,7 +409,7 @@ async def test_a_role_shows_its_own_modifier_sections():
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app) == {
-            "How to fix": _fix_lines("modifiers > "),
+            "Needs Fixes": _fix_lines("modifiers > "),
             "meshes": ["body"],
             **{
                 f"modifiers > {key}": lines for key, lines in _MODIFIER_SECTIONS.items()
