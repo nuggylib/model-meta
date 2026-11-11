@@ -24,6 +24,7 @@ from model_meta.core.results import (
     MeshRoleResult,
     ModifiersResult,
     Results,
+    TextureMapOverride,
 )
 from model_meta.specs import schema
 from model_meta.tui.screens import model_dashboard
@@ -522,6 +523,30 @@ async def test_failing_role_fails_its_row_and_the_heading(tmp_path, monkeypatch)
     assert saved["wheels"].checks["material_slots"] == FieldCheck(
         [{"mesh": "wheel_hub.rear.R", "missing": ["rubber"]}]
     )
+
+
+async def test_the_check_applies_and_keeps_saved_texture_map_overrides(
+    tmp_path, monkeypatch
+):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    fronts = ["wheel_hub.front.L", "wheel_hub.front.R"]
+    overrides = {"wheels": [TextureMapOverride("wheel_hub", ["albedo"], fronts)]}
+    roles = {"wheels": {**_ROLES["wheels"], "texture_maps": ["albedo", "orm"]}}
+    screen = _screen(tmp_path, "Rig", roles=roles, texture_map_overrides=overrides)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, meshes.empty)
+        assert await _wait_for(
+            pilot, lambda: _role_rows(screen)[:2] == ["❌ Mesh Roles:", "❌ wheels"]
+        )
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == overrides
+    assert saved.mesh_roles["wheels"].checks["texture_maps"].failures == [
+        {"mesh": name, "missing": ["albedo"], "expected": ["wheel_hub_albedo.png"]}
+        for name in fronts
+    ]
 
 
 async def test_modifier_results_are_saved_at_the_root_and_per_role(

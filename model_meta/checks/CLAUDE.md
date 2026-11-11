@@ -10,9 +10,12 @@ Textual, no UI.
     `MeshTarget` per mesh a role with `texture_maps` matches (for textures and
     UVs), then one per mesh any role matches (for modifiers), deduped. The
     screen passes `functools.partial(plan, roles)` to `subscribe_meshes`.
-  - `evaluate(roles, report)`: one `MeshRoleResult` per role. It re-runs `plan`
-    to line the report's items up with their targets, so the report must come
-    from the same roles.
+  - `evaluate(roles, report, overrides)`: one `MeshRoleResult` per role. It
+    re-runs `plan` to line the report's items up with their targets, so the
+    report must come from the same roles. `overrides` is the results file's
+    `texture_map_overrides`. Each role gets its own `_Scene.stems`, mapping
+    `(mesh, map)` to the override name its file must start with. When two
+    overrides name the same mesh and map, the first wins.
   - A role's meshes are the scene meshes whose whole name matches
     `mesh_regex` (`re.fullmatch`).
   - Each set field becomes a `FieldCheck` holding one dict of facts per
@@ -31,9 +34,10 @@ Textual, no UI.
     - `texture_maps` / `material_slots`: `{"mesh", "missing"}`, or the
       bridge's `error` for textures. Extra slots and their order don't matter.
       A map is present when one of the mesh's images has a file whose name
-      ends with `<mesh>_<map>.png`. An image with no file never counts. A
-      `texture_maps` failure also lists `expected`, the exact filename each
-      missing map needs. With an add-on before 0.5.1 (`textures` `None`),
+      ends with `<stem>_<map>.png`. `<stem>` is the mesh's name, or the
+      override's name when one covers that mesh and map. An image with no file
+      never counts. A `texture_maps` failure also lists `expected`, the exact
+      filename each missing map needs. With an add-on before 0.5.1 (`textures` `None`),
       `texture_maps` fails once with `OLD_ADDON`.
     - `texture_maps` always sets `duplicates`: the report's same-shape
       groups, reduced to the role's matched meshes, keeping groups of two or

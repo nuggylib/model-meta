@@ -123,6 +123,13 @@ storage, and connections to the external apps Model Meta validates against.
   `ModifiersResult`). A `None` check was never run and is omitted on write. A
   present one must be well formed (a `null` is rejected). It is the source of
   truth for the dashboard's icons: a new check is a field here.
+  After the checks comes `texture_map_overrides`, the one key the user
+  writes rather than a check: role name → a list of `TextureMapOverride(name,
+  maps, meshes)`, written as `{"name", "maps", "meshes"}`. Each one makes
+  those meshes' listed maps expect `<name>_<map>.png` instead of
+  `<mesh>_<map>.png`. It defaults to `{}`, is omitted while empty, and the
+  mesh check never replaces it. Shape checks only: `name` must be a non-empty
+  string.
   `MeshRoleResult(meshes, checks, modifiers)` is one role's result: the names
   `mesh_regex` matched, then a `FieldCheck(failures)` per set field, then
   that role's own `modifiers` (omitted while `None`), written as

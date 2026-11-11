@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import PurePath
 
 from model_meta.core.blender_bridge import (
@@ -15,7 +15,7 @@ from model_meta.core.blender_bridge import (
     SceneMesh,
     WeightTarget,
 )
-from model_meta.core.results import FieldCheck, MeshRoleResult
+from model_meta.core.results import FieldCheck, MeshRoleResult, TextureMapOverride
 from model_meta.core.spec import MeshRole
 from model_meta.specs import parenting
 
@@ -48,7 +48,9 @@ def plan(
 
 
 def evaluate(
-    roles: Mapping[str, MeshRole], report: MeshReport
+    roles: Mapping[str, MeshRole],
+    report: MeshReport,
+    overrides: Mapping[str, Sequence[TextureMapOverride]] | None = None,
 ) -> dict[str, MeshRoleResult]:
     """Pass a `report` fetched with `plan(roles, ...)`, so its items line up."""
     weight_targets, textured, _ = plan(roles, report.meshes)
@@ -57,10 +59,27 @@ def evaluate(
         _by_mesh(textured, report.textures),
         _by_mesh(textured, report.uvs),
         report.duplicates or [],
+        {},
     )
+    overrides = overrides or {}
     return {
-        name: _role_result(role, report.meshes, scene) for name, role in roles.items()
+        name: _role_result(
+            role,
+            report.meshes,
+            replace(scene, stems=_stems(overrides.get(name, ()))),
+        )
+        for name, role in roles.items()
     }
+
+
+def _stems(overrides: Sequence[TextureMapOverride]) -> dict[tuple[str, str], str]:
+    """`(mesh, map)` → the name its texture file starts with. The first override wins."""
+    stems: dict[tuple[str, str], str] = {}
+    for override in overrides:
+        for mesh in override.meshes:
+            for name in override.maps:
+                stems.setdefault((mesh, name), override.name)
+    return stems
 
 
 def _by_mesh(targets: list[MeshTarget], results: list | None) -> dict | None:
@@ -79,6 +98,7 @@ class _Scene:
     textures: dict[str, MeshTextures] | None
     uvs: dict[str, MeshUvs] | None
     duplicates: list[list[str]]
+    stems: dict[tuple[str, str], str]
 
 
 def _role_result(
@@ -150,17 +170,21 @@ def _texture_maps(
             for image in result.images
             if image.filepath is not None
         ]
+        expected = {
+            name: f"{scene.stems.get((mesh.name, name), mesh.name)}_{name}.png"
+            for name in role.texture_maps
+        }
         missing = [
             name
-            for name in role.texture_maps
-            if not any(f.endswith(f"{mesh.name}_{name}.png") for f in files)
+            for name, file in expected.items()
+            if not any(f.endswith(file) for f in files)
         ]
         if missing:
             failures.append(
                 {
                     "mesh": mesh.name,
                     "missing": missing,
-                    "expected": [f"{mesh.name}_{name}.png" for name in missing],
+                    "expected": [expected[name] for name in missing],
                     **_unwrap(mesh.name, scene),
                 }
             )

@@ -13,7 +13,7 @@ from model_meta.core.blender_bridge import (
     TextureImage,
     WeightTarget,
 )
-from model_meta.core.results import FieldCheck, MeshRoleResult
+from model_meta.core.results import FieldCheck, MeshRoleResult, TextureMapOverride
 from model_meta.core.spec import MeshRole
 
 WHEELS = MeshRole(
@@ -264,6 +264,40 @@ def test_texture_maps_list_the_roles_duplicate_groups_even_when_passing():
             ["wheel_hub.rear.L", "wheel_hub.rear.R"],
         ],
     )
+
+
+def test_an_override_renames_only_its_maps_on_only_its_meshes():
+    fronts = ["wheel_hub.front.L", "wheel_hub.front.R"]
+    overrides = {
+        "wheels": [
+            TextureMapOverride("wheel_hub.front", ["albedo"], fronts),
+            # Later overrides of the same mesh and map are ignored.
+            TextureMapOverride("ignored", ["albedo"], fronts[:1]),
+        ],
+        "body": [TextureMapOverride("unused", ["albedo"], fronts)],
+    }
+
+    def textures(target):
+        if target.mesh == "wheel_hub.front.L":
+            return MeshTextures(
+                target.mesh,
+                [
+                    TextureImage("a", "/textures/wheel_hub.front_albedo.png"),
+                    TextureImage("o", "/textures/wheel_hub.front.L_orm.png"),
+                ],
+            )
+        if target.mesh == "wheel_hub.front.R":
+            return _images(target.mesh, "albedo", "orm")
+        return _passing_textures(target)
+
+    results = mesh_roles.evaluate(ROLES, _report(textures=textures), overrides)
+    assert _failures(results["wheels"])["texture_maps"] == [
+        {
+            "mesh": "wheel_hub.front.R",
+            "missing": ["albedo"],
+            "expected": ["wheel_hub.front_albedo.png"],
+        }
+    ]
 
 
 def test_an_addon_before_image_reports_fails_texture_maps():

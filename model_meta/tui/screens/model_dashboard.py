@@ -189,7 +189,8 @@ class ModelDashboardScreen(Screen):
             self._save(armature=self._armature in message.names)
 
     def _check_mesh_roles(self, report: MeshReport) -> None:
-        roles = mesh_roles.evaluate(self._roles, report)
+        overrides = {} if self.results is None else self.results.texture_map_overrides
+        roles = mesh_roles.evaluate(self._roles, report, overrides)
         # An add-on before 0.4.0: keep the stored modifier results.
         if report.modifiers is None:
             self._save(mesh_roles=roles)
