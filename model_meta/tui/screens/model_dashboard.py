@@ -28,7 +28,7 @@ from model_meta.core.blender_bridge import (
     subscribe_meshes,
 )
 from model_meta.core.blender_connection import BlenderConnection
-from model_meta.core.results import Results
+from model_meta.core.results import Results, TextureMapOverride
 from model_meta.core.spec import MeshRole, Modifiers, Spec
 from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.check_detail import CheckDetailScreen
@@ -83,6 +83,8 @@ class ModelDashboardScreen(Screen):
         self._roles: dict[str, MeshRole] = {}
         self._modifiers = Modifiers()
         self._rows: list[Row] = []
+        # The model's last scene report, re-checked when an override is saved.
+        self._report: MeshReport | None = None
 
     def compose(self) -> ComposeResult:
         try:
@@ -138,15 +140,29 @@ class ModelDashboardScreen(Screen):
 
     def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
         field = message.row.key
-        self.app.push_screen(
-            CheckDetailScreen(
-                self.model,
-                (field,),
-                (_ROOTS[field],),
-                self.results,
-                self.results_changed,
+        self.app.push_screen(CheckDetailScreen(self, (field,), (_ROOTS[field],)))
+
+    def texture_maps(self, role: str) -> list[str]:
+        return self._roles[role].texture_maps or []
+
+    def add_texture_map_override(self, role: str, override: TextureMapOverride) -> None:
+        def add(results: Results) -> Results:
+            overrides = results.texture_map_overrides
+            return replace(
+                results,
+                texture_map_overrides={
+                    **overrides,
+                    role: [*overrides.get(role, []), override],
+                },
             )
-        )
+
+        if not self._update(add):
+            return
+        if self._report is None:
+            self.notify("Override saved. It's checked when Blender next saves.")
+            return
+        self._check_mesh_roles(self._report)
+        self.notify("Override saved and checked.")
 
     @work(exclusive=True, group="blender-check")
     async def _refresh(self) -> None:
@@ -189,6 +205,7 @@ class ModelDashboardScreen(Screen):
             self._save(armature=self._armature in message.names)
 
     def _check_mesh_roles(self, report: MeshReport) -> None:
+        self._report = report
         overrides = {} if self.results is None else self.results.texture_map_overrides
         roles = mesh_roles.evaluate(self._roles, report, overrides)
         # An add-on before 0.4.0: keep the stored modifier results.
@@ -211,18 +228,24 @@ class ModelDashboardScreen(Screen):
         except (OSError, ValueError):
             self.results = None
 
-    def _save(self, **checks: object) -> None:
+    def _save(self, **fields: object) -> bool:
+        return self._update(lambda results: replace(results, **fields))
+
+    def _update(self, change: Callable[[Results], Results]) -> bool:
+        """Applies `change` to the file as it is now. `False` after a failed load or
+        save, which it reports."""
         try:
             results = Results.load(self.results_path)
-            updated = replace(results, **checks)
+            updated = change(results)
             if updated != results:
                 updated.save()
         except (OSError, ValueError) as error:
             self.notify(
                 f"Couldn't save {self.results_path.name}: {error}", severity="error"
             )
-            return
+            return False
         self.results = updated
+        return True
 
     def watch_live(self) -> None:
         self._update_connection()

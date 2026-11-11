@@ -549,6 +549,45 @@ async def test_the_check_applies_and_keeps_saved_texture_map_overrides(
     ]
 
 
+_TEXTURED_ROLES = {"wheels": {**_ROLES["wheels"], "texture_maps": ["albedo"]}}
+_FRONTS = ["wheel_hub.front.L", "wheel_hub.front.R"]
+_FRONT_OVERRIDE = TextureMapOverride("wheel_hub", ["albedo"], _FRONTS)
+
+
+async def test_an_added_override_is_saved_and_checks_the_last_report(
+    tmp_path, monkeypatch
+):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, lambda: _role_rows(screen)[1] == "✅ wheels")
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+        assert _role_rows(screen)[1] == "❌ wheels"
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == {"wheels": [_FRONT_OVERRIDE]}
+    assert [
+        failure["mesh"]
+        for failure in saved.mesh_roles["wheels"].checks["texture_maps"].failures
+    ] == _FRONTS
+
+
+async def test_an_override_added_before_any_report_is_saved_for_later(
+    tmp_path, monkeypatch
+):
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        await pilot.pause()
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == {"wheels": [_FRONT_OVERRIDE]}
+    assert saved.mesh_roles is None
+
+
 async def test_modifier_results_are_saved_at_the_root_and_per_role(
     tmp_path, monkeypatch
 ):

@@ -1,16 +1,19 @@
 from pathlib import Path
 
+import pytest
 from textual.app import App
 from textual.signal import Signal
-from textual.widgets import Static
+from textual.widgets import Button, Input, SelectionList, Static
 
 from model_meta.core.results import (
     FieldCheck,
     MeshRoleResult,
     ModifiersResult,
     Results,
+    TextureMapOverride,
 )
 from model_meta.tui.screens.check_detail import CheckDetailScreen
+from model_meta.tui.screens.texture_map_override_modal import TextureMapOverrideModal
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _WEIGHT_FAILURE = {
@@ -58,6 +61,23 @@ _ROLES = {
 }
 
 
+class _Source:
+    """Stands in for the model dashboard, recording each saved override."""
+
+    model = Path("/m/sedan.blend")
+
+    def __init__(self, results, updates):
+        self.results = results
+        self.results_changed = updates
+        self.saved = []
+
+    def texture_maps(self, _role):
+        return ["albedo", "orm", "normal"]
+
+    def add_texture_map_override(self, role, override):
+        self.saved.append((role, override))
+
+
 class _Host(App):
     def __init__(self, path, results):
         super().__init__()
@@ -66,14 +86,9 @@ class _Host(App):
 
     def on_mount(self):
         self.updates = Signal(self, "updates")
+        self.source = _Source(self.results, self.updates)
         self.push_screen(
-            CheckDetailScreen(
-                Path("/m/sedan.blend"),
-                self.path,
-                ("Title", *self.path[1:]),
-                self.results,
-                self.updates,
-            )
+            CheckDetailScreen(self.source, self.path, ("Title", *self.path[1:]))
         )
 
 
@@ -171,7 +186,7 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "  expected: wheel_hub.front.R_albedo.png, wheel_hub.front.R_orm.png",
             "  uv_error: in edit mode",
             "duplicates:",
-            "- wheel_hub.front.L, wheel_hub.front.R",
+            "▸ wheel_hub.front.L, wheel_hub.front.R",
             _DUPLICATES_HELP,
             "Warning: A mesh with `has_default_uv_map: True` may not be unwrapped "
             "yet: its UVs match a primitive's default layout. Check them before "
@@ -184,22 +199,101 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
 
 _DUPLICATES_HELP = (
     "The meshes in each `duplicates` group have the same shape, so they can share "
-    "texture maps."
+    "texture maps. Select a group to link some of its maps under one name."
 )
+_ARMS = ["arm_top.FL", "arm_top.FR", "arm_top.RL"]
+_ARM_ROLES = {
+    "arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck([], duplicates=[_ARMS])})
+}
 
 
-async def test_a_passing_texture_check_still_lists_its_duplicates():
-    check = FieldCheck([], duplicates=[["arm_top.FL", "arm_top.FR"]])
-    roles = {"arms": MeshRoleResult(["arm_top.FL"], {"texture_maps": check})}
-    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
+async def test_a_passing_texture_check_lists_its_duplicates_and_overrides():
+    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
+    results = _results(mesh_roles=_ARM_ROLES, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app)["texture_maps"] == [
             "✅ passing",
             "duplicates:",
-            "- arm_top.FL, arm_top.FR",
+            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
             _DUPLICATES_HELP,
+            "texture_map_overrides:",
+            "- name: arm_top",
+            "  maps: albedo",
+            "  meshes: arm_top.FL, arm_top.FR",
         ]
+
+
+async def _open_link_modal(pilot, app):
+    await pilot.pause()
+    app.screen.query_one(SelectableRow).focus()
+    await pilot.press("enter")
+    await pilot.pause()
+    assert isinstance(app.screen, TextureMapOverrideModal)
+    return app.screen
+
+
+async def test_linking_a_group_saves_the_checked_meshes_and_maps_under_the_name():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
+    async with app.run_test() as pilot:
+        modal = await _open_link_modal(pilot, app)
+        modal.query_one("#override-meshes", SelectionList).deselect("arm_top.RL")
+        modal.query_one("#override-maps", SelectionList).select("normal")
+        modal.query_one("#override-maps", SelectionList).select("albedo")
+        modal.query_one("#override-name", Input).value = " arm_top "
+        await pilot.pause()
+        preview = str(modal.query_one("#override-preview", Static).render())
+        assert preview == "Expected: arm_top_albedo.png, arm_top_normal.png"
+        modal.query_one("#override-name", Input).focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.source.saved == [
+            (
+                "arms",
+                TextureMapOverride("arm_top", ["albedo", "normal"], _ARMS[:2]),
+            )
+        ]
+        assert isinstance(app.screen, CheckDetailScreen)
+
+
+@pytest.mark.parametrize(
+    ("meshes", "maps", "name", "problem"),
+    [
+        (_ARMS[:1], ["albedo"], "arm_top", "Check at least two meshes to link."),
+        (_ARMS, [], "arm_top", "Check at least one map to share."),
+        (_ARMS, ["albedo"], "  ", "Type the shared name."),
+        (_ARMS, ["albedo"], "arms/top", "The shared name can't hold `/` or `\\`."),
+    ],
+)
+async def test_an_incomplete_link_says_why_and_saves_nothing(
+    meshes, maps, name, problem
+):
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
+    async with app.run_test() as pilot:
+        modal = await _open_link_modal(pilot, app)
+        mesh_list = modal.query_one("#override-meshes", SelectionList)
+        mesh_list.deselect_all()
+        for mesh in meshes:
+            mesh_list.select(mesh)
+        for name_ in maps:
+            modal.query_one("#override-maps", SelectionList).select(name_)
+        modal.query_one("#override-name", Input).value = name
+        modal.query_one("#save-override", Button).press()
+        await pilot.pause()
+        assert str(modal.query_one("#override-status", Static).render()) == problem
+        assert app.screen is modal
+        assert app.source.saved == []
+
+
+async def test_escape_closes_the_link_modal_and_saves_nothing():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
+    async with app.run_test() as pilot:
+        await _open_link_modal(pilot, app)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
+        assert app.source.saved == []
 
 
 async def test_no_default_uv_map_shows_no_warning():
