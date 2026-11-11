@@ -52,19 +52,25 @@ storage, and connections to the external apps Model Meta validates against.
     and after a save/load that changes the list), with `names` `None` for
     `busy`. It ignores the version.
   - `subscribe_meshes(plan, port, timeout)` yields `OpenFile`, then one
-    `MeshReport(meshes, weights, textures, uvs, modifiers)` per pushed
-    `meshes_revision` (on subscribe and after every save/load). A `_Fetch`
-    follows every page of `get_meshes`, then calls `plan(meshes)` for the
-    `WeightTarget`s, `TextureTarget`s, and the UV and modifier `MeshTarget`s,
-    and pages through `get_mesh_weights` / `get_mesh_textures` /
-    `get_mesh_uvs` / `get_mesh_modifiers` for them, in order (an empty list
-    isn't requested). `_ADDED` names the add-on version each optional request
-    arrived in: UVs need `UVS_VERSION` (0.2.0) and modifiers
-    `MODIFIERS_VERSION` (0.4.0). An older add-on skips the request and leaves
-    `uvs` / `modifiers` `None`. A missing or unparseable version counts as
-    older. `MeshUvs` keeps only `has_default_uv_map`; the add-on's face count
-    and UV maps are dropped. `MeshModifiers` lists each Blender modifier type
-    in stack order, repeats included.
+    `MeshReport(meshes, weights, textures, uvs, modifiers, duplicates)` per
+    pushed `meshes_revision` (on subscribe and after every save/load). A
+    `_Fetch` follows every page of `get_meshes`, then calls `plan(meshes)` for
+    the `WeightTarget`s and the textured and modified `MeshTarget`s. It pages
+    through `get_mesh_weights`, then `get_mesh_textures` and `get_mesh_uvs`
+    (both for the textured targets), `get_mesh_modifiers`, and
+    `get_duplicate_meshes`, in that order. Duplicates are requested only when
+    there are textured targets, and an empty target list isn't requested.
+    `_ADDED` names the add-on version that gave each optional request its
+    current shape: textures need `TEXTURES_VERSION` (0.5.1, when it began
+    reporting images), UVs `UVS_VERSION` (0.2.0), modifiers
+    `MODIFIERS_VERSION` (0.4.0) and duplicates `DUPLICATES_VERSION` (0.5.0).
+    An older add-on skips the request and leaves its list `None`. A missing or
+    unparseable version counts as older. `MeshTextures` lists every
+    `TextureImage(name, filepath)` the mesh's Image Texture nodes hold
+    (`filepath` `None` when the image has no file). `MeshUvs` keeps only
+    `has_default_uv_map`; the add-on's face count and UV maps are dropped.
+    `MeshModifiers` lists each Blender modifier type in stack order, repeats
+    included. `duplicates` is one sorted name list per same-shape group.
     Only one request is in flight at a time. A newer revision restarts the
     fetch from cursor 0 once the in-flight reply lands, whether that reply is
     an old page or `stale`. `busy` yields nothing: queued requests are answered

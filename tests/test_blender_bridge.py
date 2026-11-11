@@ -15,7 +15,7 @@ from model_meta.core.blender_bridge import (
     MeshWeight,
     OpenFile,
     SceneMesh,
-    TextureTarget,
+    TextureImage,
     WeightTarget,
     subscribe_armatures,
     subscribe_meshes,
@@ -220,14 +220,15 @@ class _FakeAddon:
     """Answers mesh requests one item per page, so every list takes several pages.
 
     `reports` maps a targeted request type to each target's item fields, keyed by the
-    target's `(mesh,)` or `(mesh, vertex_group)`. `saves` maps a request's index to
+    target's `(mesh,)` or `(mesh, vertex_group)`, and `get_duplicate_meshes` to its
+    groups. `saves` maps a request's index to
     `"before"` or `"after"`: a save/load bumps the revision and pushes it before or
     after that request's answer. `answers` maps a request type to `f(lines)`, which
     returns what to send in place of `lines`. A `None` `version` answers `get_version`
     like an add-on that predates it.
     """
 
-    def __init__(self, meshes, reports=None, saves=None, answers=None, version="0.4.0"):
+    def __init__(self, meshes, reports=None, saves=None, answers=None, version="0.5.1"):
         self.revision = 1
         self.meshes = meshes
         self.reports = reports or {}
@@ -262,7 +263,13 @@ class _FakeAddon:
         if request["revision"] != self.revision:
             return [_error("stale")]
         key = kind.removeprefix("get_")
-        items = self.meshes if kind == "get_meshes" else self._items(request)
+        if kind == "get_meshes":
+            items = self.meshes
+        elif kind == "get_duplicate_meshes":
+            groups = self.reports.get(kind, [])
+            items = [{"duplicates": names} for names in groups]
+        else:
+            items = self._items(request)
         cursor = request["cursor"]
         more = cursor + 1 < len(items)
         return [
@@ -286,7 +293,7 @@ class _FakeAddon:
 
 
 def _no_targets(_meshes):
-    return [], [], [], []
+    return [], [], []
 
 
 async def _collect_meshes(addon, plan=_no_targets, count=2):
@@ -305,7 +312,7 @@ def _paged(requests):
     return [
         (request["type"], request["revision"], request["cursor"])
         for request in requests
-        if request["type"].startswith("get_mesh")
+        if request["type"].startswith(("get_mesh", "get_duplicate_meshes"))
     ]
 
 
@@ -330,13 +337,14 @@ async def test_meshes_subscribes_then_follows_every_page():
             [],
             [],
             [],
+            [],
         ),
     ]
 
 
 async def test_no_meshes_is_a_report():
     seen, _ = await _collect_meshes(_FakeAddon([]))
-    assert seen[1] == MeshReport([], [], [], [], [])
+    assert seen[1] == MeshReport([], [], [], [], [], [])
 
 
 async def test_plan_targets_are_fetched_in_order():
@@ -349,7 +357,6 @@ async def test_plan_targets_are_fetched_in_order():
                 WeightTarget("wheel_hub.front.L", "wheel_hub.front.L", 1.0),
                 WeightTarget("body", "body", 0.5),
             ],
-            [TextureTarget("wheel_hub.front.L", ["albedo", "orm"])],
             [MeshTarget("wheel_hub.front.L")],
             [MeshTarget("wheel_hub.front.L"), MeshTarget("body")],
         )
@@ -357,6 +364,7 @@ async def test_plan_targets_are_fetched_in_order():
     addon = _FakeAddon(
         [_BODY, _WHEEL],
         reports={
+            "get_duplicate_meshes": [["arm_top.FL", "arm_top.FR"], ["hub.L", "hub.R"]],
             "get_mesh_weights": {
                 ("wheel_hub.front.L", "wheel_hub.front.L"): {
                     "vertices": 340,
@@ -366,7 +374,12 @@ async def test_plan_targets_are_fetched_in_order():
                 ("body", "body"): {"error": "no vertex group"},
             },
             "get_mesh_textures": {
-                ("wheel_hub.front.L",): {"maps": {"albedo": True, "orm": False}}
+                ("wheel_hub.front.L",): {
+                    "images": [
+                        {"name": "hub", "filepath": "/tex/hub.L_albedo.png"},
+                        {"name": "bake", "filepath": None},
+                    ]
+                }
             },
             "get_mesh_uvs": {
                 ("wheel_hub.front.L",): {
@@ -399,14 +412,23 @@ async def test_plan_targets_are_fetched_in_order():
         ("get_mesh_uvs", 1, 0),
         ("get_mesh_modifiers", 1, 0),
         ("get_mesh_modifiers", 1, 1),
+        ("get_duplicate_meshes", 1, 0),
+        ("get_duplicate_meshes", 1, 1),
     ]
     assert seen[1].weights == [
         MeshWeight("wheel_hub.front.L", "wheel_hub.front.L", 340, 328, 300),
         MeshWeight("body", "body", error="no vertex group"),
     ]
     assert seen[1].textures == [
-        MeshTextures("wheel_hub.front.L", {"albedo": True, "orm": False})
+        MeshTextures(
+            "wheel_hub.front.L",
+            [
+                TextureImage("hub", "/tex/hub.L_albedo.png"),
+                TextureImage("bake", None),
+            ],
+        )
     ]
+    assert seen[1].duplicates == [["arm_top.FL", "arm_top.FR"], ["hub.L", "hub.R"]]
     assert seen[1].uvs == [MeshUvs("wheel_hub.front.L", True)]
     assert seen[1].modifiers == [
         MeshModifiers("wheel_hub.front.L", ["ARMATURE", "MIRROR"]),
@@ -414,31 +436,37 @@ async def test_plan_targets_are_fetched_in_order():
     ]
 
 
-async def test_a_mesh_gone_from_the_textures_is_an_error():
-    def plan(_meshes):
-        return [], [TextureTarget("body", ["albedo"])], [], []
+def _textured(_meshes):
+    return [], [MeshTarget("body")], []
 
+
+async def test_a_mesh_gone_from_the_textures_is_an_error():
     addon = _FakeAddon(
-        [_BODY], reports={"get_mesh_textures": {("body",): {"error": "no mesh"}}}
+        [_BODY],
+        reports={
+            "get_mesh_textures": {("body",): {"error": "no mesh"}},
+            "get_mesh_uvs": {("body",): {"has_default_uv_map": False}},
+        },
     )
-    seen, _ = await _collect_meshes(addon, plan)
-    assert seen[1].textures == [MeshTextures("body", {}, "no mesh")]
+    seen, _ = await _collect_meshes(addon, _textured)
+    assert seen[1].textures == [MeshTextures("body", [], "no mesh")]
 
 
 async def test_a_mesh_in_edit_mode_is_a_uv_error():
-    def plan(_meshes):
-        return [], [], [MeshTarget("body")], []
-
     addon = _FakeAddon(
-        [_BODY], reports={"get_mesh_uvs": {("body",): {"error": "in edit mode"}}}
+        [_BODY],
+        reports={
+            "get_mesh_textures": {("body",): {"images": []}},
+            "get_mesh_uvs": {("body",): {"error": "in edit mode"}},
+        },
     )
-    seen, _ = await _collect_meshes(addon, plan)
+    seen, _ = await _collect_meshes(addon, _textured)
     assert seen[1].uvs == [MeshUvs("body", False, "in edit mode")]
 
 
 async def test_a_mesh_gone_from_the_modifiers_is_an_error():
     def plan(_meshes):
-        return [], [], [], [MeshTarget("body")]
+        return [], [], [MeshTarget("body")]
 
     addon = _FakeAddon(
         [_BODY], reports={"get_mesh_modifiers": {("body",): {"error": "no mesh"}}}
@@ -447,27 +475,56 @@ async def test_a_mesh_gone_from_the_modifiers_is_an_error():
     assert seen[1].modifiers == [MeshModifiers("body", [], "no mesh")]
 
 
-def _uvs_and_modifiers(_meshes):
-    return [], [], [MeshTarget("body")], [MeshTarget("body")]
+def _every_kind(_meshes):
+    return [], [MeshTarget("body")], [MeshTarget("body")]
+
+
+_BODY_REPORTS = {
+    "get_mesh_uvs": {("body",): {"has_default_uv_map": False}},
+    "get_mesh_modifiers": {("body",): {"modifiers": []}},
+    "get_duplicate_meshes": [["a", "b"]],
+}
 
 
 @pytest.mark.parametrize("version", [None, "0.1.0", "dev"])
-async def test_an_addon_before_uvs_skips_uvs_and_modifiers(version):
+async def test_an_addon_before_uvs_skips_every_optional_request(version):
     addon = _FakeAddon([_BODY], version=version)
-    seen, requests = await _collect_meshes(addon, _uvs_and_modifiers)
+    seen, requests = await _collect_meshes(addon, _every_kind)
     assert _paged(requests) == [("get_meshes", 1, 0)]
-    assert seen[1] == MeshReport([_SCENE_BODY], [], [], None, None)
+    assert seen[1] == MeshReport([_SCENE_BODY], [], None, None, None, None)
 
 
 async def test_an_addon_before_modifiers_skips_them():
-    addon = _FakeAddon(
-        [_BODY],
-        reports={"get_mesh_uvs": {("body",): {"has_default_uv_map": False}}},
-        version="0.3.0",
-    )
-    seen, requests = await _collect_meshes(addon, _uvs_and_modifiers)
+    addon = _FakeAddon([_BODY], reports=_BODY_REPORTS, version="0.3.0")
+    seen, requests = await _collect_meshes(addon, _every_kind)
     assert _paged(requests) == [("get_meshes", 1, 0), ("get_mesh_uvs", 1, 0)]
-    assert seen[1] == MeshReport([_SCENE_BODY], [], [], [MeshUvs("body", False)], None)
+    assert seen[1] == MeshReport(
+        [_SCENE_BODY], [], None, [MeshUvs("body", False)], None, None
+    )
+
+
+async def test_an_addon_before_image_reports_skips_textures():
+    addon = _FakeAddon([_BODY], reports=_BODY_REPORTS, version="0.5.0")
+    seen, requests = await _collect_meshes(addon, _every_kind)
+    assert ("get_mesh_textures", 1, 0) not in _paged(requests)
+    assert seen[1] == MeshReport(
+        [_SCENE_BODY],
+        [],
+        None,
+        [MeshUvs("body", False)],
+        [MeshModifiers("body", [])],
+        [["a", "b"]],
+    )
+
+
+async def test_duplicates_are_fetched_only_for_textured_meshes():
+    def plan(_meshes):
+        return [], [], [MeshTarget("body")]
+
+    addon = _FakeAddon([_BODY], reports=_BODY_REPORTS)
+    seen, requests = await _collect_meshes(addon, plan)
+    assert ("get_duplicate_meshes", 1, 0) not in _paged(requests)
+    assert seen[1].duplicates == []
 
 
 async def test_each_save_sends_a_new_report():
@@ -475,7 +532,7 @@ async def test_each_save_sends_a_new_report():
     addon = _FakeAddon([_BODY], saves={3: "after"})
     seen, requests = await _collect_meshes(addon, count=3)
     assert _paged(requests) == [("get_meshes", 1, 0), ("get_meshes", 2, 0)]
-    assert seen[1:] == [MeshReport([_SCENE_BODY], [], [], [], [])] * 2
+    assert seen[1:] == [MeshReport([_SCENE_BODY], [], [], [], [], [])] * 2
 
 
 @pytest.mark.parametrize("when", ["before", "after"])
@@ -519,6 +576,7 @@ async def _meshes_error(meshes_answer):
         {"revision": 1, "mesh_weights": [], **_LAST},
         {"revision": 1, "mesh_uvs": [], **_LAST},
         {"revision": 1, "mesh_modifiers": [], **_LAST},
+        {"revision": 1, "duplicate_meshes": [], **_LAST},
     ],
 )
 async def test_an_unexpected_page_raises(result):

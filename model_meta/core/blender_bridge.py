@@ -10,6 +10,8 @@ PORT = 7417
 PROTOCOL = 1
 UVS_VERSION = (0, 2, 0)
 MODIFIERS_VERSION = (0, 4, 0)
+DUPLICATES_VERSION = (0, 5, 0)
+TEXTURES_VERSION = (0, 5, 1)
 
 
 class BridgeError(Exception):
@@ -45,12 +47,6 @@ class WeightTarget:
 
 
 @dataclass(frozen=True)
-class TextureTarget:
-    mesh: str
-    maps: list[str]
-
-
-@dataclass(frozen=True)
 class MeshTarget:
     mesh: str
 
@@ -68,11 +64,19 @@ class MeshWeight:
 
 
 @dataclass(frozen=True)
+class TextureImage:
+    """`filepath` is `None` for an image with no file, like an unsaved bake."""
+
+    name: str
+    filepath: str | None
+
+
+@dataclass(frozen=True)
 class MeshTextures:
-    """With `error` set (`"no mesh"`), `maps` is empty."""
+    """With `error` set (`"no mesh"`), `images` is empty."""
 
     mesh: str
-    maps: dict[str, bool]
+    images: list[TextureImage]
     error: str | None = None
 
 
@@ -96,25 +100,22 @@ class MeshModifiers:
 
 @dataclass(frozen=True)
 class MeshReport:
-    """`weights`, `textures`, `uvs` and `modifiers` answer the plan's targets, in order.
-    `uvs` / `modifiers` are `None` when the add-on predates `UVS_VERSION` /
-    `MODIFIERS_VERSION`."""
+    """`weights`, `textures` / `uvs` and `modifiers` answer the plan's targets, in order.
+    `duplicates` holds every same-shape group of scene meshes, fetched only when there are
+    textured targets. An optional list is `None` when the add-on predates its `_ADDED`
+    version."""
 
     meshes: list[SceneMesh]
     weights: list[MeshWeight]
-    textures: list[MeshTextures]
+    textures: list[MeshTextures] | None
     uvs: list[MeshUvs] | None
     modifiers: list[MeshModifiers] | None
+    duplicates: list[list[str]] | None
 
 
 MeshPlan = Callable[
     [list[SceneMesh]],
-    tuple[
-        Sequence[WeightTarget],
-        Sequence[TextureTarget],
-        Sequence[MeshTarget],
-        Sequence[MeshTarget],
-    ],
+    tuple[Sequence[WeightTarget], Sequence[MeshTarget], Sequence[MeshTarget]],
 ]
 
 
@@ -170,8 +171,8 @@ async def subscribe_meshes(
     """Yields the open file, then a `MeshReport` after each save/load; a new `OpenFile` whenever
     another file opens.
 
-    `plan(meshes)` picks the weight, texture, UV and modifier targets to fetch. Raises
-    like `subscribe_armatures`.
+    `plan(meshes)` picks the weight, textured (textures and UVs) and modifier targets to
+    fetch. Raises like `subscribe_armatures`.
     """
     async with _subscription("subscribe_meshes", port, timeout) as bridge:
         version = None
@@ -214,15 +215,22 @@ _PAGED = {
     "get_mesh_textures": "mesh_textures",
     "get_mesh_uvs": "mesh_uvs",
     "get_mesh_modifiers": "mesh_modifiers",
+    "get_duplicate_meshes": "duplicate_meshes",
 }
 
-# The add-on version that added each request; an older one leaves its list `None`.
-_ADDED = {"get_mesh_uvs": UVS_VERSION, "get_mesh_modifiers": MODIFIERS_VERSION}
+# The add-on version that added each request's current shape; an older one leaves its
+# list `None`.
+_ADDED = {
+    "get_mesh_textures": TEXTURES_VERSION,
+    "get_mesh_uvs": UVS_VERSION,
+    "get_mesh_modifiers": MODIFIERS_VERSION,
+    "get_duplicate_meshes": DUPLICATES_VERSION,
+}
 
 
 class _Fetch:
-    """One revision's pages: the meshes, then the planned weights, textures, UVs and
-    modifiers."""
+    """One revision's pages: the meshes, then the planned weights, textures, UVs,
+    modifiers and duplicates."""
 
     def __init__(self, revision: int, plan: MeshPlan, version: str | None) -> None:
         self.revision = revision
@@ -255,14 +263,15 @@ class _Fetch:
         self._queue.pop(0)
         self._cursor = 0
         if kind == "get_meshes":
-            weights, textures, uvs, modifiers = self._plan(self._items["meshes"])
+            weights, textured, modifiers = self._plan(self._items["meshes"])
             self._queue += [
-                (request_type, {"meshes": [asdict(target) for target in targets]})
-                for request_type, targets in (
-                    ("get_mesh_weights", weights),
-                    ("get_mesh_textures", textures),
-                    ("get_mesh_uvs", uvs),
-                    ("get_mesh_modifiers", modifiers),
+                (request_type, params)
+                for request_type, targets, params in (
+                    ("get_mesh_weights", weights, _targets(weights)),
+                    ("get_mesh_textures", textured, _targets(textured)),
+                    ("get_mesh_uvs", textured, _targets(textured)),
+                    ("get_mesh_modifiers", modifiers, _targets(modifiers)),
+                    ("get_duplicate_meshes", textured, {}),
                 )
                 if targets and request_type not in self._unsupported
             ]
@@ -271,13 +280,18 @@ class _Fetch:
         return MeshReport(
             self._items["meshes"],
             self._items["mesh_weights"],
-            self._items["mesh_textures"],
+            self._optional("get_mesh_textures"),
             self._optional("get_mesh_uvs"),
             self._optional("get_mesh_modifiers"),
+            self._optional("get_duplicate_meshes"),
         )
 
     def _optional(self, kind: str) -> list | None:
         return None if kind in self._unsupported else self._items[_PAGED[kind]]
+
+
+def _targets(targets: Sequence[WeightTarget | MeshTarget]) -> dict:
+    return {"meshes": [asdict(target) for target in targets]}
 
 
 @asynccontextmanager
@@ -420,13 +434,21 @@ def _mesh_weight(item: dict) -> MeshWeight | None:
 
 
 def _mesh_textures(item: dict) -> MeshTextures | None:
-    mesh, maps, error = item.get("mesh"), item.get("maps"), item.get("error")
+    mesh, images, error = item.get("mesh"), item.get("images"), item.get("error")
     if not isinstance(mesh, str):
         return None
     if "error" in item:
-        return MeshTextures(mesh, {}, error) if isinstance(error, str) else None
-    if isinstance(maps, dict) and all(isinstance(v, bool) for v in maps.values()):
-        return MeshTextures(mesh, maps)
+        return MeshTextures(mesh, [], error) if isinstance(error, str) else None
+    if not isinstance(images, list) or not all(isinstance(i, dict) for i in images):
+        return None
+    parsed = [_texture_image(image) for image in images]
+    return None if None in parsed else MeshTextures(mesh, parsed)
+
+
+def _texture_image(item: dict) -> TextureImage | None:
+    name, filepath = item.get("name"), item.get("filepath")
+    if isinstance(name, str) and (filepath is None or isinstance(filepath, str)):
+        return TextureImage(name, filepath)
     return None
 
 
@@ -449,12 +471,18 @@ def _mesh_modifiers(item: dict) -> MeshModifiers | None:
     return MeshModifiers(mesh, modifiers) if _is_str_list(modifiers) else None
 
 
+def _duplicates(item: dict) -> list[str] | None:
+    names = item.get("duplicates")
+    return names if _is_str_list(names) else None
+
+
 _ITEMS = {
     "meshes": _scene_mesh,
     "mesh_weights": _mesh_weight,
     "mesh_textures": _mesh_textures,
     "mesh_uvs": _mesh_uvs,
     "mesh_modifiers": _mesh_modifiers,
+    "duplicate_meshes": _duplicates,
 }
 
 

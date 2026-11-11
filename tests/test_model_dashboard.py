@@ -16,6 +16,7 @@ from model_meta.core.blender_bridge import (
     MeshWeight,
     OpenFile,
     SceneMesh,
+    TextureImage,
 )
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import (
@@ -24,6 +25,7 @@ from model_meta.core.results import (
     ModifiersResult,
     Results,
 )
+from model_meta.specs import schema
 from model_meta.tui.screens import model_dashboard
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
@@ -89,13 +91,23 @@ def _fake_subscription(monkeypatch, name, wrap, *, reachable=True):
 def _passing_report(meshes, plan):
     """Every planned weight, texture and modifier passes, so only the scene meshes
     decide."""
-    weights, textures, uvs, modifiers = plan(meshes)
+    weights, textured, modifiers = plan(meshes)
     return MeshReport(
         meshes,
         [MeshWeight(t.mesh, t.vertex_group, 10, 10, 10) for t in weights],
-        [MeshTextures(t.mesh, dict.fromkeys(t.maps, True)) for t in textures],
-        [MeshUvs(t.mesh, False) for t in uvs],
+        [
+            MeshTextures(
+                t.mesh,
+                [
+                    TextureImage(m, f"/textures/{t.mesh}_{m}.png")
+                    for m in schema.TEXTURE_MAPS
+                ],
+            )
+            for t in textured
+        ],
+        [MeshUvs(t.mesh, False) for t in textured],
         [MeshModifiers(t.mesh, ["ARMATURE"]) for t in modifiers],
+        [],
     )
 
 

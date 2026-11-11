@@ -3,15 +3,16 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from pathlib import PurePath
 
 from model_meta.core.blender_bridge import (
+    TEXTURES_VERSION,
     MeshReport,
     MeshTarget,
     MeshTextures,
     MeshUvs,
     MeshWeight,
     SceneMesh,
-    TextureTarget,
     WeightTarget,
 )
 from model_meta.core.results import FieldCheck, MeshRoleResult
@@ -19,17 +20,18 @@ from model_meta.core.spec import MeshRole
 from model_meta.specs import parenting
 
 NO_MESHES = "no meshes matched"
+OLD_ADDON = f"add-on before {'.'.join(map(str, TEXTURES_VERSION))}"
 
 Failures = list[dict[str, object]]
 
 
 def plan(
     roles: Mapping[str, MeshRole], meshes: Sequence[SceneMesh]
-) -> tuple[list[WeightTarget], list[TextureTarget], list[MeshTarget], list[MeshTarget]]:
-    """The bridge targets `evaluate` needs: deduped, one texture and UV target per
-    textured mesh, and one modifier target per matched mesh."""
+) -> tuple[list[WeightTarget], list[MeshTarget], list[MeshTarget]]:
+    """The bridge targets `evaluate` needs, deduped: weights, one target per textured
+    mesh, and one per matched mesh."""
     weights: dict[WeightTarget, None] = {}
-    maps: dict[str, dict[str, None]] = {}
+    textured: dict[str, None] = {}
     matched_names: dict[str, None] = {}
     for role in roles.values():
         matched, _ = _matched(role, meshes)
@@ -38,13 +40,11 @@ def plan(
             if role.weight is not None and role.vtx_grp is not None:
                 for group in _groups(role.vtx_grp, mesh):
                     weights[WeightTarget(mesh.name, group, role.weight)] = None
-            for name in role.texture_maps or []:
-                maps.setdefault(mesh.name, {})[name] = None
-    textures = [TextureTarget(mesh, list(names)) for mesh, names in maps.items()]
+            if role.texture_maps:
+                textured[mesh.name] = None
     return (
         list(weights),
-        textures,
-        [MeshTarget(mesh) for mesh in maps],
+        [MeshTarget(mesh) for mesh in textured],
         [MeshTarget(mesh) for mesh in matched_names],
     )
 
@@ -53,31 +53,31 @@ def evaluate(
     roles: Mapping[str, MeshRole], report: MeshReport
 ) -> dict[str, MeshRoleResult]:
     """Pass a `report` fetched with `plan(roles, ...)`, so its items line up."""
-    weight_targets, texture_targets, uv_targets, _ = plan(roles, report.meshes)
+    weight_targets, textured, _ = plan(roles, report.meshes)
     scene = _Scene(
         dict(zip(weight_targets, report.weights, strict=True)),
-        {
-            target.mesh: result
-            for target, result in zip(texture_targets, report.textures, strict=True)
-        },
-        None
-        if report.uvs is None
-        else {
-            target.mesh: result
-            for target, result in zip(uv_targets, report.uvs, strict=True)
-        },
+        _by_mesh(textured, report.textures),
+        _by_mesh(textured, report.uvs),
     )
     return {
         name: _role_result(role, report.meshes, scene) for name, role in roles.items()
     }
 
 
+def _by_mesh(targets: list[MeshTarget], results: list | None) -> dict | None:
+    if results is None:
+        return None
+    return {
+        target.mesh: result for target, result in zip(targets, results, strict=True)
+    }
+
+
 @dataclass(frozen=True)
 class _Scene:
-    """`uvs` is `None` when the add-on predates `get_mesh_uvs`."""
+    """`textures` / `uvs` are `None` when the add-on predates them."""
 
     weights: dict[WeightTarget, MeshWeight]
-    textures: dict[str, MeshTextures]
+    textures: dict[str, MeshTextures] | None
     uvs: dict[str, MeshUvs] | None
 
 
@@ -131,13 +131,24 @@ def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures
 
 
 def _texture_maps(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures:
+    if scene.textures is None:
+        return [{"error": OLD_ADDON}]
     failures = []
     for mesh in matched:
         result = scene.textures[mesh.name]
         if result.error is not None:
             failures.append({"mesh": mesh.name, "error": result.error})
             continue
-        missing = [name for name in role.texture_maps if not result.maps.get(name)]
+        files = [
+            PurePath(image.filepath).name
+            for image in result.images
+            if image.filepath is not None
+        ]
+        missing = [
+            name
+            for name in role.texture_maps
+            if not any(f.endswith(f"{mesh.name}_{name}.png") for f in files)
+        ]
         if missing:
             failures.append(
                 {"mesh": mesh.name, "missing": missing, **_unwrap(mesh.name, scene)}

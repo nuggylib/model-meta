@@ -6,11 +6,10 @@ Textual, no UI.
 
 ## Files
 - `mesh_roles.py` — the `mesh_roles` check.
-  - `plan(roles, meshes)`: the `WeightTarget`s, `TextureTarget`s, and UV and
-    modifier `MeshTarget`s to fetch, deduped, with one texture target per mesh
-    that holds every role's maps, one UV target per textured mesh, and one
-    modifier target per mesh any role matches. The screen passes
-    `functools.partial(plan, roles)` to `subscribe_meshes`.
+  - `plan(roles, meshes)`: the `WeightTarget`s, then one textured
+    `MeshTarget` per mesh a role with `texture_maps` matches (for textures and
+    UVs), then one per mesh any role matches (for modifiers), deduped. The
+    screen passes `functools.partial(plan, roles)` to `subscribe_meshes`.
   - `evaluate(roles, report)`: one `MeshRoleResult` per role. It re-runs `plan`
     to line the report's items up with their targets, so the report must come
     from the same roles.
@@ -30,6 +29,10 @@ Textual, no UI.
       with `"vtx_grp not set"`.
     - `texture_maps` / `material_slots`: `{"mesh", "missing"}`, or the
       bridge's `error` for textures. Extra slots and their order don't matter.
+      A map is present when one of the mesh's images has a file whose name
+      ends with `<mesh>_<map>.png`. An image with no file never counts. With
+      an add-on before 0.5.1 (`textures` `None`), `texture_maps` fails once
+      with `OLD_ADDON`.
     - A `texture_maps` failure with `missing` also gets
       `"has_default_uv_map": True` when the bridge reports one for that mesh
       (a `False` is left out as noise), or its `uv_error`. It is a hint,
