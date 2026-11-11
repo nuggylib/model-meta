@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -25,21 +25,54 @@ from model_meta.tui.widgets.selectable_row import SelectableRow
 _NO_RESULTS = "No results yet."
 _STATES = {True: "passing", WARNING: "warning", False: "failing"}
 
-# Keyed by a check's key in the results file, wherever it sits.
-_FIX_STEPS = {
-    "armature": "Name the armature object in Blender as the spec's `object_name`.",
-    "count": "Rename the role's meshes so exactly `count` of them fully match its "
-    "`mesh_regex`.",
-    "vtx_grp": "Add a vertex group matching the role's `vtx_grp` to each listed mesh.",
-    "weight": "In Weight Paint mode, assign every vertex of each listed mesh to its "
-    "group at the role's `weight`.",
-    "material_slots": "Add a material slot for each missing name to the listed mesh.",
-    "skinned_meshes": "Add each missing modifier to the listed mesh in its Modifier "
-    "Properties.",
-    "warn": "Confirm each listed modifier belongs on the mesh, or apply or remove it "
-    "before export.",
-    "fail": "Apply or remove each listed modifier from the mesh before export.",
+Fixes = Callable[[list[dict]], list[str]]
+
+
+def _once(text: str) -> Fixes:
+    return lambda _failures: [text]
+
+
+def _texture_fixes(failures: list[dict]) -> list[str]:
+    return [
+        f"Bake a texture map named {file} for {failure['mesh']}"
+        for failure in failures
+        for file in failure.get("expected", [])
+    ]
+
+
+# Keyed by a check's key in the results file, wherever it sits: its fixes, from its
+# failures.
+_FIXES: dict[str, Fixes] = {
+    "armature": _once(
+        "Name the armature object in Blender as the spec's `object_name`."
+    ),
+    "count": _once(
+        "Rename the role's meshes so exactly `count` of them fully match its "
+        "`mesh_regex`."
+    ),
+    "vtx_grp": _once(
+        "Add a vertex group matching the role's `vtx_grp` to each listed mesh."
+    ),
+    "weight": _once(
+        "In Weight Paint mode, assign every vertex of each listed mesh to its group "
+        "at the role's `weight`."
+    ),
+    "texture_maps": _texture_fixes,
+    "material_slots": _once(
+        "Add a material slot for each missing name to the listed mesh."
+    ),
+    "skinned_meshes": _once(
+        "Add each missing modifier to the listed mesh in its Modifier Properties."
+    ),
+    "warn": _once(
+        "Confirm each listed modifier belongs on the mesh, or apply or remove it "
+        "before export."
+    ),
+    "fail": _once("Apply or remove each listed modifier from the mesh before export."),
 }
+
+# Failure facts a check's fixes restate, so its section doesn't list them again.
+_RESTATED = {"texture_maps": {"expected"}}
 
 # Keyed by a failure's fact; shown once when any failure has it set to `True`.
 _WARNINGS = {
@@ -47,18 +80,6 @@ _WARNINGS = {
     "unwrapped yet: its UVs match a primitive's default layout. Check them before "
     "baking.",
 }
-
-
-def _texture_steps(failure: dict) -> list[str]:
-    return [
-        f"Bake a texture map named {file} for this mesh"
-        for file in failure.get("expected", [])
-    ]
-
-
-# Keyed by a check's key: the numbered fixes under each failure, and the facts they
-# restate, which aren't listed again.
-_FAILURE_STEPS = {"texture_maps": (_texture_steps, {"expected"})}
 
 _DUPLICATES_HELP = (
     "The meshes in each `duplicates` group have the same shape, so they can share "
@@ -144,7 +165,11 @@ class CheckDetailScreen(Screen):
         await lines.remove_children()
         if value is None or value == {}:
             await lines.mount(Static(_NO_RESULTS, classes="config-detail"))
-        elif isinstance(value, dict) and not is_check(value):
+            return
+        fixes = list(_fixes(value, () if isinstance(value, dict) else self.path[-1:]))
+        if fixes:
+            await lines.mount(_fix_section(fixes))
+        if isinstance(value, dict) and not is_check(value):
             await lines.mount_all(_sections(value, self._overrides(results)))
         else:
             await lines.mount(_section((self.path[-1],), value))
@@ -212,18 +237,14 @@ def _section(
     if isinstance(value, bool) or is_check(value):
         status = status_of(value)
         failures = value["failures"] if is_check(value) else []
-        children: list[Widget] = _statics([f"{icon(status)} {_STATES[status]}"])
-        steps, restated = _FAILURE_STEPS.get(key, (lambda _failure: [], set()))
-        for failure in failures:
-            facts = {k: v for k, v in failure.items() if k not in restated}
-            children += _statics(_fact_lines([facts]))
-            if fixes := steps(failure):
-                box = Vertical(
-                    *_statics([f"{n}. {fix}" for n, fix in enumerate(fixes, 1)]),
-                    classes="check-steps",
-                )
-                box.border_title = "How to fix"
-                children.append(box)
+        restated = _RESTATED.get(key, set())
+        facts = [
+            {k: v for k, v in failure.items() if k not in restated}
+            for failure in failures
+        ]
+        children: list[Widget] = _statics(
+            [f"{icon(status)} {_STATES[status]}", *_fact_lines(facts)]
+        )
         duplicates = value.get("duplicates", []) if is_check(value) else []
         if duplicates:
             children += _statics(["duplicates:"])
@@ -250,18 +271,35 @@ def _section(
             for fact, text in _WARNINGS.items()
             if any(failure.get(fact) is True for failure in failures)
         ]
-        if status is not True and key in _FIX_STEPS:
-            children.append(
-                Static(
-                    f"How to fix: {_FIX_STEPS[key]}",
-                    classes="config-detail check-fix",
-                    markup=False,
-                )
-            )
     else:
         children = _statics([_text(value)])
     section = Vertical(*children, classes="check-section")
     section.border_title = " > ".join(keys)
+    return section
+
+
+def _fixes(value: object, keys: tuple[str, ...]) -> Iterator[tuple[str, list[str]]]:
+    """Each failing or warning check's label (its section's title) and fixes."""
+    if isinstance(value, bool) or is_check(value):
+        fixes = _FIXES.get(keys[-1])
+        failures = value["failures"] if is_check(value) else []
+        if status_of(value) is not True and fixes and (items := fixes(failures)):
+            yield " > ".join(keys), items
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            yield from _fixes(child, (*keys, key))
+
+
+def _fix_section(fixes: list[tuple[str, list[str]]]) -> Vertical:
+    children: list[Widget] = []
+    for label, items in fixes:
+        children.append(Static(label, classes="check-line fix-label", markup=False))
+        children += [
+            Static(f"{n}. {item}", classes="check-line fix-item", markup=False)
+            for n, item in enumerate(items, 1)
+        ]
+    section = Vertical(*children, classes="check-section check-fixes")
+    section.border_title = "How to fix"
     return section
 
 

@@ -144,19 +144,17 @@ CheckDetailScreen .check-section {
     border-title-color: $accent;
 }
 
-CheckDetailScreen .check-fix {
-    margin-top: 1;
+/* The page's fixes, above its checks: each check's label, then its numbered fixes. */
+CheckDetailScreen .check-fixes {
+    border: round $warning;
 }
 
-/* One failure's numbered fixes, nested in its check's box and lined up with the
-   failure's facts, past their "- ". */
-CheckDetailScreen .check-steps {
-    width: auto;
-    height: auto;
-    margin: 0 0 0 2;
-    padding: 0 1;
-    border: round $panel;
-    border-title-color: $accent;
+CheckDetailScreen .fix-label {
+    text-style: bold;
+}
+
+CheckDetailScreen .fix-item {
+    padding-left: 2;
 }
 
 CheckDetailScreen .check-warning {

@@ -118,16 +118,16 @@ async def test_unreadable_results_say_no_results():
     assert await _open(("armature",), None) == ["No results yet."]
 
 
-async def test_a_failing_bool_check_is_a_section_with_its_fix():
+async def test_a_failing_bool_check_is_a_section_under_its_fix():
     app = _Host(("armature",), _results(armature=False))
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app) == {
-            "armature": [
-                "❌ failing",
-                "How to fix: Name the armature object in Blender as the spec's "
-                "`object_name`.",
-            ]
+            "How to fix": [
+                "armature",
+                "1. Name the armature object in Blender as the spec's `object_name`.",
+            ],
+            "armature": ["❌ failing"],
         }
 
 
@@ -156,15 +156,25 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
     async with app.run_test() as pilot:
         await pilot.pause()
         sections = _sections(app)
+    assert list(sections)[0] == "How to fix"
     assert sections == {
-        "meshes": ["wheel_hub.front.L, wheel_hub.front.R"],
-        "count": [
-            "❌ failing",
-            "- expected: 4",
-            "  matched: 2",
-            "How to fix: Rename the role's meshes so exactly `count` of them fully "
-            "match its `mesh_regex`.",
+        "How to fix": [
+            "count",
+            "1. Rename the role's meshes so exactly `count` of them fully match its "
+            "`mesh_regex`.",
+            "weight",
+            "1. In Weight Paint mode, assign every vertex of each listed mesh to its "
+            "group at the role's `weight`.",
+            "texture_maps",
+            "1. Bake a texture map named wheel_hub.front.L_orm.png for "
+            "wheel_hub.front.L",
+            "2. Bake a texture map named wheel_hub.front.R_albedo.png for "
+            "wheel_hub.front.R",
+            "3. Bake a texture map named wheel_hub.front.R_orm.png for "
+            "wheel_hub.front.R",
         ],
+        "meshes": ["wheel_hub.front.L, wheel_hub.front.R"],
+        "count": ["❌ failing", "- expected: 4", "  matched: 2"],
         "weight": [
             "❌ failing",
             "- mesh: wheel_hub.front.R",
@@ -172,20 +182,15 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "  vertices: 340",
             "  assigned: 328",
             "  at_weight: 300",
-            "How to fix: In Weight Paint mode, assign every vertex of each listed "
-            "mesh to its group at the role's `weight`.",
         ],
         "texture_maps": [
             "❌ failing",
             "- mesh: wheel_hub.front.L",
             "  missing: orm",
             "  has_default_uv_map: True",
-            "1. Bake a texture map named wheel_hub.front.L_orm.png for this mesh",
             "- mesh: wheel_hub.front.R",
             "  missing: albedo, orm",
             "  uv_error: in edit mode",
-            "1. Bake a texture map named wheel_hub.front.R_albedo.png for this mesh",
-            "2. Bake a texture map named wheel_hub.front.R_orm.png for this mesh",
             "duplicates:",
             "▸ wheel_hub.front.L, wheel_hub.front.R",
             _DUPLICATES_HELP,
@@ -196,7 +201,7 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
     }
 
 
-async def test_texture_steps_name_the_override_file_and_skip_errors():
+async def test_texture_fixes_name_the_override_file_and_skip_errors():
     failures = [
         {
             "mesh": "arm_top.FL",
@@ -209,16 +214,19 @@ async def test_texture_steps_name_the_override_file_and_skip_errors():
     app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _sections(app)["texture_maps"] == [
-            "❌ failing",
-            "- mesh: arm_top.FL",
-            "  missing: albedo",
-            "1. Bake a texture map named arm_top_albedo.png for this mesh",
-            "- mesh: arm_top.FR",
-            "  error: no mesh",
+        assert _sections(app)["How to fix"] == [
+            "texture_maps",
+            "1. Bake a texture map named arm_top_albedo.png for arm_top.FL",
         ]
-        boxes = app.screen.query(".check-steps")
-        assert [box.border_title for box in boxes] == ["How to fix"]
+
+
+async def test_a_check_with_no_fix_text_adds_no_fix_section():
+    failures = [{"mesh": "arm_top.FR", "error": "no mesh"}]
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck(failures)})}
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert "How to fix" not in _sections(app)
 
 
 _DUPLICATES_HELP = (
@@ -368,29 +376,31 @@ _MODIFIERS = ModifiersResult(
     FieldCheck([]),
 )
 _MODIFIER_SECTIONS = {
-    "required > skinned_meshes": [
-        "❌ failing",
-        "- mesh: body",
-        "  missing: ARMATURE",
-        "How to fix: Add each missing modifier to the listed mesh in its Modifier "
-        "Properties.",
-    ],
-    "warn": [
-        "⚠️ warning",
-        "- mesh: body",
-        "  modifiers: MIRROR, SUBSURF",
-        "How to fix: Confirm each listed modifier belongs on the mesh, or apply or "
-        "remove it before export.",
-    ],
+    "required > skinned_meshes": ["❌ failing", "- mesh: body", "  missing: ARMATURE"],
+    "warn": ["⚠️ warning", "- mesh: body", "  modifiers: MIRROR, SUBSURF"],
     "fail": ["✅ passing"],
 }
+_MODIFIER_FIXES = {
+    "required > skinned_meshes": "1. Add each missing modifier to the listed mesh in "
+    "its Modifier Properties.",
+    "warn": "1. Confirm each listed modifier belongs on the mesh, or apply or remove "
+    "it before export.",
+}
+
+
+def _fix_lines(prefix=""):
+    return [
+        line
+        for label, fix in _MODIFIER_FIXES.items()
+        for line in (f"{prefix}{label}", fix)
+    ]
 
 
 async def test_modifiers_show_a_section_per_list_titled_by_its_path():
     app = _Host(("modifiers",), _results(modifiers=_MODIFIERS))
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _sections(app) == _MODIFIER_SECTIONS
+        assert _sections(app) == {"How to fix": _fix_lines(), **_MODIFIER_SECTIONS}
 
 
 async def test_a_role_shows_its_own_modifier_sections():
@@ -399,6 +409,7 @@ async def test_a_role_shows_its_own_modifier_sections():
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app) == {
+            "How to fix": _fix_lines("modifiers > "),
             "meshes": ["body"],
             **{
                 f"modifiers > {key}": lines for key, lines in _MODIFIER_SECTIONS.items()

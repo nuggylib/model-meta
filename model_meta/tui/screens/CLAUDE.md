@@ -215,13 +215,8 @@ in the app (analogous to a route in a web app).
     `modifiers > warn` on a role). A bool or a check shows `✅ passing`,
     `⚠️ warning` (a failing `warning` check) or `❌ failing`. A warning or a
     failure lists every failure's facts as `key: value` lines (the first
-    marked `- `). A `_FAILURE_STEPS` entry, keyed by the check's key, nests
-    a `How to fix` box (`.check-steps`) under each failure that has fixes, as
-    a numbered list, and drops the facts they restate. `texture_maps` lists
-    one fix per `expected` file ("Bake a texture map named X_albedo.png for
-    this mesh") and hides `expected`. Then comes the check's `_FIX_STEPS` entry, keyed by the last
-    key in the path, as `How to fix: ...` (`.check-fix`). `texture_maps` has
-    no entry: its per-mesh steps replace it. A check with `duplicates`
+    marked `- `), minus the facts its fixes restate (`_RESTATED`:
+    `texture_maps` hides `expected`). A check with `duplicates`
     lists them after its failures, passing or not, as `duplicates:` and one
     `SelectableRow` per group, keyed by the group as a tuple, then
     `_DUPLICATES_HELP`. On a role's page, the `texture_maps` section then
@@ -231,13 +226,22 @@ in the app (analogous to a route in a web app).
     `TextureMapOverrideModal` and passes a non-`None` result to
     `source.add_texture_map_override`. A remount refocuses the group row that
     had focus. A `_WARNINGS` entry, keyed by a failure fact, shows once
-    as `Warning: ...` (`.check-warning`) before the fix when any failure has
-    that fact `True`; `texture_maps`' `has_default_uv_map` is the only one.
+    as `Warning: ...` (`.check-warning`) when any failure has that fact
+    `True`; `texture_maps`' `has_default_uv_map` is the only one.
     A list (`meshes`) shows `format_list`. Only set fields
     have a check, so only they get a section.
   - **A bool or a check** (`armature`): that one section, titled by its key.
+  - **How to fix:** every fix on the page sits in one `How to fix` section
+    (`.check-fixes`) above the others. It shows only when a failing or
+    warning check has fixes. `_fixes` walks the value: each such check gets
+    a bold label (its section's title, e.g. `modifiers > warn`), then its
+    `_FIXES` entry's items as a numbered list. A `_FIXES` entry maps the
+    check's failures to items: one fixed text (`_once`), or `texture_maps`'
+    "Bake a texture map named <expected> for <mesh>", one per `expected`
+    file, so an override's name shows. A check with no items (a failure
+    that is only an `error`) gets no label.
   A missing value, an empty container or an unreadable file shows `No results
-  yet.` A new field's fix text is a `_FIX_STEPS` entry, never a new screen.
+  yet.` A new field's fix text is a `_FIXES` entry, never a new screen.
   It subscribes to `source.results_changed` on mount and redraws on each
   publish. Only `escape` and `MOVE` are bound; outside the row list,
   `#check-lines` keeps its focus so long pages scroll.
