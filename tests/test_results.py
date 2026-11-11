@@ -236,6 +236,20 @@ def test_a_passing_warning_check_keeps_its_flag():
     assert FieldCheck([]).to_dict() == _PASSING
 
 
+def test_duplicates_round_trip_and_are_omitted_when_empty():
+    groups = [["arm_top.FL", "arm_top.FR"]]
+    data = {**_PASSING, "duplicates": groups}
+    assert FieldCheck.from_dict(data, where="x").to_dict() == data
+    assert FieldCheck.from_dict(_PASSING, where="x").duplicates == []
+
+
+@pytest.mark.parametrize("duplicates", [["arm_top.FL"], [[1]], {}])
+def test_rejects_malformed_duplicates(duplicates):
+    data = {**_PASSING, "duplicates": duplicates}
+    with pytest.raises(ValueError, match=re.escape("`x.duplicates` is not a list")):
+        FieldCheck.from_dict(data, where="x")
+
+
 @pytest.mark.parametrize(
     ("modifiers", "message"),
     [

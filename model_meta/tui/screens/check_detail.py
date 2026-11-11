@@ -30,8 +30,8 @@ _FIX_STEPS = {
     "vtx_grp": "Add a vertex group matching the role's `vtx_grp` to each listed mesh.",
     "weight": "In Weight Paint mode, assign every vertex of each listed mesh to its "
     "group at the role's `weight`.",
-    "texture_maps": "Bake each missing map, save it as `<mesh>_<map>.png`, and load it "
-    "in an Image Texture node of the mesh's material.",
+    "texture_maps": "Bake each missing map, save it under its `expected` name, and load "
+    "it in an Image Texture node of the mesh's material.",
     "material_slots": "Add a material slot for each missing name to the listed mesh.",
     "skinned_meshes": "Add each missing modifier to the listed mesh in its Modifier "
     "Properties.",
@@ -46,6 +46,11 @@ _WARNINGS = {
     "unwrapped yet: its UVs match a primitive's default layout. Check them before "
     "baking.",
 }
+
+_DUPLICATES_HELP = (
+    "The meshes in each `duplicates` group have the same shape, so they can share "
+    "texture maps."
+)
 
 
 class CheckDetailScreen(Screen):
@@ -161,7 +166,14 @@ def _section(keys: tuple[str, ...], value: object) -> Vertical:
         lines = [f"{icon(status)} {_STATES[status]}"]
         failures = value["failures"] if is_check(value) else []
         lines += _failure_lines(failures)
+        duplicates = value.get("duplicates", []) if is_check(value) else []
+        if duplicates:
+            lines += ["duplicates:", *(f"- {_text(group)}" for group in duplicates)]
         children: list[Widget] = _statics(lines)
+        if duplicates:
+            children.append(
+                Static(_DUPLICATES_HELP, classes="config-detail", markup=False)
+            )
         children += [
             Static(
                 f"Warning: {text}",

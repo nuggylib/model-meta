@@ -133,7 +133,9 @@ storage, and connections to the external apps Model Meta validates against.
   `FieldCheck.passed` is derived from `failures` being empty, so it can't
   disagree in memory, and `from_dict` rejects a file where it does.
   `FieldCheck.warning` marks a check whose failures are warnings (`warn`), and
-  is written as `"warning": true` only when set. Failures are fact dicts,
+  is written as `"warning": true` only when set. `FieldCheck.duplicates` lists
+  `texture_maps`' same-shape mesh groups, written only when non-empty, and
+  doesn't affect `passed`. Failures are fact dicts,
   stored as given. Every class's `from_dict(data, where=)` raises
   `ValueError` naming the dotted path, e.g. `mesh_roles.wheels.count.passed`.
   `checks.mesh_roles.evaluate` and `checks.modifiers.evaluate` build them.

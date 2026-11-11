@@ -37,14 +37,20 @@ _ROLES = {
                     {
                         "mesh": "wheel_hub.front.L",
                         "missing": ["orm"],
+                        "expected": ["wheel_hub.front.L_orm.png"],
                         "has_default_uv_map": True,
                     },
                     {
                         "mesh": "wheel_hub.front.R",
                         "missing": ["albedo", "orm"],
+                        "expected": [
+                            "wheel_hub.front.R_albedo.png",
+                            "wheel_hub.front.R_orm.png",
+                        ],
                         "uv_error": "in edit mode",
                     },
-                ]
+                ],
+                duplicates=[["wheel_hub.front.L", "wheel_hub.front.R"]],
             ),
         },
     ),
@@ -158,17 +164,42 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "❌ failing",
             "- mesh: wheel_hub.front.L",
             "  missing: orm",
+            "  expected: wheel_hub.front.L_orm.png",
             "  has_default_uv_map: True",
             "- mesh: wheel_hub.front.R",
             "  missing: albedo, orm",
+            "  expected: wheel_hub.front.R_albedo.png, wheel_hub.front.R_orm.png",
             "  uv_error: in edit mode",
+            "duplicates:",
+            "- wheel_hub.front.L, wheel_hub.front.R",
+            _DUPLICATES_HELP,
             "Warning: A mesh with `has_default_uv_map: True` may not be unwrapped "
             "yet: its UVs match a primitive's default layout. Check them before "
             "baking.",
-            "How to fix: Bake each missing map, save it as `<mesh>_<map>.png`, and "
-            "load it in an Image Texture node of the mesh's material.",
+            "How to fix: Bake each missing map, save it under its `expected` name, "
+            "and load it in an Image Texture node of the mesh's material.",
         ],
     }
+
+
+_DUPLICATES_HELP = (
+    "The meshes in each `duplicates` group have the same shape, so they can share "
+    "texture maps."
+)
+
+
+async def test_a_passing_texture_check_still_lists_its_duplicates():
+    check = FieldCheck([], duplicates=[["arm_top.FL", "arm_top.FR"]])
+    roles = {"arms": MeshRoleResult(["arm_top.FL"], {"texture_maps": check})}
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["texture_maps"] == [
+            "✅ passing",
+            "duplicates:",
+            "- arm_top.FL, arm_top.FR",
+            _DUPLICATES_HELP,
+        ]
 
 
 async def test_no_default_uv_map_shows_no_warning():

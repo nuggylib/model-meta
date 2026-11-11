@@ -78,7 +78,7 @@ def _answer(answer, targets):
     return None if answer is None else [answer(target) for target in targets]
 
 
-def _evaluate(
+def _report(
     roles=ROLES,
     meshes=SCENE,
     weight=_passing_weight,
@@ -86,7 +86,7 @@ def _evaluate(
     uvs=_unwrapped,
 ):
     weights, textured, _ = mesh_roles.plan(roles, meshes)
-    report = MeshReport(
+    return MeshReport(
         meshes,
         _answer(weight, weights),
         _answer(textures, textured),
@@ -94,7 +94,10 @@ def _evaluate(
         None,
         None,
     )
-    return mesh_roles.evaluate(roles, report)
+
+
+def _evaluate(roles=ROLES, **answers):
+    return mesh_roles.evaluate(roles, _report(roles, **answers))
 
 
 def _failures(result):
@@ -232,10 +235,35 @@ def test_missing_texture_maps_are_named_per_mesh():
 
     failures = _failures(_evaluate(textures=textures)["wheels"])
     assert failures["texture_maps"] == [
-        {"mesh": "wheel_hub.front.R", "missing": ["orm"]},
-        {"mesh": "wheel_hub.rear.L", "missing": ["orm"]},
+        {
+            "mesh": "wheel_hub.front.R",
+            "missing": ["orm"],
+            "expected": ["wheel_hub.front.R_orm.png"],
+        },
+        {
+            "mesh": "wheel_hub.rear.L",
+            "missing": ["orm"],
+            "expected": ["wheel_hub.rear.L_orm.png"],
+        },
         {"mesh": "wheel_hub.rear.R", "error": "no mesh"},
     ]
+
+
+def test_texture_maps_list_the_roles_duplicate_groups_even_when_passing():
+    groups = [
+        ["spare", "wheel_hub.front.L", "wheel_hub.front.R"],
+        ["wheel_hub.rear.L", "wheel_hub.rear.R"],
+        ["body", "stand"],
+    ]
+    report = replace(_report(), duplicates=groups)
+    check = mesh_roles.evaluate(ROLES, report)["wheels"].checks["texture_maps"]
+    assert check == FieldCheck(
+        [],
+        duplicates=[
+            ["wheel_hub.front.L", "wheel_hub.front.R"],
+            ["wheel_hub.rear.L", "wheel_hub.rear.R"],
+        ],
+    )
 
 
 def test_an_addon_before_image_reports_fails_texture_maps():
@@ -256,20 +284,21 @@ def test_a_missing_map_carries_the_meshes_uv_report():
         return _unwrapped(target)
 
     failures = _failures(_evaluate(textures=_missing_albedo, uvs=uvs)["wheels"])
-    missing = {"missing": ["albedo"]}
     assert failures["texture_maps"] == [
-        {"mesh": "wheel_hub.front.L", **missing, "has_default_uv_map": True},
-        {"mesh": "wheel_hub.front.R", **missing},
-        {"mesh": "wheel_hub.rear.L", **missing, "uv_error": "in edit mode"},
-        {"mesh": "wheel_hub.rear.R", **missing},
+        {**_missing("wheel_hub.front.L"), "has_default_uv_map": True},
+        _missing("wheel_hub.front.R"),
+        {**_missing("wheel_hub.rear.L"), "uv_error": "in edit mode"},
+        _missing("wheel_hub.rear.R"),
     ]
+
+
+def _missing(mesh):
+    return {"mesh": mesh, "missing": ["albedo"], "expected": [f"{mesh}_albedo.png"]}
 
 
 def test_an_addon_without_uvs_leaves_the_unwrap_out():
     failures = _failures(_evaluate(textures=_missing_albedo, uvs=None)["wheels"])
-    assert failures["texture_maps"] == [
-        {"mesh": name, "missing": ["albedo"]} for name in WHEEL_NAMES
-    ]
+    assert failures["texture_maps"] == [_missing(name) for name in WHEEL_NAMES]
 
 
 def test_material_slots_must_all_be_present_in_any_order():

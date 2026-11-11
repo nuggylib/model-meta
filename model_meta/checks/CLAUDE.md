@@ -17,8 +17,9 @@ Textual, no UI.
     `mesh_regex` (`re.fullmatch`).
   - Each set field becomes a `FieldCheck` holding one dict of facts per
     failure. The UI words them; nothing here writes prose. `_CHECKS` lists the
-    fields in spec order, each with its "is set" test and its check. An
-    absent field, or an empty `texture_maps` / `material_slots`, is left out.
+    fields in spec order, each with its "is set" test and its check, which
+    returns the `FieldCheck`. An absent field, or an empty `texture_maps` /
+    `material_slots`, is left out.
     - `count`: `{"expected", "matched"}` when the matched total is wrong.
     - `vtx_grp`: `{"mesh"}` for a mesh with no vertex group matching the
       pattern (`parenting.match`). Other groups, like recoloring ones, are
@@ -30,9 +31,14 @@ Textual, no UI.
     - `texture_maps` / `material_slots`: `{"mesh", "missing"}`, or the
       bridge's `error` for textures. Extra slots and their order don't matter.
       A map is present when one of the mesh's images has a file whose name
-      ends with `<mesh>_<map>.png`. An image with no file never counts. With
-      an add-on before 0.5.1 (`textures` `None`), `texture_maps` fails once
-      with `OLD_ADDON`.
+      ends with `<mesh>_<map>.png`. An image with no file never counts. A
+      `texture_maps` failure also lists `expected`, the exact filename each
+      missing map needs. With an add-on before 0.5.1 (`textures` `None`),
+      `texture_maps` fails once with `OLD_ADDON`.
+    - `texture_maps` always sets `duplicates`: the report's same-shape
+      groups, reduced to the role's matched meshes, keeping groups of two or
+      more. They are set whether the check passes or fails, and are empty
+      when the add-on predates `get_duplicate_meshes`.
     - A `texture_maps` failure with `missing` also gets
       `"has_default_uv_map": True` when the bridge reports one for that mesh
       (a `False` is left out as noise), or its `uv_error`. It is a hint,

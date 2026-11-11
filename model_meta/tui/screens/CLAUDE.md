@@ -201,7 +201,9 @@ in the app (analogous to a route in a web app).
     `⚠️ warning` (a failing `warning` check) or `❌ failing`. A warning or a
     failure lists every failure's facts as `key: value` lines (the first
     marked `- `) and then its `_FIX_STEPS` entry, keyed by the last key in
-    the path, as `How to fix: ...` (`.check-fix`). A `_WARNINGS` entry, keyed by a failure fact, shows once
+    the path, as `How to fix: ...` (`.check-fix`). A check with `duplicates`
+    lists them after its failures, passing or not, as `duplicates:` and one
+    `- a, b` line per group, then `_DUPLICATES_HELP`. A `_WARNINGS` entry, keyed by a failure fact, shows once
     as `Warning: ...` (`.check-warning`) before the fix when any failure has
     that fact `True`; `texture_maps`' `has_default_uv_map` is the only one.
     A list (`meshes`) shows `format_list`. Only set fields

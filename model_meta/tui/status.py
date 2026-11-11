@@ -20,7 +20,9 @@ Status = bool | Literal["warning"] | None
 
 def is_check(value: object) -> bool:
     return isinstance(value, dict) and (
-        {"passed", "failures"} <= set(value) <= {"passed", "failures", "warning"}
+        {"passed", "failures"}
+        <= set(value)
+        <= {"passed", "failures", "warning", "duplicates"}
     )
 
 

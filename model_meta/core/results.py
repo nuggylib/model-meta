@@ -13,10 +13,11 @@ _RESULTS_KEYS = ("model_file", "spec", "armature", "mesh_roles", "modifiers")
 @dataclass(frozen=True)
 class FieldCheck:
     """One spec field's check: a dict of facts per failure. A `warning` check's failures
-    are warnings."""
+    are warnings. `duplicates` groups same-shape meshes, for `texture_maps`."""
 
     failures: list[dict[str, object]]
     warning: bool = False
+    duplicates: list[list[str]] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -29,6 +30,7 @@ class FieldCheck:
             raise ValueError(f"`{where}` is not an object.")
         passed, failures = data.get("passed"), data.get("failures")
         warning = data.get("warning", False)
+        duplicates = data.get("duplicates", [])
         if not isinstance(passed, bool):
             raise ValueError(f"`{where}.passed` is not a boolean.")
         if not isinstance(failures, list) or not all(
@@ -39,11 +41,22 @@ class FieldCheck:
             raise ValueError(f"`{where}.passed` disagrees with its failures.")
         if not isinstance(warning, bool):
             raise ValueError(f"`{where}.warning` is not a boolean.")
-        return cls(failures, warning)
+        if not isinstance(duplicates, list) or not all(
+            isinstance(group, list) and all(isinstance(name, str) for name in group)
+            for group in duplicates
+        ):
+            raise ValueError(f"`{where}.duplicates` is not a list of name lists.")
+        return cls(failures, warning, duplicates)
 
     def to_dict(self) -> dict:
         warning = {"warning": True} if self.warning else {}
-        return {"passed": self.passed, "failures": self.failures, **warning}
+        duplicates = {"duplicates": self.duplicates} if self.duplicates else {}
+        return {
+            "passed": self.passed,
+            "failures": self.failures,
+            **warning,
+            **duplicates,
+        }
 
 
 @dataclass(frozen=True)

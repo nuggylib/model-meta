@@ -15,7 +15,7 @@ The Textual UI layer: everything the user sees and interacts with.
   (pass), `WARNING`, `False` (fail) or `None` (pending). The icons are
   `PENDING`, `REFRESHING`, `PASS`, `WARN` (⚠️, written as escapes) and `FAIL`,
   via `icon(status)`. `is_check` matches a `{passed, failures}` object with an
-  optional `warning`. `status_of(value)` returns a bool, a check's `passed`
+  optional `warning` and `duplicates`. `status_of(value)` returns a bool, a check's `passed`
   (`WARNING` for a failing `warning` check), a container's most severe, else
   `None`. `most_severe` ranks fail, then warning, then pending, then pass.
   `lookup(data, path)` is the value at a key path, `None` when missing. Shared

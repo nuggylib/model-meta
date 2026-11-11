@@ -22,8 +22,6 @@ from model_meta.specs import parenting
 NO_MESHES = "no meshes matched"
 OLD_ADDON = f"add-on before {'.'.join(map(str, TEXTURES_VERSION))}"
 
-Failures = list[dict[str, object]]
-
 
 def plan(
     roles: Mapping[str, MeshRole], meshes: Sequence[SceneMesh]
@@ -58,6 +56,7 @@ def evaluate(
         dict(zip(weight_targets, report.weights, strict=True)),
         _by_mesh(textured, report.textures),
         _by_mesh(textured, report.uvs),
+        report.duplicates or [],
     )
     return {
         name: _role_result(role, report.meshes, scene) for name, role in roles.items()
@@ -79,6 +78,7 @@ class _Scene:
     weights: dict[WeightTarget, MeshWeight]
     textures: dict[str, MeshTextures] | None
     uvs: dict[str, MeshUvs] | None
+    duplicates: list[list[str]]
 
 
 def _role_result(
@@ -90,28 +90,29 @@ def _role_result(
         if not is_set(role):
             continue
         if problem is not None:
-            failures = [{"error": problem}]
+            checks[field] = FieldCheck([{"error": problem}])
         elif not matched and field != "count":
-            failures = [{"error": NO_MESHES}]
+            checks[field] = FieldCheck([{"error": NO_MESHES}])
         else:
-            failures = check(role, matched, scene)
-        checks[field] = FieldCheck(failures)
+            checks[field] = check(role, matched, scene)
     return MeshRoleResult([mesh.name for mesh in matched], checks)
 
 
-def _count(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> Failures:
+def _count(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
     if len(matched) == role.count:
-        return []
-    return [{"expected": role.count, "matched": len(matched)}]
+        return FieldCheck([])
+    return FieldCheck([{"expected": role.count, "matched": len(matched)}])
 
 
-def _vtx_grp(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> Failures:
-    return [{"mesh": mesh.name} for mesh in matched if not _groups(role.vtx_grp, mesh)]
+def _vtx_grp(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
+    return FieldCheck(
+        [{"mesh": mesh.name} for mesh in matched if not _groups(role.vtx_grp, mesh)]
+    )
 
 
-def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures:
+def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> FieldCheck:
     if role.vtx_grp is None:
-        return [{"error": "vtx_grp not set"}]
+        return FieldCheck([{"error": "vtx_grp not set"}])
     failures = []
     for mesh in matched:
         groups = _groups(role.vtx_grp, mesh)
@@ -127,12 +128,17 @@ def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures
                 counts = asdict(result)
                 del counts["error"]
                 failures.append(counts)
-    return failures
+    return FieldCheck(failures)
 
 
-def _texture_maps(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures:
+def _texture_maps(
+    role: MeshRole, matched: list[SceneMesh], scene: _Scene
+) -> FieldCheck:
+    names = {mesh.name for mesh in matched}
+    shared = [[n for n in group if n in names] for group in scene.duplicates]
+    duplicates = [group for group in shared if len(group) > 1]
     if scene.textures is None:
-        return [{"error": OLD_ADDON}]
+        return FieldCheck([{"error": OLD_ADDON}], duplicates=duplicates)
     failures = []
     for mesh in matched:
         result = scene.textures[mesh.name]
@@ -151,9 +157,14 @@ def _texture_maps(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Fa
         ]
         if missing:
             failures.append(
-                {"mesh": mesh.name, "missing": missing, **_unwrap(mesh.name, scene)}
+                {
+                    "mesh": mesh.name,
+                    "missing": missing,
+                    "expected": [f"{mesh.name}_{name}.png" for name in missing],
+                    **_unwrap(mesh.name, scene),
+                }
             )
-    return failures
+    return FieldCheck(failures, duplicates=duplicates)
 
 
 def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
@@ -167,13 +178,13 @@ def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
 
 def _material_slots(
     role: MeshRole, matched: list[SceneMesh], _scene: _Scene
-) -> Failures:
+) -> FieldCheck:
     failures = []
     for mesh in matched:
         missing = [s for s in role.material_slots if s not in mesh.material_slots]
         if missing:
             failures.append({"mesh": mesh.name, "missing": missing})
-    return failures
+    return FieldCheck(failures)
 
 
 # Spec order, which is also the order results are written in. `[]` lists check nothing.
