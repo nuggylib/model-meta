@@ -225,7 +225,7 @@ def _sections(
     keys: tuple[str, ...] = (),
 ) -> Iterator[Vertical]:
     """One section per bool, check or list; a nested container's are titled by path.
-    `overrides` are listed in the `texture_maps` section."""
+    `overrides` are listed in the `texture_maps` duplicates section."""
     for key, child in value.items():
         if isinstance(child, dict) and child and not is_check(child):
             yield from _sections(child, keys=(*keys, key))
@@ -240,23 +240,33 @@ def _field_sections(
     value: object,
     overrides: Sequence[TextureMapOverride] = (),
 ) -> Iterator[Vertical]:
-    yield _section(keys, value, overrides)
-    if is_check(value) and (duplicates := value.get("duplicates")):
-        rows: list[Widget] = [
+    yield _section(keys, value)
+    duplicates = value.get("duplicates", []) if is_check(value) else []
+    # Overrides outlive their group (a renamed mesh), so they alone keep the section.
+    if not duplicates and not overrides:
+        return
+    children: list[Widget] = []
+    if duplicates:
+        children.append(
+            Static(_DUPLICATES_HELP, classes="config-detail", markup=False)
+        )
+        children += [
             SelectableRow(tuple(group), _text(group), classes="check-line")
             for group in duplicates
         ]
-        rows.append(Static(_DUPLICATES_HELP, classes="config-detail", markup=False))
-        section = Vertical(*rows, classes="check-section")
-        section.border_title = " > ".join((*keys, "duplicates"))
-        yield section
+    if overrides:
+        children += _statics(
+            [
+                "texture_map_overrides:",
+                *_fact_lines([override.to_dict() for override in overrides]),
+            ]
+        )
+    section = Vertical(*children, classes="check-section")
+    section.border_title = " > ".join((*keys, "duplicates"))
+    yield section
 
 
-def _section(
-    keys: tuple[str, ...],
-    value: object,
-    overrides: Sequence[TextureMapOverride] = (),
-) -> Vertical:
+def _section(keys: tuple[str, ...], value: object) -> Vertical:
     key = keys[-1]
     if isinstance(value, bool) or is_check(value):
         status = status_of(value)
@@ -269,13 +279,6 @@ def _section(
         children: list[Widget] = _statics(
             [f"{icon(status)} {_STATES[status]}", *_fact_lines(facts)]
         )
-        if overrides:
-            children += _statics(
-                [
-                    "texture_map_overrides:",
-                    *_fact_lines([override.to_dict() for override in overrides]),
-                ]
-            )
         children += [
             Static(
                 f"Warning: {text}",

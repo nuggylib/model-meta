@@ -218,9 +218,11 @@ in the app (analogous to a route in a web app).
     marked `- `), minus the facts its fixes restate (`_RESTATED`:
     `texture_maps` hides `expected`). A check with `duplicates`, passing or
     not, gets its own section right after it (`_field_sections`), titled
-    `<keys> > duplicates`: one `SelectableRow` per group, keyed by the group
-    as a tuple, then `_DUPLICATES_HELP`. On a role's page, the `texture_maps` section then
-    lists that role's `texture_map_overrides` as `key: value` lines. `enter`
+    `<keys> > duplicates`: `_DUPLICATES_HELP`, then one `SelectableRow` per
+    group, keyed by the group as a tuple. On a role's page, the
+    `texture_maps` duplicates section then lists that role's
+    `texture_map_overrides` as `key: value` lines; overrides alone (their
+    group gone) still show the section, without the help. `enter`
     on a group runs `_link`, a `@work(exclusive=True,
     group="texture-map-override")` worker that `push_screen_wait`s a
     `TextureMapOverrideModal` and passes a non-`None` result to

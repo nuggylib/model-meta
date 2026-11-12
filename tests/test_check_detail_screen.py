@@ -196,8 +196,8 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "baking.",
         ],
         "texture_maps > duplicates": [
-            "▸ wheel_hub.front.L, wheel_hub.front.R",
             _DUPLICATES_HELP,
+            "▸ wheel_hub.front.L, wheel_hub.front.R",
         ],
     }
 
@@ -250,16 +250,29 @@ async def test_a_passing_texture_check_lists_its_duplicates_and_overrides():
         await pilot.pause()
         sections = _sections(app)
         assert list(sections)[-2:] == ["texture_maps", "texture_maps > duplicates"]
-        assert sections["texture_maps"] == [
-            "✅ passing",
+        assert sections["texture_maps"] == ["✅ passing"]
+        assert sections["texture_maps > duplicates"] == [
+            _DUPLICATES_HELP,
+            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
             "texture_map_overrides:",
             "- name: arm_top",
             "  maps: albedo",
             "  meshes: arm_top.FL, arm_top.FR",
         ]
-        assert sections["texture_maps > duplicates"] == [
-            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
-            _DUPLICATES_HELP,
+
+
+async def test_overrides_keep_the_duplicates_section_without_a_group():
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck([])})}
+    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
+    results = _results(mesh_roles=roles, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["texture_maps > duplicates"] == [
+            "texture_map_overrides:",
+            "- name: arm_top",
+            "  maps: albedo",
+            "  meshes: arm_top.FL, arm_top.FR",
         ]
 
 
