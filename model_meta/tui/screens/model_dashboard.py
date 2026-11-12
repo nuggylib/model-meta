@@ -28,7 +28,7 @@ from model_meta.core.blender_bridge import (
     subscribe_meshes,
 )
 from model_meta.core.blender_connection import BlenderConnection
-from model_meta.core.results import Results
+from model_meta.core.results import Results, TextureMapOverride
 from model_meta.core.spec import MeshRole, Modifiers, Spec
 from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.check_detail import CheckDetailScreen
@@ -83,6 +83,8 @@ class ModelDashboardScreen(Screen):
         self._roles: dict[str, MeshRole] = {}
         self._modifiers = Modifiers()
         self._rows: list[Row] = []
+        # The model's last scene report, re-checked when an override is saved.
+        self._report: MeshReport | None = None
 
     def compose(self) -> ComposeResult:
         try:
@@ -138,15 +140,60 @@ class ModelDashboardScreen(Screen):
 
     def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
         field = message.row.key
-        self.app.push_screen(
-            CheckDetailScreen(
-                self.model,
-                (field,),
-                (_ROOTS[field],),
-                self.results,
-                self.results_changed,
+        self.app.push_screen(CheckDetailScreen(self, (field,), (_ROOTS[field],)))
+
+    def texture_maps(self, role: str) -> list[str]:
+        return self._roles[role].texture_maps or []
+
+    def add_texture_map_override(self, role: str, override: TextureMapOverride) -> None:
+        self._change_overrides(role, lambda overrides: [*overrides, override], "saved")
+
+    def replace_texture_map_override(
+        self, role: str, old: TextureMapOverride, new: TextureMapOverride
+    ) -> None:
+        self._swap_override(role, old, [new], "saved")
+
+    def delete_texture_map_override(
+        self, role: str, override: TextureMapOverride
+    ) -> None:
+        self._swap_override(role, override, [], "deleted")
+
+    def _swap_override(
+        self,
+        role: str,
+        old: TextureMapOverride,
+        new: list[TextureMapOverride],
+        done: str,
+    ) -> None:
+        def swap(overrides: list[TextureMapOverride]) -> list[TextureMapOverride]:
+            if old not in overrides:
+                raise ValueError(f"override '{old.name}' is no longer in it")
+            index = overrides.index(old)
+            return [*overrides[:index], *new, *overrides[index + 1 :]]
+
+        self._change_overrides(role, swap, done)
+
+    def _change_overrides(
+        self,
+        role: str,
+        change: Callable[[list[TextureMapOverride]], list[TextureMapOverride]],
+        done: str,
+    ) -> None:
+        def apply(results: Results) -> Results:
+            current = results.texture_map_overrides
+            updated = {**current, role: change(current.get(role, []))}
+            return replace(
+                results,
+                texture_map_overrides={n: o for n, o in updated.items() if o},
             )
-        )
+
+        if not self._update(apply):
+            return
+        if self._report is None:
+            self.notify(f"Override {done}. It's checked when Blender next saves.")
+            return
+        self._check_mesh_roles(self._report)
+        self.notify(f"Override {done} and checked.")
 
     @work(exclusive=True, group="blender-check")
     async def _refresh(self) -> None:
@@ -189,7 +236,9 @@ class ModelDashboardScreen(Screen):
             self._save(armature=self._armature in message.names)
 
     def _check_mesh_roles(self, report: MeshReport) -> None:
-        roles = mesh_roles.evaluate(self._roles, report)
+        self._report = report
+        overrides = {} if self.results is None else self.results.texture_map_overrides
+        roles = mesh_roles.evaluate(self._roles, report, overrides)
         # An add-on before 0.4.0: keep the stored modifier results.
         if report.modifiers is None:
             self._save(mesh_roles=roles)
@@ -210,18 +259,24 @@ class ModelDashboardScreen(Screen):
         except (OSError, ValueError):
             self.results = None
 
-    def _save(self, **checks: object) -> None:
+    def _save(self, **fields: object) -> bool:
+        return self._update(lambda results: replace(results, **fields))
+
+    def _update(self, change: Callable[[Results], Results]) -> bool:
+        """Applies `change` to the file as it is now. `False` after a failed load or
+        save, which it reports."""
         try:
             results = Results.load(self.results_path)
-            updated = replace(results, **checks)
+            updated = change(results)
             if updated != results:
                 updated.save()
         except (OSError, ValueError) as error:
             self.notify(
                 f"Couldn't save {self.results_path.name}: {error}", severity="error"
             )
-            return
+            return False
         self.results = updated
+        return True
 
     def watch_live(self) -> None:
         self._update_connection()

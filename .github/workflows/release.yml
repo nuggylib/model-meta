@@ -8,7 +8,7 @@ name: Release (rolling latest)
 # live here and never reach a fork PR.
 #
 # Two jobs:
-#   sign-macos  (macos-14) — takes the ad-hoc .app build.yml produced, Developer ID
+#   sign-macos  (macos-15) — takes the ad-hoc .app build.yml produced, Developer ID
 #               signs it (hardened runtime + secure timestamp), notarizes it via the
 #               App Store Connect API, staples the ticket so first launch works
 #               OFFLINE with no Gatekeeper prompt and no user `xattr` step, then
@@ -47,7 +47,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.repository == 'nuggylib/model-meta'
-    runs-on: macos-14
+    runs-on: macos-15
     # notarytool --wait blocks on Apple's service; cap the whole job so a hung
     # submission can't burn the 360-min default on a scarce macOS runner.
     timeout-minutes: 30

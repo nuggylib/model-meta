@@ -8,6 +8,7 @@ from model_meta.core.results import (
     MeshRoleResult,
     ModifiersResult,
     Results,
+    TextureMapOverride,
 )
 
 
@@ -234,6 +235,88 @@ def test_unchecked_modifiers_are_none_and_omitted(tmp_path):
 def test_a_passing_warning_check_keeps_its_flag():
     assert FieldCheck([], warning=True).to_dict() == {**_PASSING, "warning": True}
     assert FieldCheck([]).to_dict() == _PASSING
+
+
+def test_duplicates_round_trip_and_are_omitted_when_empty():
+    groups = [["arm_top.FL", "arm_top.FR"]]
+    data = {**_PASSING, "duplicates": groups}
+    assert FieldCheck.from_dict(data, where="x").to_dict() == data
+    assert FieldCheck.from_dict(_PASSING, where="x").duplicates == []
+
+
+_ARM_OVERRIDE = {
+    "name": "arm_top",
+    "maps": ["albedo"],
+    "meshes": ["arm_top.FL", "arm_top.FR"],
+}
+
+
+def test_texture_map_overrides_round_trip_after_the_checks(tmp_path):
+    data = {
+        "model_file": "/m/car.blend",
+        "spec": "vehicle",
+        "note": "hand-added",
+        "texture_map_overrides": {"arms": [_ARM_OVERRIDE]},
+        "armature": True,
+    }
+    results = Results.from_dict(data, path=tmp_path / "car.json")
+    assert results.texture_map_overrides == {
+        "arms": [
+            TextureMapOverride("arm_top", ["albedo"], ["arm_top.FL", "arm_top.FR"])
+        ]
+    }
+    assert list(results.to_dict()) == [
+        "model_file",
+        "spec",
+        "armature",
+        "texture_map_overrides",
+        "note",
+    ]
+    assert results.to_dict()["texture_map_overrides"] == {"arms": [_ARM_OVERRIDE]}
+
+
+def test_no_texture_map_overrides_are_empty_and_omitted(tmp_path):
+    data = {"model_file": "/m/car.blend", "spec": "vehicle"}
+    results = Results.from_dict(data, path=tmp_path / "car.json")
+    assert results.texture_map_overrides == {}
+    assert "texture_map_overrides" not in results.to_dict()
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ([], "`texture_map_overrides` is not an object."),
+        ({"arms": {}}, "`texture_map_overrides.arms` is not a list."),
+        ({"arms": ["x"]}, "`texture_map_overrides.arms[0]` is not an object."),
+        (
+            {"arms": [{**_ARM_OVERRIDE, "name": ""}]},
+            "`texture_map_overrides.arms[0].name` is not a non-empty string.",
+        ),
+        (
+            {"arms": [_ARM_OVERRIDE, {**_ARM_OVERRIDE, "maps": "albedo"}]},
+            "`texture_map_overrides.arms[1].maps` is not a list of strings.",
+        ),
+        (
+            {"arms": [{"name": "arm_top", "maps": []}]},
+            "`texture_map_overrides.arms[0].meshes` is not a list of strings.",
+        ),
+    ],
+)
+def test_rejects_malformed_texture_map_overrides(tmp_path, overrides, message):
+    data = {
+        "model_file": "/m/car.blend",
+        "spec": "vehicle",
+        "texture_map_overrides": overrides,
+    }
+    with pytest.raises(ValueError, match=re.escape(message)):
+        Results.from_dict(data, path=tmp_path / "car.json")
+
+
+@pytest.mark.parametrize("duplicates", [["arm_top.FL"], [[1]], {}])
+def test_rejects_malformed_duplicates(duplicates):
+    data = {**_PASSING, "duplicates": duplicates}
+    with pytest.raises(ValueError, match=re.escape("`x.duplicates` is not a list")):
+        FieldCheck.from_dict(data, where="x")
 
 
 @pytest.mark.parametrize(

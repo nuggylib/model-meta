@@ -139,17 +139,35 @@ CheckDetailScreen .check-section {
     width: 100%;
     height: auto;
     margin-bottom: 1;
-    padding: 0 1;
+    padding: 1 1;
     border: round $panel;
     border-title-color: $accent;
 }
 
-CheckDetailScreen .check-fix {
+/* A section's blocks (facts, a warning, help, rows, one check's fixes) sit a blank
+   line apart; `spaced` is every block after the first. */
+CheckDetailScreen .check-block {
+    height: auto;
+}
+
+CheckDetailScreen .check-block.spaced {
     margin-top: 1;
 }
 
+/* The page's fixes, above its checks: each check's label, then its numbered fixes. */
+CheckDetailScreen .check-fixes {
+    border: round $warning;
+}
+
+CheckDetailScreen .fix-label {
+    text-style: bold;
+}
+
+CheckDetailScreen .fix-item {
+    padding-left: 2;
+}
+
 CheckDetailScreen .check-warning {
-    margin-top: 1;
     color: $warning;
 }
 

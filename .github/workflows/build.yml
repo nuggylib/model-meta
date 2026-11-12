@@ -80,8 +80,9 @@ jobs:
           # macOS is Apple Silicon only: the Intel runner (macos-13) is the last
           # of a deprecated image and its scarce pool queues for many minutes
           # (plan I8). Intel Mac users run the arm64 build under Rosetta 2.
+          # macos-14 retired 2026-11-02: https://github.com/actions/runner-images/issues/13518
           - target: macos-arm64
-            os: macos-14
+            os: macos-15
             ext: ""
           - target: linux-x86_64
             os: ubuntu-latest

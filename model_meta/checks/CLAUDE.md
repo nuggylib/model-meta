@@ -6,20 +6,26 @@ Textual, no UI.
 
 ## Files
 - `mesh_roles.py` — the `mesh_roles` check.
-  - `plan(roles, meshes)`: the `WeightTarget`s, `TextureTarget`s, and UV and
-    modifier `MeshTarget`s to fetch, deduped, with one texture target per mesh
-    that holds every role's maps, one UV target per textured mesh, and one
-    modifier target per mesh any role matches. The screen passes
-    `functools.partial(plan, roles)` to `subscribe_meshes`.
-  - `evaluate(roles, report)`: one `MeshRoleResult` per role. It re-runs `plan`
-    to line the report's items up with their targets, so the report must come
-    from the same roles.
+  - `plan(roles, meshes)`: the `WeightTarget`s, then one textured
+    `MeshTarget` per mesh a role with `texture_maps` matches (for textures and
+    UVs), then one per mesh any role matches (for modifiers), deduped. The
+    screen passes `functools.partial(plan, roles)` to `subscribe_meshes`.
+  - `evaluate(roles, report, overrides)`: one `MeshRoleResult` per role. It
+    re-runs `plan` to line the report's items up with their targets, so the
+    report must come from the same roles. `overrides` is the results file's
+    `texture_map_overrides`. Each role gets its own `_Scene.stems` from
+    `stems_of(overrides)`, mapping `(mesh, map)` to the override name its
+    file must start with. When two overrides name the same mesh and map, the
+    first wins. `texture_file(stems, mesh, map)` is the filename the check
+    looks for. The check detail screen calls both, so its fix list names
+    the same files.
   - A role's meshes are the scene meshes whose whole name matches
     `mesh_regex` (`re.fullmatch`).
   - Each set field becomes a `FieldCheck` holding one dict of facts per
     failure. The UI words them; nothing here writes prose. `_CHECKS` lists the
-    fields in spec order, each with its "is set" test and its check. An
-    absent field, or an empty `texture_maps` / `material_slots`, is left out.
+    fields in spec order, each with its "is set" test and its check, which
+    returns the `FieldCheck`. An absent field, or an empty `texture_maps` /
+    `material_slots`, is left out.
     - `count`: `{"expected", "matched"}` when the matched total is wrong.
     - `vtx_grp`: `{"mesh"}` for a mesh with no vertex group matching the
       pattern (`parenting.match`). Other groups, like recoloring ones, are
@@ -30,6 +36,16 @@ Textual, no UI.
       with `"vtx_grp not set"`.
     - `texture_maps` / `material_slots`: `{"mesh", "missing"}`, or the
       bridge's `error` for textures. Extra slots and their order don't matter.
+      A map is present when one of the mesh's images has a file whose name
+      ends with `<stem>_<map>.png`. `<stem>` is the mesh's name, or the
+      override's name when one covers that mesh and map. An image with no file
+      never counts. A `texture_maps` failure also lists `expected`, the exact
+      filename each missing map needs. With an add-on before 0.5.1 (`textures` `None`),
+      `texture_maps` fails once with `OLD_ADDON`.
+    - `texture_maps` always sets `duplicates`: the report's same-shape
+      groups, reduced to the role's matched meshes, keeping groups of two or
+      more. They are set whether the check passes or fails, and are empty
+      when the add-on predates `get_duplicate_meshes`.
     - A `texture_maps` failure with `missing` also gets
       `"has_default_uv_map": True` when the bridge reports one for that mesh
       (a `False` is left out as noise), or its `uv_error`. It is a hint,

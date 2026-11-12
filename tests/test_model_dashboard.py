@@ -16,6 +16,7 @@ from model_meta.core.blender_bridge import (
     MeshWeight,
     OpenFile,
     SceneMesh,
+    TextureImage,
 )
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import (
@@ -23,7 +24,9 @@ from model_meta.core.results import (
     MeshRoleResult,
     ModifiersResult,
     Results,
+    TextureMapOverride,
 )
+from model_meta.specs import schema
 from model_meta.tui.screens import model_dashboard
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
@@ -89,13 +92,23 @@ def _fake_subscription(monkeypatch, name, wrap, *, reachable=True):
 def _passing_report(meshes, plan):
     """Every planned weight, texture and modifier passes, so only the scene meshes
     decide."""
-    weights, textures, uvs, modifiers = plan(meshes)
+    weights, textured, modifiers = plan(meshes)
     return MeshReport(
         meshes,
         [MeshWeight(t.mesh, t.vertex_group, 10, 10, 10) for t in weights],
-        [MeshTextures(t.mesh, dict.fromkeys(t.maps, True)) for t in textures],
-        [MeshUvs(t.mesh, False) for t in uvs],
+        [
+            MeshTextures(
+                t.mesh,
+                [
+                    TextureImage(m, f"/textures/{t.mesh}_{m}.png")
+                    for m in schema.TEXTURE_MAPS
+                ],
+            )
+            for t in textured
+        ],
+        [MeshUvs(t.mesh, False) for t in textured],
         [MeshModifiers(t.mesh, ["ARMATURE"]) for t in modifiers],
+        [],
     )
 
 
@@ -512,6 +525,115 @@ async def test_failing_role_fails_its_row_and_the_heading(tmp_path, monkeypatch)
     )
 
 
+async def test_the_check_applies_and_keeps_saved_texture_map_overrides(
+    tmp_path, monkeypatch
+):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    fronts = ["wheel_hub.front.L", "wheel_hub.front.R"]
+    overrides = {"wheels": [TextureMapOverride("wheel_hub", ["albedo"], fronts)]}
+    roles = {"wheels": {**_ROLES["wheels"], "texture_maps": ["albedo", "orm"]}}
+    screen = _screen(tmp_path, "Rig", roles=roles, texture_map_overrides=overrides)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, meshes.empty)
+        assert await _wait_for(
+            pilot, lambda: _role_rows(screen)[:2] == ["❌ Mesh Roles:", "❌ wheels"]
+        )
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == overrides
+    assert saved.mesh_roles["wheels"].checks["texture_maps"].failures == [
+        {"mesh": name, "missing": ["albedo"], "expected": ["wheel_hub_albedo.png"]}
+        for name in fronts
+    ]
+
+
+_TEXTURED_ROLES = {"wheels": {**_ROLES["wheels"], "texture_maps": ["albedo"]}}
+_FRONTS = ["wheel_hub.front.L", "wheel_hub.front.R"]
+_FRONT_OVERRIDE = TextureMapOverride("wheel_hub", ["albedo"], _FRONTS)
+
+
+async def test_an_added_override_is_saved_and_checks_the_last_report(
+    tmp_path, monkeypatch
+):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, lambda: _role_rows(screen)[1] == "✅ wheels")
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+        assert _role_rows(screen)[1] == "❌ wheels"
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == {"wheels": [_FRONT_OVERRIDE]}
+    assert [
+        failure["mesh"]
+        for failure in saved.mesh_roles["wheels"].checks["texture_maps"].failures
+    ] == _FRONTS
+
+
+async def test_an_override_added_before_any_report_is_saved_for_later(
+    tmp_path, monkeypatch
+):
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        await pilot.pause()
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == {"wheels": [_FRONT_OVERRIDE]}
+    assert saved.mesh_roles is None
+
+
+async def test_deleting_the_last_override_drops_the_role_and_rechecks(
+    tmp_path, monkeypatch
+):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    overrides = {"wheels": [_FRONT_OVERRIDE]}
+    screen = _screen(
+        tmp_path, "Rig", roles=_TEXTURED_ROLES, texture_map_overrides=overrides
+    )
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, lambda: _role_rows(screen)[1] == "❌ wheels")
+        screen.delete_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+        assert _role_rows(screen)[1] == "✅ wheels"
+    assert Results.load(screen.results_path).texture_map_overrides == {}
+
+
+async def test_replacing_an_override_keeps_its_place(tmp_path, monkeypatch):
+    rear = TextureMapOverride("rear", ["albedo"], ["wheel_hub.rear.L", "x"])
+    edited = TextureMapOverride("wheel_hub", ["albedo", "orm"], _FRONTS)
+    overrides = {"wheels": [_FRONT_OVERRIDE, rear]}
+    screen = _screen(
+        tmp_path, "Rig", roles=_TEXTURED_ROLES, texture_map_overrides=overrides
+    )
+    async with _Host(screen).run_test() as pilot:
+        await pilot.pause()
+        screen.replace_texture_map_override("wheels", _FRONT_OVERRIDE, edited)
+        await pilot.pause()
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == {"wheels": [edited, rear]}
+
+
+async def test_deleting_an_override_no_longer_saved_writes_nothing(
+    tmp_path, monkeypatch
+):
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        await pilot.pause()
+        before = screen.results_path.read_text()
+        screen.delete_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+        assert screen.results_path.read_text() == before
+
+
 async def test_modifier_results_are_saved_at_the_root_and_per_role(
     tmp_path, monkeypatch
 ):
@@ -664,6 +786,61 @@ async def test_check_detail_follows_live_results(tmp_path, monkeypatch):
         assert lines() == ["No results yet."]
         meshes.put_nowait(_SCENE)
         assert await _wait_for(pilot, lambda: "✅ wheels" in lines())
+
+
+_RENAMED_FIXES = [
+    "1. Meshes wheel_hub.front.L, wheel_hub.front.R need wheel_hub_albedo.png "
+    "baked or linked"
+]
+
+
+def _fix_lines(detail):
+    box = detail.query_one(".check-fixes")
+    return [_text(line) for line in box.query(Static)]
+
+
+async def _open_wheels(pilot, screen):
+    await pilot.press("down", "enter")
+    app = screen.app
+    assert await _wait_for(pilot, lambda: isinstance(app.screen, CheckDetailScreen))
+    await pilot.pause()
+    await pilot.press("enter")
+    assert await _wait_for(pilot, lambda: app.screen.path == ("mesh_roles", "wheels"))
+    return app.screen
+
+
+async def test_an_added_override_regenerates_the_live_fix_list(tmp_path, monkeypatch):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, lambda: _role_rows(screen)[1] == "✅ wheels")
+        detail = await _open_wheels(pilot, screen)
+        assert not detail.query(".check-fixes")
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        assert await _wait_for(pilot, lambda: detail.query(".check-fixes"))
+        assert _fix_lines(detail) == ["texture_maps", *_RENAMED_FIXES]
+
+
+async def test_an_override_renames_the_stored_fixes_without_a_report(
+    tmp_path, monkeypatch
+):
+    failures = [
+        {"mesh": name, "missing": ["albedo"], "expected": [f"{name}_albedo.png"]}
+        for name in _FRONTS
+    ]
+    roles = {"wheels": MeshRoleResult(_FRONTS, {"texture_maps": FieldCheck(failures)})}
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES, mesh_roles=roles)
+    async with _Host(screen).run_test() as pilot:
+        detail = await _open_wheels(pilot, screen)
+        assert _fix_lines(detail)[1] == (
+            "1. Bake a texture map named wheel_hub.front.L_albedo.png for "
+            "wheel_hub.front.L"
+        )
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        assert await _wait_for(pilot, lambda: _fix_lines(detail)[1:] == _RENAMED_FIXES)
 
 
 async def test_dropped_mesh_connection_falls_back_to_manual_mode(tmp_path, monkeypatch):

@@ -129,10 +129,25 @@ in the app (analogous to a route in a web app).
   keyed by their results file key (`_ROOTS`: `armature`, `mesh_roles`,
   `modifiers`, each with its title). They are the only focus stops (`MOVE`
   steps through them), and the nested rows are plain `Static`s. `enter`
-  pushes `CheckDetailScreen(model, (key,), (title,), results, results_changed)`.
-  `results_changed` is a Textual `Signal` that `watch_results` publishes, so
-  the detail screen follows live results while the worker keeps running
-  beneath it. Nested rows are indented past the root rows' rail and `▸ `.
+  pushes `CheckDetailScreen(self, (key,), (title,))`: the dashboard is the
+  detail screen's `ResultsSource`. `results_changed` is a Textual `Signal`
+  that `watch_results` publishes, so the detail screen follows live results
+  while the worker keeps running beneath it. Nested rows are indented past
+  the root rows' rail and `▸ `.
+  **Overrides:** `texture_maps(role)` gives a role's spec `texture_maps`.
+  `add_texture_map_override(role, override)` appends one.
+  `replace_texture_map_override(role, old, new)` swaps the first one equal
+  to `old` in place, and `delete_texture_map_override(role, override)`
+  removes it (both `_swap_override`). All go through `_change_overrides`,
+  then `_update`, which loads the file
+  right before. A role left with no overrides is dropped from the file. An
+  override no longer in the file is a `ValueError`, so the error notice
+  shows and nothing is written. Each then re-runs `_check_mesh_roles` on
+  `_report`, the last report checked on the model's file, so the icons and
+  `expected` names change without a Blender save. A fresh scene query would
+  pick up unsaved edits; the report keeps every result tied to the last save.
+  With no report yet, the override is only saved, and a notice says it's
+  checked when Blender next saves.
   **Icons always come from the results file**, in every mode (Live, Wrong
   File, Manual, Inactive): ✅ for `True`, ❌ for `False`, ⚠️ for a failing
   `warning` check, and 🟡 for a check never run or a results file that can't
@@ -157,13 +172,15 @@ in the app (analogous to a route in a web app).
   wrong). A connection's results are checked only once that connection's
   own `OpenFile` has confirmed the model is open. The armature check passes
   when the spec's `object_name` is in the list (a blank `object_name` fails).
-  The mesh check stores `checks.mesh_roles.evaluate(roles, report)`, then
+  The mesh check stores `checks.mesh_roles.evaluate(roles, report,
+  overrides)`, with the `texture_map_overrides` of the loaded `results`, then
   `checks.modifiers.evaluate` over those roles: the root `modifiers` and each
   role's. A report with no `modifiers` (an add-on before 0.4.0) saves the
   roles alone and keeps the stored modifier results. Both go
-  through `_save(**checks)`: load right before, `replace` those fields, save
-  only when something changed (other keys kept), then set `results`. A failed
-  load or save is an error notice, and the icons keep the stored results. A
+  through `_save(**fields)`, a `replace` passed to `_update(change)`: load
+  right before, apply `change`, save only when something changed (other keys
+  kept), then set `results`. A failed load or save is an error notice and
+  returns `False`, and the icons keep the stored results. A
   `busy` `None` armature list checks nothing. With the wrong file open,
   results are ignored and nothing is written; the icons keep showing the
   results file.
@@ -181,9 +198,15 @@ in the app (analogous to a route in a web app).
   on the wrong file, "Results update when you load a file, or save one, in
   Blender." in Live Mode, "Press r to refresh.", or "Start Blender, then press
   r to refresh." when `Inactive`. Every watcher is `NoMatches`-guarded.
-- `check_detail.py` — `CheckDetailScreen(model, path, headings, results,
-  updates)`, one model's results at a key path in `Results.to_dict()`
-  (`tui.status.lookup`), pushed by `enter` on a model dashboard root row and
+- `check_detail.py` — `CheckDetailScreen(source, path, headings)`, one
+  model's results at a key path in `Results.to_dict()`. `source` is a
+  `ResultsSource` (the model dashboard): `model`, `results`,
+  `results_changed`, `texture_maps(role)`,
+  `add_texture_map_override(role, override)`,
+  `replace_texture_map_override(role, old, new)` and
+  `delete_texture_map_override(role, override)`. The screen never writes the
+  results file itself. It reads the value with `tui.status.lookup`, and is
+  pushed by `enter` on a model dashboard root row and
   by `enter` on its own rows. Not in `SCREENS`. The title is `Models - <model
   stem>` then each of `headings`. One class serves every path: it reads
   nothing per field and lays the value out by its shape, mirroring the JSON.
@@ -191,7 +214,7 @@ in the app (analogous to a route in a web app).
     key, `<icon> <key>`, the icon the most severe status beneath it. They are
     the focus stops (`MOVE`; `#check-lines` gets `can_focus=False`), and the
     first is focused. `enter` pushes another `CheckDetailScreen` at
-    `(*path, key)`, sharing `updates`. A publish with the same keys relabels
+    `(*path, key)`, sharing `source`. A publish with the same keys relabels
     the rows in place, so focus stays put; other keys remount them.
   - **Any other container** (a role, `modifiers`): one bordered
     `.check-section` per key, the key as its `border_title`. A nested
@@ -200,18 +223,79 @@ in the app (analogous to a route in a web app).
     `modifiers > warn` on a role). A bool or a check shows `✅ passing`,
     `⚠️ warning` (a failing `warning` check) or `❌ failing`. A warning or a
     failure lists every failure's facts as `key: value` lines (the first
-    marked `- `) and then its `_FIX_STEPS` entry, keyed by the last key in
-    the path, as `How to fix: ...` (`.check-fix`). A `_WARNINGS` entry, keyed by a failure fact, shows once
-    as `Warning: ...` (`.check-warning`) before the fix when any failure has
-    that fact `True`; `texture_maps`' `has_default_uv_map` is the only one.
+    marked `- `), minus the facts its fixes restate (`_RESTATED`:
+    `texture_maps` hides `expected`). A check with `duplicates`, passing or
+    not, gets its own section right after it (`_field_sections`), titled
+    `<keys> > duplicates`: `_DUPLICATES_HELP`, then one `SelectableRow` per
+    group, keyed by the group as a tuple. A mesh in any of the role's
+    overrides is dropped from its group, and a group left with one mesh is
+    dropped. With no group left, the help and rows give way to a muted
+    `_NO_DUPLICATES` line. On a role's page, the
+    `texture_maps` duplicates section then lists that role's
+    `texture_map_overrides` under a `texture_map_overrides:` line, one
+    `SelectableRow` each, keyed by the override, its `key: value` lines in
+    one label. Overrides alone (their group gone) still show the section,
+    with `_NO_DUPLICATES`. `x` (`check_action`: only on an override row)
+    runs `_delete_override` in the same worker group: a `ConfirmModal`, and
+    on Yes `source.delete_texture_map_override`. `enter` on an override runs
+    `_edit` (same group): the modal with that override as `existing`, its
+    meshes from `_editable_meshes`, the override's meshes plus the meshes of
+    any duplicate group holding one of them that no other override links,
+    in group order. A saved result that differs goes to
+    `source.replace_texture_map_override`; an unchanged one writes nothing. `enter`
+    on a group runs `_link`, a `@work(exclusive=True,
+    group="texture-map-override")` worker that `push_screen_wait`s a
+    `TextureMapOverrideModal` and passes a non-`None` result to
+    `source.add_texture_map_override`. A remount refocuses the group row that
+    had focus, or the first group left when a link changed it. A `_WARNINGS` entry, keyed by a failure fact, shows once
+    as `Warning: ...` (`.check-warning`) when any failure has that fact
+    `True`; `texture_maps`' `has_default_uv_map` is the only one.
     A list (`meshes`) shows `format_list`. Only set fields
     have a check, so only they get a section.
   - **A bool or a check** (`armature`): that one section, titled by its key.
+  - **Blocks:** `_box` builds every section from blocks, each a
+    `.check-block` `Vertical`: the status and facts, each warning, the
+    duplicates help, its group rows, the overrides, and each check's fixes.
+    Every block after the first gets `spaced` (a blank line above). Order
+    is set in Python, not with `:first-child`, which Textual can leave stale
+    on children passed to a constructor.
+  - **Needs Fixes:** every fix on the page sits in one `Needs Fixes` section
+    (`.check-fixes`) above the others. It shows only when a failing or
+    warning check has fixes. `_fixes` walks the value: each such check gets
+    a bold label (its section's title, e.g. `modifiers > warn`), then its
+    `_FIXES` entry's items as a numbered list. A `_FIXES` entry maps the
+    check's failures, and the role's override `Stems`, to items: one fixed
+    text (`_once`), or `texture_maps`' "Bake a texture map named <file> for
+    <mesh>", one per `missing` map. A map an override covers is instead
+    "Mesh <mesh> needs <file> baked or linked" (`Meshes <a, b> need` for
+    several), one item per override file, at its first mesh's place. `<file>`
+    comes from
+    `checks.mesh_roles.texture_file` with the role's current
+    `texture_map_overrides`, not from the stored `expected`. That way, an
+    override saved with no scene report to re-check (Manual Mode, or before
+    Blender's first save) still renames the list on the next publish. A
+    check with no items (a failure that is only an `error`) gets no label.
   A missing value, an empty container or an unreadable file shows `No results
-  yet.` A new field's fix text is a `_FIX_STEPS` entry, never a new screen.
-  It subscribes to `updates` on mount and redraws on each publish. Only
-  `escape` and `MOVE` are bound; outside the row list, `#check-lines` keeps
-  its focus so long pages scroll.
+  yet.` A new field's fix text is a `_FIXES` entry, never a new screen.
+  It subscribes to `source.results_changed` on mount and redraws on each
+  publish. Only `escape` and `MOVE` are bound; outside the row list,
+  `#check-lines` keeps its focus so long pages scroll.
+- `texture_map_override_modal.py` — `TextureMapOverrideModal(role, meshes,
+  maps, existing=None)`, a `ModalScreen[TextureMapOverride | None]`. It shows
+  a `#override-meshes` checklist of `meshes` (all checked), a
+  `#override-maps` checklist of the role's maps (none checked; focused), and
+  a `#override-name` Input. With `existing` (an edit), the title reads `Edit
+  shared texture maps in <role>`, only its meshes and maps are checked, the
+  name is prefilled, and any of its maps no longer in `maps` are listed
+  after them so a save keeps them. A live `#override-preview` lists the `Expected:`
+  filenames. Enter in the Input or **Save** checks, in order: at least two
+  meshes, at least one map, a non-blank name (trimmed), and no `/` or `\`.
+  The first problem shows in `#override-status`, and the modal stays open.
+  Otherwise it returns the override, with meshes and maps in their listed
+  order. `escape` returns `None`. Writes nothing. Its body is a
+  `VerticalScroll`, so Save stays reachable in a short terminal. Own
+  `Footer`, `q` shadowed. Never name a method `_name` here: `DOMNode` keeps
+  the widget's name there.
 - `edit_data_modal.py` — `EditDataModal(ModalScreen[str | None])`: an
   `OptionList` of spec root fields from `FIELDS` (keys are `schema.skeleton`
   root keys: Armature, Mesh roles, Modifiers). Returns the key, or `None` on

@@ -1,16 +1,20 @@
 from pathlib import Path
 
+import pytest
 from textual.app import App
 from textual.signal import Signal
-from textual.widgets import Static
+from textual.widgets import Button, Input, SelectionList, Static
 
 from model_meta.core.results import (
     FieldCheck,
     MeshRoleResult,
     ModifiersResult,
     Results,
+    TextureMapOverride,
 )
 from model_meta.tui.screens.check_detail import CheckDetailScreen
+from model_meta.tui.screens.confirm_modal import ConfirmModal
+from model_meta.tui.screens.texture_map_override_modal import TextureMapOverrideModal
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _WEIGHT_FAILURE = {
@@ -37,19 +41,50 @@ _ROLES = {
                     {
                         "mesh": "wheel_hub.front.L",
                         "missing": ["orm"],
+                        "expected": ["wheel_hub.front.L_orm.png"],
                         "has_default_uv_map": True,
                     },
                     {
                         "mesh": "wheel_hub.front.R",
                         "missing": ["albedo", "orm"],
+                        "expected": [
+                            "wheel_hub.front.R_albedo.png",
+                            "wheel_hub.front.R_orm.png",
+                        ],
                         "uv_error": "in edit mode",
                     },
-                ]
+                ],
+                duplicates=[["wheel_hub.front.L", "wheel_hub.front.R"]],
             ),
         },
     ),
     "body": MeshRoleResult(["body"], {"material_slots": FieldCheck([])}),
 }
+
+
+class _Source:
+    """Stands in for the model dashboard, recording each saved override."""
+
+    model = Path("/m/sedan.blend")
+
+    def __init__(self, results, updates):
+        self.results = results
+        self.results_changed = updates
+        self.saved = []
+        self.replaced = []
+        self.deleted = []
+
+    def texture_maps(self, _role):
+        return ["albedo", "orm", "normal"]
+
+    def add_texture_map_override(self, role, override):
+        self.saved.append((role, override))
+
+    def replace_texture_map_override(self, role, old, new):
+        self.replaced.append((role, old, new))
+
+    def delete_texture_map_override(self, role, override):
+        self.deleted.append((role, override))
 
 
 class _Host(App):
@@ -60,14 +95,9 @@ class _Host(App):
 
     def on_mount(self):
         self.updates = Signal(self, "updates")
+        self.source = _Source(self.results, self.updates)
         self.push_screen(
-            CheckDetailScreen(
-                Path("/m/sedan.blend"),
-                self.path,
-                ("Title", *self.path[1:]),
-                self.results,
-                self.updates,
-            )
+            CheckDetailScreen(self.source, self.path, ("Title", *self.path[1:]))
         )
 
 
@@ -97,16 +127,16 @@ async def test_unreadable_results_say_no_results():
     assert await _open(("armature",), None) == ["No results yet."]
 
 
-async def test_a_failing_bool_check_is_a_section_with_its_fix():
+async def test_a_failing_bool_check_is_a_section_under_its_fix():
     app = _Host(("armature",), _results(armature=False))
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app) == {
-            "armature": [
-                "❌ failing",
-                "How to fix: Name the armature object in Blender as the spec's "
-                "`object_name`.",
-            ]
+            "Needs Fixes": [
+                "armature",
+                "1. Name the armature object in Blender as the spec's `object_name`.",
+            ],
+            "armature": ["❌ failing"],
         }
 
 
@@ -135,15 +165,25 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
     async with app.run_test() as pilot:
         await pilot.pause()
         sections = _sections(app)
+    assert list(sections)[0] == "Needs Fixes"
     assert sections == {
-        "meshes": ["wheel_hub.front.L, wheel_hub.front.R"],
-        "count": [
-            "❌ failing",
-            "- expected: 4",
-            "  matched: 2",
-            "How to fix: Rename the role's meshes so exactly `count` of them fully "
-            "match its `mesh_regex`.",
+        "Needs Fixes": [
+            "count",
+            "1. Rename the role's meshes so exactly `count` of them fully match its "
+            "`mesh_regex`.",
+            "weight",
+            "1. In Weight Paint mode, assign every vertex of each listed mesh to its "
+            "group at the role's `weight`.",
+            "texture_maps",
+            "1. Bake a texture map named wheel_hub.front.L_orm.png for "
+            "wheel_hub.front.L",
+            "2. Bake a texture map named wheel_hub.front.R_albedo.png for "
+            "wheel_hub.front.R",
+            "3. Bake a texture map named wheel_hub.front.R_orm.png for "
+            "wheel_hub.front.R",
         ],
+        "meshes": ["wheel_hub.front.L, wheel_hub.front.R"],
+        "count": ["❌ failing", "- expected: 4", "  matched: 2"],
         "weight": [
             "❌ failing",
             "- mesh: wheel_hub.front.R",
@@ -151,8 +191,6 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "  vertices: 340",
             "  assigned: 328",
             "  at_weight: 300",
-            "How to fix: In Weight Paint mode, assign every vertex of each listed "
-            "mesh to its group at the role's `weight`.",
         ],
         "texture_maps": [
             "❌ failing",
@@ -165,10 +203,309 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "Warning: A mesh with `has_default_uv_map: True` may not be unwrapped "
             "yet: its UVs match a primitive's default layout. Check them before "
             "baking.",
-            "How to fix: Bake each missing map, save it as `<mesh>_<map>.png`, and "
-            "load it in an Image Texture node of the mesh's material.",
+        ],
+        "texture_maps > duplicates": [
+            _DUPLICATES_HELP,
+            "▸ wheel_hub.front.L, wheel_hub.front.R",
         ],
     }
+
+
+async def test_texture_fixes_name_the_override_file_and_skip_errors():
+    failures = [
+        {
+            "mesh": "arm_top.FL",
+            "missing": ["albedo"],
+            "expected": ["arm_top_albedo.png"],
+        },
+        {"mesh": "arm_top.FR", "error": "no mesh"},
+    ]
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck(failures)})}
+    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
+    results = _results(mesh_roles=roles, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["Needs Fixes"] == [
+            "texture_maps",
+            "1. Mesh arm_top.FL needs arm_top_albedo.png baked or linked",
+        ]
+
+
+async def test_an_overrides_meshes_share_one_fix_beside_the_bake_fixes():
+    failures = [{"mesh": mesh, "missing": ["albedo", "normal"]} for mesh in _ARMS]
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck(failures)})}
+    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS)]}
+    results = _results(mesh_roles=roles, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["Needs Fixes"] == [
+            "texture_maps",
+            "1. Meshes arm_top.FL, arm_top.FR, arm_top.RL need arm_top_albedo.png "
+            "baked or linked",
+            "2. Bake a texture map named arm_top.FL_normal.png for arm_top.FL",
+            "3. Bake a texture map named arm_top.FR_normal.png for arm_top.FR",
+            "4. Bake a texture map named arm_top.RL_normal.png for arm_top.RL",
+        ]
+
+
+async def test_a_check_with_no_fix_text_adds_no_fix_section():
+    failures = [{"mesh": "arm_top.FR", "error": "no mesh"}]
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck(failures)})}
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert "Needs Fixes" not in _sections(app)
+
+
+_DUPLICATES_HELP = (
+    "The meshes in each `duplicates` group have the same shape, so they can share "
+    "texture maps. Select a group to link some of its maps under one name."
+)
+_ARMS = ["arm_top.FL", "arm_top.FR", "arm_top.RL"]
+_ARM_ROLES = {
+    "arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck([], duplicates=[_ARMS])})
+}
+
+
+_NO_DUPLICATES = "No more duplicates to override."
+_FRONT_ARMS = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
+_FRONT_ARMS_LINES = [
+    "texture_map_overrides:",
+    "▸ name: arm_top\n  maps: albedo\n  meshes: arm_top.FL, arm_top.FR",
+]
+_QUAD = [*_ARMS, "arm_top.RR"]
+_QUAD_ROLES = {
+    "arms": MeshRoleResult(_QUAD, {"texture_maps": FieldCheck([], duplicates=[_QUAD])})
+}
+
+
+async def test_a_passing_texture_check_lists_its_duplicates():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sections = _sections(app)
+        assert list(sections)[-2:] == ["texture_maps", "texture_maps > duplicates"]
+        assert sections["texture_maps"] == ["✅ passing"]
+        assert sections["texture_maps > duplicates"] == [
+            _DUPLICATES_HELP,
+            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
+        ]
+
+
+async def test_linked_meshes_leave_their_group_and_overrides_follow():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        section = app.screen.query(".check-section").last()
+        assert _sections(app)["texture_maps > duplicates"] == [
+            _DUPLICATES_HELP,
+            "▸ arm_top.RL, arm_top.RR",
+            *_FRONT_ARMS_LINES,
+        ]
+        blocks = section.query_children(".check-block")
+        assert [block.has_class("spaced") for block in blocks] == [False, True, True]
+
+
+async def test_a_group_with_one_unlinked_mesh_leaves_a_placeholder():
+    results = _results(mesh_roles=_ARM_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["texture_maps > duplicates"] == [
+            _NO_DUPLICATES,
+            *_FRONT_ARMS_LINES,
+        ]
+        rows = app.screen.query(SelectableRow)
+        assert not [row for row in rows if isinstance(row.key, tuple)]
+
+
+async def test_overrides_keep_the_duplicates_section_without_a_group():
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck([])})}
+    results = _results(mesh_roles=roles, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["texture_maps > duplicates"] == [
+            _NO_DUPLICATES,
+            *_FRONT_ARMS_LINES,
+        ]
+
+
+def _override_row(app):
+    return next(
+        row
+        for row in app.screen.query(SelectableRow)
+        if isinstance(row.key, TextureMapOverride)
+    )
+
+
+@pytest.mark.parametrize(("answer", "deleted"), [("yes", True), ("no", False)])
+async def test_x_on_an_override_deletes_it_once_confirmed(answer, deleted):
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        _override_row(app).focus()
+        await pilot.press("x")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmModal)
+        app.screen.query_one(f"#confirm-{answer}", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
+        expected = [("arms", _FRONT_ARMS["arms"][0])] if deleted else []
+        assert app.source.deleted == expected
+
+
+async def _open_edit_modal(pilot, app):
+    await pilot.pause()
+    _override_row(app).focus()
+    await pilot.press("enter")
+    await pilot.pause()
+    assert isinstance(app.screen, TextureMapOverrideModal)
+    return app.screen
+
+
+async def test_enter_on_an_override_opens_it_prefilled_with_its_group():
+    # RR is linked by another override, so only RL joins the edited one's meshes.
+    rear = TextureMapOverride("rear", ["orm"], ["arm_top.RR"])
+    overrides = {"arms": [*_FRONT_ARMS["arms"], rear]}
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        modal = await _open_edit_modal(pilot, app)
+        meshes = modal.query_one("#override-meshes", SelectionList)
+        maps = modal.query_one("#override-maps", SelectionList)
+        assert [meshes.get_option_at_index(i).value for i in range(3)] == _ARMS
+        assert meshes.option_count == 3
+        assert meshes.selected == _ARMS[:2]
+        assert maps.selected == ["albedo"]
+        assert modal.query_one("#override-name", Input).value == "arm_top"
+
+
+async def test_saving_an_edit_replaces_the_override():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        modal = await _open_edit_modal(pilot, app)
+        modal.query_one("#override-meshes", SelectionList).select("arm_top.RL")
+        modal.query_one("#override-maps", SelectionList).select("orm")
+        modal.query_one("#save-override", Button).press()
+        await pilot.pause()
+        assert app.source.replaced == [
+            (
+                "arms",
+                _FRONT_ARMS["arms"][0],
+                TextureMapOverride("arm_top", ["albedo", "orm"], _ARMS),
+            )
+        ]
+
+
+async def test_saving_an_unchanged_edit_writes_nothing():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        modal = await _open_edit_modal(pilot, app)
+        modal.query_one("#save-override", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
+        assert app.source.replaced == []
+
+
+async def test_x_on_a_group_does_nothing():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.screen.query_one(SelectableRow).focus()
+        await pilot.press("x")
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
+
+
+async def test_focus_moves_to_the_group_left_after_a_link():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_QUAD_ROLES))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.screen.query_one(SelectableRow).focus()
+        app.updates.publish(
+            _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+        )
+        await pilot.pause()
+        assert app.screen.focused.key == ("arm_top.RL", "arm_top.RR")
+
+
+async def _open_link_modal(pilot, app):
+    await pilot.pause()
+    app.screen.query_one(SelectableRow).focus()
+    await pilot.press("enter")
+    await pilot.pause()
+    assert isinstance(app.screen, TextureMapOverrideModal)
+    return app.screen
+
+
+async def test_linking_a_group_saves_the_checked_meshes_and_maps_under_the_name():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
+    async with app.run_test() as pilot:
+        modal = await _open_link_modal(pilot, app)
+        modal.query_one("#override-meshes", SelectionList).deselect("arm_top.RL")
+        modal.query_one("#override-maps", SelectionList).select("normal")
+        modal.query_one("#override-maps", SelectionList).select("albedo")
+        modal.query_one("#override-name", Input).value = " arm_top "
+        await pilot.pause()
+        preview = str(modal.query_one("#override-preview", Static).render())
+        assert preview == "Expected: arm_top_albedo.png, arm_top_normal.png"
+        modal.query_one("#override-name", Input).focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.source.saved == [
+            (
+                "arms",
+                TextureMapOverride("arm_top", ["albedo", "normal"], _ARMS[:2]),
+            )
+        ]
+        assert isinstance(app.screen, CheckDetailScreen)
+
+
+@pytest.mark.parametrize(
+    ("meshes", "maps", "name", "problem"),
+    [
+        (_ARMS[:1], ["albedo"], "arm_top", "Check at least two meshes to link."),
+        (_ARMS, [], "arm_top", "Check at least one map to share."),
+        (_ARMS, ["albedo"], "  ", "Type the shared name."),
+        (_ARMS, ["albedo"], "arms/top", "The shared name can't hold `/` or `\\`."),
+    ],
+)
+async def test_an_incomplete_link_says_why_and_saves_nothing(
+    meshes, maps, name, problem
+):
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
+    async with app.run_test() as pilot:
+        modal = await _open_link_modal(pilot, app)
+        mesh_list = modal.query_one("#override-meshes", SelectionList)
+        mesh_list.deselect_all()
+        for mesh in meshes:
+            mesh_list.select(mesh)
+        for name_ in maps:
+            modal.query_one("#override-maps", SelectionList).select(name_)
+        modal.query_one("#override-name", Input).value = name
+        modal.query_one("#save-override", Button).press()
+        await pilot.pause()
+        assert str(modal.query_one("#override-status", Static).render()) == problem
+        assert app.screen is modal
+        assert app.source.saved == []
+
+
+async def test_escape_closes_the_link_modal_and_saves_nothing():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
+    async with app.run_test() as pilot:
+        await _open_link_modal(pilot, app)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
+        assert app.source.saved == []
 
 
 async def test_no_default_uv_map_shows_no_warning():
@@ -219,29 +556,31 @@ _MODIFIERS = ModifiersResult(
     FieldCheck([]),
 )
 _MODIFIER_SECTIONS = {
-    "required > skinned_meshes": [
-        "❌ failing",
-        "- mesh: body",
-        "  missing: ARMATURE",
-        "How to fix: Add each missing modifier to the listed mesh in its Modifier "
-        "Properties.",
-    ],
-    "warn": [
-        "⚠️ warning",
-        "- mesh: body",
-        "  modifiers: MIRROR, SUBSURF",
-        "How to fix: Confirm each listed modifier belongs on the mesh, or apply or "
-        "remove it before export.",
-    ],
+    "required > skinned_meshes": ["❌ failing", "- mesh: body", "  missing: ARMATURE"],
+    "warn": ["⚠️ warning", "- mesh: body", "  modifiers: MIRROR, SUBSURF"],
     "fail": ["✅ passing"],
 }
+_MODIFIER_FIXES = {
+    "required > skinned_meshes": "1. Add each missing modifier to the listed mesh in "
+    "its Modifier Properties.",
+    "warn": "1. Confirm each listed modifier belongs on the mesh, or apply or remove "
+    "it before export.",
+}
+
+
+def _fix_lines(prefix=""):
+    return [
+        line
+        for label, fix in _MODIFIER_FIXES.items()
+        for line in (f"{prefix}{label}", fix)
+    ]
 
 
 async def test_modifiers_show_a_section_per_list_titled_by_its_path():
     app = _Host(("modifiers",), _results(modifiers=_MODIFIERS))
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _sections(app) == _MODIFIER_SECTIONS
+        assert _sections(app) == {"Needs Fixes": _fix_lines(), **_MODIFIER_SECTIONS}
 
 
 async def test_a_role_shows_its_own_modifier_sections():
@@ -250,6 +589,7 @@ async def test_a_role_shows_its_own_modifier_sections():
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app) == {
+            "Needs Fixes": _fix_lines("modifiers > "),
             "meshes": ["body"],
             **{
                 f"modifiers > {key}": lines for key, lines in _MODIFIER_SECTIONS.items()

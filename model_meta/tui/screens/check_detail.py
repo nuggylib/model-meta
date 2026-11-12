@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
+from typing import Protocol
 
+from textual import work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import Screen
@@ -13,32 +16,82 @@ from textual.signal import Signal
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
-from model_meta.core.results import Results
+from model_meta.checks import mesh_roles
+from model_meta.checks.mesh_roles import Stems, texture_file
+from model_meta.core.results import Results, TextureMapOverride
 from model_meta.specs.modifiers import format_list
 from model_meta.tui.bindings import MOVE
+from model_meta.tui.screens.confirm_modal import ConfirmModal
+from model_meta.tui.screens.texture_map_override_modal import TextureMapOverrideModal
 from model_meta.tui.status import WARNING, icon, is_check, lookup, status_of
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _NO_RESULTS = "No results yet."
 _STATES = {True: "passing", WARNING: "warning", False: "failing"}
 
-# Keyed by a check's key in the results file, wherever it sits.
-_FIX_STEPS = {
-    "armature": "Name the armature object in Blender as the spec's `object_name`.",
-    "count": "Rename the role's meshes so exactly `count` of them fully match its "
-    "`mesh_regex`.",
-    "vtx_grp": "Add a vertex group matching the role's `vtx_grp` to each listed mesh.",
-    "weight": "In Weight Paint mode, assign every vertex of each listed mesh to its "
-    "group at the role's `weight`.",
-    "texture_maps": "Bake each missing map, save it as `<mesh>_<map>.png`, and load it "
-    "in an Image Texture node of the mesh's material.",
-    "material_slots": "Add a material slot for each missing name to the listed mesh.",
-    "skinned_meshes": "Add each missing modifier to the listed mesh in its Modifier "
-    "Properties.",
-    "warn": "Confirm each listed modifier belongs on the mesh, or apply or remove it "
-    "before export.",
-    "fail": "Apply or remove each listed modifier from the mesh before export.",
+Fixes = Callable[[list[dict], Stems], list[str]]
+
+
+def _once(text: str) -> Fixes:
+    return lambda _failures, _stems: [text]
+
+
+def _texture_fixes(failures: list[dict], stems: Stems) -> list[str]:
+    # Named from `missing` and the current overrides, not the stored `expected`, so
+    # a new override shows before Blender saves again. An override's meshes share one
+    # item, at its first mesh's place.
+    items: dict[str, list[str]] = {}
+    for failure in failures:
+        if not isinstance(mesh := failure.get("mesh"), str):
+            continue
+        for name in failure.get("missing", []):
+            file = texture_file(stems, mesh, name)
+            if (mesh, name) in stems:
+                items.setdefault(file, []).append(mesh)
+            else:
+                items[f"Bake a texture map named {file} for {mesh}"] = []
+    return [_linked(meshes, key) if meshes else key for key, meshes in items.items()]
+
+
+def _linked(meshes: list[str], file: str) -> str:
+    if len(meshes) == 1:
+        return f"Mesh {meshes[0]} needs {file} baked or linked"
+    return f"Meshes {format_list(meshes)} need {file} baked or linked"
+
+
+# Keyed by a check's key in the results file, wherever it sits: its fixes, from its
+# failures and the role's overrides.
+_FIXES: dict[str, Fixes] = {
+    "armature": _once(
+        "Name the armature object in Blender as the spec's `object_name`."
+    ),
+    "count": _once(
+        "Rename the role's meshes so exactly `count` of them fully match its "
+        "`mesh_regex`."
+    ),
+    "vtx_grp": _once(
+        "Add a vertex group matching the role's `vtx_grp` to each listed mesh."
+    ),
+    "weight": _once(
+        "In Weight Paint mode, assign every vertex of each listed mesh to its group "
+        "at the role's `weight`."
+    ),
+    "texture_maps": _texture_fixes,
+    "material_slots": _once(
+        "Add a material slot for each missing name to the listed mesh."
+    ),
+    "skinned_meshes": _once(
+        "Add each missing modifier to the listed mesh in its Modifier Properties."
+    ),
+    "warn": _once(
+        "Confirm each listed modifier belongs on the mesh, or apply or remove it "
+        "before export."
+    ),
+    "fail": _once("Apply or remove each listed modifier from the mesh before export."),
 }
+
+# Failure facts a check's fixes restate, so its section doesn't list them again.
+_RESTATED = {"texture_maps": {"expected"}}
 
 # Keyed by a failure's fact; shown once when any failure has it set to `True`.
 _WARNINGS = {
@@ -47,34 +100,59 @@ _WARNINGS = {
     "baking.",
 }
 
+_DUPLICATES_HELP = (
+    "The meshes in each `duplicates` group have the same shape, so they can share "
+    "texture maps. Select a group to link some of its maps under one name."
+)
+_NO_DUPLICATES = "No more duplicates to override."
+
+
+class ResultsSource(Protocol):
+    """The model dashboard: the results it follows, and where overrides are saved."""
+
+    model: Path
+    results: Results | None
+    results_changed: Signal[Results | None]
+
+    def texture_maps(self, role: str) -> list[str]: ...
+
+    def add_texture_map_override(
+        self, role: str, override: TextureMapOverride
+    ) -> None: ...
+
+    def replace_texture_map_override(
+        self, role: str, old: TextureMapOverride, new: TextureMapOverride
+    ) -> None: ...
+
+    def delete_texture_map_override(
+        self, role: str, override: TextureMapOverride
+    ) -> None: ...
+
 
 class CheckDetailScreen(Screen):
     """Pushed as an instance, per model and key path. `headings` title each key in
-    `path`. `updates` publishes each new `Results` (`None` when the file can't be
-    read)."""
+    `path`."""
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), *MOVE]
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Back"),
+        Binding("x", "delete_override", "Delete"),
+        *MOVE,
+    ]
 
     def __init__(
-        self,
-        model: Path,
-        path: tuple[str, ...],
-        headings: tuple[str, ...],
-        results: Results | None,
-        updates: Signal[Results | None],
+        self, source: ResultsSource, path: tuple[str, ...], headings: tuple[str, ...]
     ) -> None:
         super().__init__()
-        self.model = model
+        self.source = source
         self.path = path
         self.headings = headings
-        self._results = results
-        self._updates = updates
+        self._results = source.results
         self._rows: list[str] | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            " - ".join(("Models", self.model.stem, *self.headings)),
+            " - ".join(("Models", self.source.model.stem, *self.headings)),
             id="check-title",
             classes="section-title",
             markup=False,
@@ -83,20 +161,84 @@ class CheckDetailScreen(Screen):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self._updates.subscribe(self, self._show)
+        self.source.results_changed.subscribe(self, self._show)
         await self._show(self._results)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        if action == "delete_override":
+            return self._focused_override() is not None
+        return True
+
+    def action_delete_override(self) -> None:
+        if (override := self._focused_override()) is not None:
+            self._delete_override(override)
+
+    def _focused_override(self) -> TextureMapOverride | None:
+        focused = self.focused
+        if isinstance(focused, SelectableRow) and isinstance(
+            focused.key, TextureMapOverride
+        ):
+            return focused.key
+        return None
+
+    @work(exclusive=True, group="texture-map-override")
+    async def _delete_override(self, override: TextureMapOverride) -> None:
+        question = ConfirmModal(f"Delete texture map override '{override.name}'?")
+        if await self.app.push_screen_wait(question):
+            self.source.delete_texture_map_override(self.path[-1], override)
 
     def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
         key = message.row.key
+        if isinstance(key, TextureMapOverride):
+            self._edit(key)
+            return
+        if isinstance(key, tuple):
+            self._link(list(key))
+            return
         self.app.push_screen(
-            CheckDetailScreen(
-                self.model,
-                (*self.path, key),
-                (*self.headings, key),
-                self._results,
-                self._updates,
-            )
+            CheckDetailScreen(self.source, (*self.path, key), (*self.headings, key))
         )
+
+    @work(exclusive=True, group="texture-map-override")
+    async def _link(self, meshes: list[str]) -> None:
+        role = self.path[-1]
+        modal = TextureMapOverrideModal(role, meshes, self.source.texture_maps(role))
+        override = await self.app.push_screen_wait(modal)
+        if override is not None:
+            self.source.add_texture_map_override(role, override)
+
+    @work(exclusive=True, group="texture-map-override")
+    async def _edit(self, old: TextureMapOverride) -> None:
+        role = self.path[-1]
+        meshes = self._editable_meshes(old)
+        modal = TextureMapOverrideModal(
+            role, meshes, self.source.texture_maps(role), old
+        )
+        new = await self.app.push_screen_wait(modal)
+        if new is not None and new != old:
+            self.source.replace_texture_map_override(role, old, new)
+
+    def _editable_meshes(self, old: TextureMapOverride) -> list[str]:
+        results = self._results
+        if results is None:
+            return old.meshes
+        role = lookup(results.to_dict(), self.path)
+        check = role.get("texture_maps") if isinstance(role, dict) else None
+        groups = check.get("duplicates", []) if is_check(check) else []
+        others = {
+            mesh
+            for override in self._overrides(results)
+            if override != old
+            for mesh in override.meshes
+        }
+        listed = {
+            mesh: None
+            for group in groups
+            if set(group) & set(old.meshes)
+            for mesh in group
+            if mesh in old.meshes or mesh not in others
+        }
+        return [*listed, *(mesh for mesh in old.meshes if mesh not in listed)]
 
     async def _show(self, results: Results | None) -> None:
         self._results = results
@@ -109,14 +251,33 @@ class CheckDetailScreen(Screen):
             await self._show_rows(lines, value)
             return
         self._rows = None
+        focused = self.focused.key if isinstance(self.focused, SelectableRow) else None
         lines.can_focus = True
         await lines.remove_children()
         if value is None or value == {}:
             await lines.mount(Static(_NO_RESULTS, classes="config-detail"))
-        elif isinstance(value, dict) and not is_check(value):
-            await lines.mount_all(_sections(value))
+            return
+        keys = () if isinstance(value, dict) else self.path[-1:]
+        stems = mesh_roles.stems_of(self._overrides(results))
+        fixes = list(_fixes(value, keys, stems))
+        if fixes:
+            await lines.mount(_fix_section(fixes))
+        if isinstance(value, dict) and not is_check(value):
+            await lines.mount_all(_sections(value, self._overrides(results)))
         else:
-            await lines.mount(_section((self.path[-1],), value))
+            await lines.mount_all(_field_sections((self.path[-1],), value))
+        # A remount drops focus. Linking shrinks or removes the focused group, so fall
+        # back to the first group left.
+        rows = list(lines.query(SelectableRow))
+        if focused is not None and rows:
+            next((row for row in rows if row.key == focused), rows[0]).focus()
+
+    def _overrides(self, results: Results) -> list[TextureMapOverride]:
+        """The overrides of the role at `path`, or none when it isn't a role."""
+        match self.path:
+            case ("mesh_roles", role):
+                return results.texture_map_overrides.get(role, [])
+        return []
 
     async def _show_rows(self, lines: VerticalScroll, value: dict) -> None:
         labels = {
@@ -145,57 +306,141 @@ def _is_listing(value: object) -> bool:
     )
 
 
-def _sections(value: dict, keys: tuple[str, ...] = ()) -> Iterator[Vertical]:
-    """One section per bool, check or list; a nested container's are titled by path."""
+def _sections(
+    value: dict,
+    overrides: Sequence[TextureMapOverride] = (),
+    keys: tuple[str, ...] = (),
+) -> Iterator[Vertical]:
+    """One section per bool, check or list; a nested container's are titled by path.
+    `overrides` are listed in the `texture_maps` duplicates section."""
     for key, child in value.items():
         if isinstance(child, dict) and child and not is_check(child):
-            yield from _sections(child, (*keys, key))
+            yield from _sections(child, keys=(*keys, key))
+        elif key == "texture_maps":
+            yield from _field_sections((*keys, key), child, overrides)
         else:
-            yield _section((*keys, key), child)
+            yield from _field_sections((*keys, key), child)
+
+
+def _field_sections(
+    keys: tuple[str, ...],
+    value: object,
+    overrides: Sequence[TextureMapOverride] = (),
+) -> Iterator[Vertical]:
+    yield _section(keys, value)
+    duplicates = value.get("duplicates", []) if is_check(value) else []
+    # Overrides outlive their group (a renamed mesh), so they alone keep the section.
+    if not duplicates and not overrides:
+        return
+    linked = {mesh for override in overrides for mesh in override.meshes}
+    unlinked = [[mesh for mesh in group if mesh not in linked] for group in duplicates]
+    # An override links two or more meshes, so a group of one has nothing left.
+    groups = [group for group in unlinked if len(group) > 1]
+    blocks: list[list[Widget]] = []
+    if groups:
+        blocks.append([Static(_DUPLICATES_HELP, classes="config-detail", markup=False)])
+        blocks.append(
+            [
+                SelectableRow(tuple(group), _text(group), classes="check-line")
+                for group in groups
+            ]
+        )
+    else:
+        blocks.append([Static(_NO_DUPLICATES, classes="config-detail", markup=False)])
+    if overrides:
+        blocks.append(
+            [
+                *_statics(["texture_map_overrides:"]),
+                *(
+                    SelectableRow(
+                        override,
+                        "\n  ".join(
+                            f"{key}: {_text(value)}"
+                            for key, value in override.to_dict().items()
+                        ),
+                        classes="check-line",
+                    )
+                    for override in overrides
+                ),
+            ]
+        )
+    yield _box(" > ".join((*keys, "duplicates")), blocks)
 
 
 def _section(keys: tuple[str, ...], value: object) -> Vertical:
     key = keys[-1]
-    if isinstance(value, bool) or is_check(value):
-        status = status_of(value)
-        lines = [f"{icon(status)} {_STATES[status]}"]
-        failures = value["failures"] if is_check(value) else []
-        lines += _failure_lines(failures)
-        children: list[Widget] = _statics(lines)
-        children += [
+    if not (isinstance(value, bool) or is_check(value)):
+        return _box(" > ".join(keys), [_statics([_text(value)])])
+    status = status_of(value)
+    failures = value["failures"] if is_check(value) else []
+    restated = _RESTATED.get(key, set())
+    facts = [
+        {k: v for k, v in failure.items() if k not in restated} for failure in failures
+    ]
+    blocks = [_statics([f"{icon(status)} {_STATES[status]}", *_fact_lines(facts)])]
+    blocks += [
+        [
             Static(
-                f"Warning: {text}",
-                classes="config-detail check-warning",
-                markup=False,
+                f"Warning: {text}", classes="config-detail check-warning", markup=False
             )
-            for fact, text in _WARNINGS.items()
-            if any(failure.get(fact) is True for failure in failures)
         ]
-        if status is not True and key in _FIX_STEPS:
-            children.append(
-                Static(
-                    f"How to fix: {_FIX_STEPS[key]}",
-                    classes="config-detail check-fix",
-                    markup=False,
-                )
-            )
-    else:
-        children = _statics([_text(value)])
-    section = Vertical(*children, classes="check-section")
-    section.border_title = " > ".join(keys)
+        for fact, text in _WARNINGS.items()
+        if any(failure.get(fact) is True for failure in failures)
+    ]
+    return _box(" > ".join(keys), blocks)
+
+
+def _box(title: str, blocks: list[list[Widget]], classes: str = "") -> Vertical:
+    # Not `:first-child`: Textual can match it stale on constructor children.
+    section = Vertical(
+        *(
+            Vertical(*block, classes="check-block" + (" spaced" if i else ""))
+            for i, block in enumerate(blocks)
+        ),
+        classes=f"check-section {classes}".strip(),
+    )
+    section.border_title = title
     return section
+
+
+def _fixes(
+    value: object, keys: tuple[str, ...], stems: Stems
+) -> Iterator[tuple[str, list[str]]]:
+    """Each failing or warning check's label (its section's title) and fixes."""
+    if isinstance(value, bool) or is_check(value):
+        fixes = _FIXES.get(keys[-1])
+        failures = value["failures"] if is_check(value) else []
+        if status_of(value) is not True and fixes and (items := fixes(failures, stems)):
+            yield " > ".join(keys), items
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            yield from _fixes(child, (*keys, key), stems)
+
+
+def _fix_section(fixes: list[tuple[str, list[str]]]) -> Vertical:
+    blocks: list[list[Widget]] = [
+        [
+            Static(label, classes="check-line fix-label", markup=False),
+            *(
+                Static(f"{n}. {item}", classes="check-line fix-item", markup=False)
+                for n, item in enumerate(items, 1)
+            ),
+        ]
+        for label, items in fixes
+    ]
+    return _box("Needs Fixes", blocks, "check-fixes")
 
 
 def _statics(lines: list[str]) -> list[Widget]:
     return [Static(text, classes="check-line", markup=False) for text in lines]
 
 
-def _failure_lines(failures: list[dict]) -> list[str]:
-    """Each failure's facts as `key: value` lines, the first marked `- ` like YAML."""
+def _fact_lines(facts: list[dict]) -> list[str]:
+    """Each dict's facts as `key: value` lines, the first marked `- ` like YAML."""
     return [
         f"{'- ' if index == 0 else '  '}{key}: {_text(value)}"
-        for failure in failures
-        for index, (key, value) in enumerate(failure.items())
+        for fact in facts
+        for index, (key, value) in enumerate(fact.items())
     ]
 
 

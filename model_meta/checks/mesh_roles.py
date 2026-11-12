@@ -2,34 +2,34 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
+from pathlib import PurePath
 
 from model_meta.core.blender_bridge import (
+    TEXTURES_VERSION,
     MeshReport,
     MeshTarget,
     MeshTextures,
     MeshUvs,
     MeshWeight,
     SceneMesh,
-    TextureTarget,
     WeightTarget,
 )
-from model_meta.core.results import FieldCheck, MeshRoleResult
+from model_meta.core.results import FieldCheck, MeshRoleResult, TextureMapOverride
 from model_meta.core.spec import MeshRole
 from model_meta.specs import parenting
 
 NO_MESHES = "no meshes matched"
-
-Failures = list[dict[str, object]]
+OLD_ADDON = f"add-on before {'.'.join(map(str, TEXTURES_VERSION))}"
 
 
 def plan(
     roles: Mapping[str, MeshRole], meshes: Sequence[SceneMesh]
-) -> tuple[list[WeightTarget], list[TextureTarget], list[MeshTarget], list[MeshTarget]]:
-    """The bridge targets `evaluate` needs: deduped, one texture and UV target per
-    textured mesh, and one modifier target per matched mesh."""
+) -> tuple[list[WeightTarget], list[MeshTarget], list[MeshTarget]]:
+    """The bridge targets `evaluate` needs, deduped: weights, one target per textured
+    mesh, and one per matched mesh."""
     weights: dict[WeightTarget, None] = {}
-    maps: dict[str, dict[str, None]] = {}
+    textured: dict[str, None] = {}
     matched_names: dict[str, None] = {}
     for role in roles.values():
         matched, _ = _matched(role, meshes)
@@ -38,47 +38,76 @@ def plan(
             if role.weight is not None and role.vtx_grp is not None:
                 for group in _groups(role.vtx_grp, mesh):
                     weights[WeightTarget(mesh.name, group, role.weight)] = None
-            for name in role.texture_maps or []:
-                maps.setdefault(mesh.name, {})[name] = None
-    textures = [TextureTarget(mesh, list(names)) for mesh, names in maps.items()]
+            if role.texture_maps:
+                textured[mesh.name] = None
     return (
         list(weights),
-        textures,
-        [MeshTarget(mesh) for mesh in maps],
+        [MeshTarget(mesh) for mesh in textured],
         [MeshTarget(mesh) for mesh in matched_names],
     )
 
 
 def evaluate(
-    roles: Mapping[str, MeshRole], report: MeshReport
+    roles: Mapping[str, MeshRole],
+    report: MeshReport,
+    overrides: Mapping[str, Sequence[TextureMapOverride]] | None = None,
 ) -> dict[str, MeshRoleResult]:
     """Pass a `report` fetched with `plan(roles, ...)`, so its items line up."""
-    weight_targets, texture_targets, uv_targets, _ = plan(roles, report.meshes)
+    weight_targets, textured, _ = plan(roles, report.meshes)
     scene = _Scene(
         dict(zip(weight_targets, report.weights, strict=True)),
-        {
-            target.mesh: result
-            for target, result in zip(texture_targets, report.textures, strict=True)
-        },
-        None
-        if report.uvs is None
-        else {
-            target.mesh: result
-            for target, result in zip(uv_targets, report.uvs, strict=True)
-        },
+        _by_mesh(textured, report.textures),
+        _by_mesh(textured, report.uvs),
+        report.duplicates or [],
+        {},
     )
+    overrides = overrides or {}
     return {
-        name: _role_result(role, report.meshes, scene) for name, role in roles.items()
+        name: _role_result(
+            role,
+            report.meshes,
+            replace(scene, stems=stems_of(overrides.get(name, ()))),
+        )
+        for name, role in roles.items()
+    }
+
+
+Stems = dict[tuple[str, str], str]
+
+
+def stems_of(overrides: Sequence[TextureMapOverride]) -> Stems:
+    """One role's `(mesh, map)` → the override name its file starts with. The first
+    override wins."""
+    stems: Stems = {}
+    for override in overrides:
+        for mesh in override.meshes:
+            for name in override.maps:
+                stems.setdefault((mesh, name), override.name)
+    return stems
+
+
+def texture_file(stems: Stems, mesh: str, name: str) -> str:
+    """The file the check looks for: the override's name, else the mesh's."""
+    return f"{stems.get((mesh, name), mesh)}_{name}.png"
+
+
+def _by_mesh(targets: list[MeshTarget], results: list | None) -> dict | None:
+    if results is None:
+        return None
+    return {
+        target.mesh: result for target, result in zip(targets, results, strict=True)
     }
 
 
 @dataclass(frozen=True)
 class _Scene:
-    """`uvs` is `None` when the add-on predates `get_mesh_uvs`."""
+    """`textures` / `uvs` are `None` when the add-on predates them."""
 
     weights: dict[WeightTarget, MeshWeight]
-    textures: dict[str, MeshTextures]
+    textures: dict[str, MeshTextures] | None
     uvs: dict[str, MeshUvs] | None
+    duplicates: list[list[str]]
+    stems: Stems
 
 
 def _role_result(
@@ -90,28 +119,29 @@ def _role_result(
         if not is_set(role):
             continue
         if problem is not None:
-            failures = [{"error": problem}]
+            checks[field] = FieldCheck([{"error": problem}])
         elif not matched and field != "count":
-            failures = [{"error": NO_MESHES}]
+            checks[field] = FieldCheck([{"error": NO_MESHES}])
         else:
-            failures = check(role, matched, scene)
-        checks[field] = FieldCheck(failures)
+            checks[field] = check(role, matched, scene)
     return MeshRoleResult([mesh.name for mesh in matched], checks)
 
 
-def _count(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> Failures:
+def _count(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
     if len(matched) == role.count:
-        return []
-    return [{"expected": role.count, "matched": len(matched)}]
+        return FieldCheck([])
+    return FieldCheck([{"expected": role.count, "matched": len(matched)}])
 
 
-def _vtx_grp(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> Failures:
-    return [{"mesh": mesh.name} for mesh in matched if not _groups(role.vtx_grp, mesh)]
+def _vtx_grp(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
+    return FieldCheck(
+        [{"mesh": mesh.name} for mesh in matched if not _groups(role.vtx_grp, mesh)]
+    )
 
 
-def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures:
+def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> FieldCheck:
     if role.vtx_grp is None:
-        return [{"error": "vtx_grp not set"}]
+        return FieldCheck([{"error": "vtx_grp not set"}])
     failures = []
     for mesh in matched:
         groups = _groups(role.vtx_grp, mesh)
@@ -127,22 +157,47 @@ def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures
                 counts = asdict(result)
                 del counts["error"]
                 failures.append(counts)
-    return failures
+    return FieldCheck(failures)
 
 
-def _texture_maps(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> Failures:
+def _texture_maps(
+    role: MeshRole, matched: list[SceneMesh], scene: _Scene
+) -> FieldCheck:
+    names = {mesh.name for mesh in matched}
+    shared = [[n for n in group if n in names] for group in scene.duplicates]
+    duplicates = [group for group in shared if len(group) > 1]
+    if scene.textures is None:
+        return FieldCheck([{"error": OLD_ADDON}], duplicates=duplicates)
     failures = []
     for mesh in matched:
         result = scene.textures[mesh.name]
         if result.error is not None:
             failures.append({"mesh": mesh.name, "error": result.error})
             continue
-        missing = [name for name in role.texture_maps if not result.maps.get(name)]
+        files = [
+            PurePath(image.filepath).name
+            for image in result.images
+            if image.filepath is not None
+        ]
+        expected = {
+            name: texture_file(scene.stems, mesh.name, name)
+            for name in role.texture_maps
+        }
+        missing = [
+            name
+            for name, file in expected.items()
+            if not any(f.endswith(file) for f in files)
+        ]
         if missing:
             failures.append(
-                {"mesh": mesh.name, "missing": missing, **_unwrap(mesh.name, scene)}
+                {
+                    "mesh": mesh.name,
+                    "missing": missing,
+                    "expected": [expected[name] for name in missing],
+                    **_unwrap(mesh.name, scene),
+                }
             )
-    return failures
+    return FieldCheck(failures, duplicates=duplicates)
 
 
 def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
@@ -156,13 +211,13 @@ def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
 
 def _material_slots(
     role: MeshRole, matched: list[SceneMesh], _scene: _Scene
-) -> Failures:
+) -> FieldCheck:
     failures = []
     for mesh in matched:
         missing = [s for s in role.material_slots if s not in mesh.material_slots]
         if missing:
             failures.append({"mesh": mesh.name, "missing": missing})
-    return failures
+    return FieldCheck(failures)
 
 
 # Spec order, which is also the order results are written in. `[]` lists check nothing.
