@@ -148,16 +148,30 @@ class ModelDashboardScreen(Screen):
     def add_texture_map_override(self, role: str, override: TextureMapOverride) -> None:
         self._change_overrides(role, lambda overrides: [*overrides, override], "saved")
 
+    def replace_texture_map_override(
+        self, role: str, old: TextureMapOverride, new: TextureMapOverride
+    ) -> None:
+        self._swap_override(role, old, [new], "saved")
+
     def delete_texture_map_override(
         self, role: str, override: TextureMapOverride
     ) -> None:
-        def delete(overrides: list[TextureMapOverride]) -> list[TextureMapOverride]:
-            if override not in overrides:
-                raise ValueError(f"override '{override.name}' is no longer in it")
-            index = overrides.index(override)
-            return [*overrides[:index], *overrides[index + 1 :]]
+        self._swap_override(role, override, [], "deleted")
 
-        self._change_overrides(role, delete, "deleted")
+    def _swap_override(
+        self,
+        role: str,
+        old: TextureMapOverride,
+        new: list[TextureMapOverride],
+        done: str,
+    ) -> None:
+        def swap(overrides: list[TextureMapOverride]) -> list[TextureMapOverride]:
+            if old not in overrides:
+                raise ValueError(f"override '{old.name}' is no longer in it")
+            index = overrides.index(old)
+            return [*overrides[:index], *new, *overrides[index + 1 :]]
+
+        self._change_overrides(role, swap, done)
 
     def _change_overrides(
         self,

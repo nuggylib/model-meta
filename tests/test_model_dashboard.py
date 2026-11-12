@@ -607,6 +607,21 @@ async def test_deleting_the_last_override_drops_the_role_and_rechecks(
     assert Results.load(screen.results_path).texture_map_overrides == {}
 
 
+async def test_replacing_an_override_keeps_its_place(tmp_path, monkeypatch):
+    rear = TextureMapOverride("rear", ["albedo"], ["wheel_hub.rear.L", "x"])
+    edited = TextureMapOverride("wheel_hub", ["albedo", "orm"], _FRONTS)
+    overrides = {"wheels": [_FRONT_OVERRIDE, rear]}
+    screen = _screen(
+        tmp_path, "Rig", roles=_TEXTURED_ROLES, texture_map_overrides=overrides
+    )
+    async with _Host(screen).run_test() as pilot:
+        await pilot.pause()
+        screen.replace_texture_map_override("wheels", _FRONT_OVERRIDE, edited)
+        await pilot.pause()
+    saved = Results.load(screen.results_path)
+    assert saved.texture_map_overrides == {"wheels": [edited, rear]}
+
+
 async def test_deleting_an_override_no_longer_saved_writes_nothing(
     tmp_path, monkeypatch
 ):

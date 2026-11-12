@@ -18,7 +18,8 @@ _HELP = (
 
 
 class TextureMapOverrideModal(ModalScreen[TextureMapOverride | None]):
-    """Return the override to add, or `None` on `escape`. Writes nothing."""
+    """Return the override to save, or `None` on `escape`. Writes nothing. `existing`
+    prefills the form; `meshes` must hold its meshes."""
 
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
@@ -50,31 +51,50 @@ class TextureMapOverrideModal(ModalScreen[TextureMapOverride | None]):
     }
     """
 
-    def __init__(self, role: str, meshes: list[str], maps: list[str]) -> None:
+    def __init__(
+        self,
+        role: str,
+        meshes: list[str],
+        maps: list[str],
+        existing: TextureMapOverride | None = None,
+    ) -> None:
         super().__init__()
         self.role = role
         self.meshes = meshes
-        self.maps = maps
+        self.existing = existing
+        # Maps since dropped from the spec stay listed, so a save keeps them.
+        kept = [] if existing is None else existing.maps
+        self.maps = [*maps, *(name for name in kept if name not in maps)]
 
     def compose(self) -> ComposeResult:
         # Scrolls so Save stays reachable in a short terminal.
+        existing = self.existing
+        linked = self.meshes if existing is None else existing.meshes
+        shared = [] if existing is None else existing.maps
+        title = "Share" if existing is None else "Edit shared"
         with VerticalScroll(can_focus=False):
             yield Static(
-                f"Share texture maps in {self.role}",
+                f"{title} texture maps in {self.role}",
                 classes="section-title",
                 markup=False,
             )
             yield Static(_HELP, classes="config-detail", markup=False)
             yield Static("Meshes", classes="override-label")
             yield SelectionList[str](
-                *((mesh, mesh, True) for mesh in self.meshes), id="override-meshes"
+                *((mesh, mesh, mesh in linked) for mesh in self.meshes),
+                id="override-meshes",
             )
             yield Static("Maps", classes="override-label")
             yield SelectionList[str](
-                *((name, name) for name in self.maps), id="override-maps"
+                *((name, name, name in shared) for name in self.maps),
+                id="override-maps",
             )
             yield Static("Shared name", classes="override-label")
-            yield Input(placeholder="e.g. arm_top", id="override-name")
+            yield Input(
+                "" if existing is None else existing.name,
+                placeholder="e.g. arm_top",
+                id="override-name",
+            )
             yield Static(id="override-preview", classes="config-detail", markup=False)
             yield Static(id="override-status", markup=False)
             yield Button("Save", id="save-override")

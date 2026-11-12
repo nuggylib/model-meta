@@ -135,9 +135,11 @@ in the app (analogous to a route in a web app).
   while the worker keeps running beneath it. Nested rows are indented past
   the root rows' rail and `▸ `.
   **Overrides:** `texture_maps(role)` gives a role's spec `texture_maps`.
-  `add_texture_map_override(role, override)` appends one and
-  `delete_texture_map_override(role, override)` removes the first equal one;
-  both go through `_change_overrides`, then `_update`, which loads the file
+  `add_texture_map_override(role, override)` appends one.
+  `replace_texture_map_override(role, old, new)` swaps the first one equal
+  to `old` in place, and `delete_texture_map_override(role, override)`
+  removes it (both `_swap_override`). All go through `_change_overrides`,
+  then `_update`, which loads the file
   right before. A role left with no overrides is dropped from the file. An
   override no longer in the file is a `ValueError`, so the error notice
   shows and nothing is written. Each then re-runs `_check_mesh_roles` on
@@ -200,7 +202,8 @@ in the app (analogous to a route in a web app).
   model's results at a key path in `Results.to_dict()`. `source` is a
   `ResultsSource` (the model dashboard): `model`, `results`,
   `results_changed`, `texture_maps(role)`,
-  `add_texture_map_override(role, override)` and
+  `add_texture_map_override(role, override)`,
+  `replace_texture_map_override(role, old, new)` and
   `delete_texture_map_override(role, override)`. The screen never writes the
   results file itself. It reads the value with `tui.status.lookup`, and is
   pushed by `enter` on a model dashboard root row and
@@ -234,8 +237,12 @@ in the app (analogous to a route in a web app).
     one label. Overrides alone (their group gone) still show the section,
     with `_NO_DUPLICATES`. `x` (`check_action`: only on an override row)
     runs `_delete_override` in the same worker group: a `ConfirmModal`, and
-    on Yes `source.delete_texture_map_override`. `enter` on an override does
-    nothing yet. `enter`
+    on Yes `source.delete_texture_map_override`. `enter` on an override runs
+    `_edit` (same group): the modal with that override as `existing`, its
+    meshes from `_editable_meshes`, the override's meshes plus the meshes of
+    any duplicate group holding one of them that no other override links,
+    in group order. A saved result that differs goes to
+    `source.replace_texture_map_override`; an unchanged one writes nothing. `enter`
     on a group runs `_link`, a `@work(exclusive=True,
     group="texture-map-override")` worker that `push_screen_wait`s a
     `TextureMapOverrideModal` and passes a non-`None` result to
@@ -274,10 +281,13 @@ in the app (analogous to a route in a web app).
   publish. Only `escape` and `MOVE` are bound; outside the row list,
   `#check-lines` keeps its focus so long pages scroll.
 - `texture_map_override_modal.py` — `TextureMapOverrideModal(role, meshes,
-  maps)`, a `ModalScreen[TextureMapOverride | None]`. It shows a
-  `#override-meshes` checklist of one duplicate group (all checked), a
+  maps, existing=None)`, a `ModalScreen[TextureMapOverride | None]`. It shows
+  a `#override-meshes` checklist of `meshes` (all checked), a
   `#override-maps` checklist of the role's maps (none checked; focused), and
-  a `#override-name` Input. A live `#override-preview` lists the `Expected:`
+  a `#override-name` Input. With `existing` (an edit), the title reads `Edit
+  shared texture maps in <role>`, only its meshes and maps are checked, the
+  name is prefilled, and any of its maps no longer in `maps` are listed
+  after them so a save keeps them. A live `#override-preview` lists the `Expected:`
   filenames. Enter in the Input or **Save** checks, in order: at least two
   meshes, at least one map, a non-blank name (trimmed), and no `/` or `\`.
   The first problem shows in `#override-status`, and the modal stays open.

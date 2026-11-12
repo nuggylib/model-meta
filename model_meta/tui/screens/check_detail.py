@@ -120,6 +120,10 @@ class ResultsSource(Protocol):
         self, role: str, override: TextureMapOverride
     ) -> None: ...
 
+    def replace_texture_map_override(
+        self, role: str, old: TextureMapOverride, new: TextureMapOverride
+    ) -> None: ...
+
     def delete_texture_map_override(
         self, role: str, override: TextureMapOverride
     ) -> None: ...
@@ -186,6 +190,7 @@ class CheckDetailScreen(Screen):
     def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
         key = message.row.key
         if isinstance(key, TextureMapOverride):
+            self._edit(key)
             return
         if isinstance(key, tuple):
             self._link(list(key))
@@ -201,6 +206,39 @@ class CheckDetailScreen(Screen):
         override = await self.app.push_screen_wait(modal)
         if override is not None:
             self.source.add_texture_map_override(role, override)
+
+    @work(exclusive=True, group="texture-map-override")
+    async def _edit(self, old: TextureMapOverride) -> None:
+        role = self.path[-1]
+        meshes = self._editable_meshes(old)
+        modal = TextureMapOverrideModal(
+            role, meshes, self.source.texture_maps(role), old
+        )
+        new = await self.app.push_screen_wait(modal)
+        if new is not None and new != old:
+            self.source.replace_texture_map_override(role, old, new)
+
+    def _editable_meshes(self, old: TextureMapOverride) -> list[str]:
+        results = self._results
+        if results is None:
+            return old.meshes
+        role = lookup(results.to_dict(), self.path)
+        check = role.get("texture_maps") if isinstance(role, dict) else None
+        groups = check.get("duplicates", []) if is_check(check) else []
+        others = {
+            mesh
+            for override in self._overrides(results)
+            if override != old
+            for mesh in override.meshes
+        }
+        listed = {
+            mesh: None
+            for group in groups
+            if set(group) & set(old.meshes)
+            for mesh in group
+            if mesh in old.meshes or mesh not in others
+        }
+        return [*listed, *(mesh for mesh in old.meshes if mesh not in listed)]
 
     async def _show(self, results: Results | None) -> None:
         self._results = results

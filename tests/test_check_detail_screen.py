@@ -71,6 +71,7 @@ class _Source:
         self.results = results
         self.results_changed = updates
         self.saved = []
+        self.replaced = []
         self.deleted = []
 
     def texture_maps(self, _role):
@@ -78,6 +79,9 @@ class _Source:
 
     def add_texture_map_override(self, role, override):
         self.saved.append((role, override))
+
+    def replace_texture_map_override(self, role, old, new):
+        self.replaced.append((role, old, new))
 
     def delete_texture_map_override(self, role, override):
         self.deleted.append((role, override))
@@ -353,6 +357,61 @@ async def test_x_on_an_override_deletes_it_once_confirmed(answer, deleted):
         assert isinstance(app.screen, CheckDetailScreen)
         expected = [("arms", _FRONT_ARMS["arms"][0])] if deleted else []
         assert app.source.deleted == expected
+
+
+async def _open_edit_modal(pilot, app):
+    await pilot.pause()
+    _override_row(app).focus()
+    await pilot.press("enter")
+    await pilot.pause()
+    assert isinstance(app.screen, TextureMapOverrideModal)
+    return app.screen
+
+
+async def test_enter_on_an_override_opens_it_prefilled_with_its_group():
+    # RR is linked by another override, so only RL joins the edited one's meshes.
+    rear = TextureMapOverride("rear", ["orm"], ["arm_top.RR"])
+    overrides = {"arms": [*_FRONT_ARMS["arms"], rear]}
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        modal = await _open_edit_modal(pilot, app)
+        meshes = modal.query_one("#override-meshes", SelectionList)
+        maps = modal.query_one("#override-maps", SelectionList)
+        assert [meshes.get_option_at_index(i).value for i in range(3)] == _ARMS
+        assert meshes.option_count == 3
+        assert meshes.selected == _ARMS[:2]
+        assert maps.selected == ["albedo"]
+        assert modal.query_one("#override-name", Input).value == "arm_top"
+
+
+async def test_saving_an_edit_replaces_the_override():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        modal = await _open_edit_modal(pilot, app)
+        modal.query_one("#override-meshes", SelectionList).select("arm_top.RL")
+        modal.query_one("#override-maps", SelectionList).select("orm")
+        modal.query_one("#save-override", Button).press()
+        await pilot.pause()
+        assert app.source.replaced == [
+            (
+                "arms",
+                _FRONT_ARMS["arms"][0],
+                TextureMapOverride("arm_top", ["albedo", "orm"], _ARMS),
+            )
+        ]
+
+
+async def test_saving_an_unchanged_edit_writes_nothing():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        modal = await _open_edit_modal(pilot, app)
+        modal.query_one("#save-override", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
+        assert app.source.replaced == []
 
 
 async def test_x_on_a_group_does_nothing():
