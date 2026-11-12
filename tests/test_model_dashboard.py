@@ -743,8 +743,8 @@ async def test_check_detail_follows_live_results(tmp_path, monkeypatch):
 
 
 _RENAMED_FIXES = [
-    f"{n}. Bake a texture map named wheel_hub_albedo.png for {mesh}"
-    for n, mesh in enumerate(_FRONTS, 1)
+    "1. Meshes wheel_hub.front.L, wheel_hub.front.R need wheel_hub_albedo.png "
+    "baked or linked"
 ]
 
 

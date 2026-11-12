@@ -219,7 +219,25 @@ async def test_texture_fixes_name_the_override_file_and_skip_errors():
         await pilot.pause()
         assert _sections(app)["Needs Fixes"] == [
             "texture_maps",
-            "1. Bake a texture map named arm_top_albedo.png for arm_top.FL",
+            "1. Mesh arm_top.FL needs arm_top_albedo.png baked or linked",
+        ]
+
+
+async def test_an_overrides_meshes_share_one_fix_beside_the_bake_fixes():
+    failures = [{"mesh": mesh, "missing": ["albedo", "normal"]} for mesh in _ARMS]
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck(failures)})}
+    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS)]}
+    results = _results(mesh_roles=roles, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["Needs Fixes"] == [
+            "texture_maps",
+            "1. Meshes arm_top.FL, arm_top.FR, arm_top.RL need arm_top_albedo.png "
+            "baked or linked",
+            "2. Bake a texture map named arm_top.FL_normal.png for arm_top.FL",
+            "3. Bake a texture map named arm_top.FR_normal.png for arm_top.FR",
+            "4. Bake a texture map named arm_top.RL_normal.png for arm_top.RL",
         ]
 
 

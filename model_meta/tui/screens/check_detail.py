@@ -36,13 +36,25 @@ def _once(text: str) -> Fixes:
 
 def _texture_fixes(failures: list[dict], stems: Stems) -> list[str]:
     # Named from `missing` and the current overrides, not the stored `expected`, so
-    # a new override shows before Blender saves again.
-    return [
-        f"Bake a texture map named {texture_file(stems, mesh, name)} for {mesh}"
-        for failure in failures
-        if isinstance(mesh := failure.get("mesh"), str)
-        for name in failure.get("missing", [])
-    ]
+    # a new override shows before Blender saves again. An override's meshes share one
+    # item, at its first mesh's place.
+    items: dict[str, list[str]] = {}
+    for failure in failures:
+        if not isinstance(mesh := failure.get("mesh"), str):
+            continue
+        for name in failure.get("missing", []):
+            file = texture_file(stems, mesh, name)
+            if (mesh, name) in stems:
+                items.setdefault(file, []).append(mesh)
+            else:
+                items[f"Bake a texture map named {file} for {mesh}"] = []
+    return [_linked(meshes, key) if meshes else key for key, meshes in items.items()]
+
+
+def _linked(meshes: list[str], file: str) -> str:
+    if len(meshes) == 1:
+        return f"Mesh {meshes[0]} needs {file} baked or linked"
+    return f"Meshes {format_list(meshes)} need {file} baked or linked"
 
 
 # Keyed by a check's key in the results file, wherever it sits: its fixes, from its
@@ -247,9 +259,7 @@ def _field_sections(
         return
     children: list[Widget] = []
     if duplicates:
-        children.append(
-            Static(_DUPLICATES_HELP, classes="config-detail", markup=False)
-        )
+        children.append(Static(_DUPLICATES_HELP, classes="config-detail", markup=False))
         children += [
             SelectableRow(tuple(group), _text(group), classes="check-line")
             for group in duplicates

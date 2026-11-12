@@ -240,7 +240,10 @@ in the app (analogous to a route in a web app).
     `_FIXES` entry's items as a numbered list. A `_FIXES` entry maps the
     check's failures, and the role's override `Stems`, to items: one fixed
     text (`_once`), or `texture_maps`' "Bake a texture map named <file> for
-    <mesh>", one per `missing` map. `<file>` comes from
+    <mesh>", one per `missing` map. A map an override covers is instead
+    "Mesh <mesh> needs <file> baked or linked" (`Meshes <a, b> need` for
+    several), one item per override file, at its first mesh's place. `<file>`
+    comes from
     `checks.mesh_roles.texture_file` with the role's current
     `texture_map_overrides`, not from the stored `expected`. That way, an
     override saved with no scene report to re-check (Manual Mode, or before
