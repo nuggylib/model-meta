@@ -10,7 +10,7 @@ GitHub-specific configuration for the repository.
 - `workflows/test.yml` — "Test" workflow. Runs the `pytest` suite on the same triggers, separate
   from linting so each reports its own status check.
 - `workflows/build.yml` — "Build" workflow. Builds a standalone binary for three targets
-  (`macos-14`/arm64, `ubuntu-latest`, `windows-latest`) on every PR and every
+  (`macos-15`/arm64, `ubuntu-latest`, `windows-latest`) on every PR and every
   push to `main`. macOS is **Apple Silicon only** — the Intel runner (`macos-13`) is a deprecated,
   scarce image that queues for many minutes (plan I8); Intel Mac users run the arm64 build under
   Rosetta 2. A `version` job resolves the embedded version string **once** (so all legs
@@ -29,7 +29,7 @@ GitHub-specific configuration for the repository.
   `build.yml` — a cancelled or failed Build never releases. A single job `if:` guard narrows the many
   `workflow_run` firings to the one that should publish: `conclusion == 'success'` **and** the triggering
   Build's `event == 'push'` **and** `head_branch == 'main'` **and** `repository == 'nuggylib/model-meta'`.
-  Two jobs. **`sign-macos`** (`macos-14`) takes the ad-hoc `model-meta.app` from the triggering
+  Two jobs. **`sign-macos`** (`macos-15`) takes the ad-hoc `model-meta.app` from the triggering
   Build run (downloaded by `run-id` into an ephemeral keychain workflow), **Developer ID signs** it
   inner-to-outer (nested Mach-O → launcher → bundle) with `--options runtime --timestamp` (hardened
   runtime), **notarizes** it via the App Store Connect API (`notarytool submit --wait`, `notarytool log`
