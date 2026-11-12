@@ -191,12 +191,13 @@ async def test_a_role_shows_one_section_per_field_and_every_failure():
             "- mesh: wheel_hub.front.R",
             "  missing: albedo, orm",
             "  uv_error: in edit mode",
-            "duplicates:",
-            "▸ wheel_hub.front.L, wheel_hub.front.R",
-            _DUPLICATES_HELP,
             "Warning: A mesh with `has_default_uv_map: True` may not be unwrapped "
             "yet: its UVs match a primitive's default layout. Check them before "
             "baking.",
+        ],
+        "texture_maps > duplicates": [
+            "▸ wheel_hub.front.L, wheel_hub.front.R",
+            _DUPLICATES_HELP,
         ],
     }
 
@@ -247,15 +248,18 @@ async def test_a_passing_texture_check_lists_its_duplicates_and_overrides():
     app = _Host(("mesh_roles", "arms"), results)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _sections(app)["texture_maps"] == [
+        sections = _sections(app)
+        assert list(sections)[-2:] == ["texture_maps", "texture_maps > duplicates"]
+        assert sections["texture_maps"] == [
             "✅ passing",
-            "duplicates:",
-            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
-            _DUPLICATES_HELP,
             "texture_map_overrides:",
             "- name: arm_top",
             "  maps: albedo",
             "  meshes: arm_top.FL, arm_top.FR",
+        ]
+        assert sections["texture_maps > duplicates"] == [
+            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
+            _DUPLICATES_HELP,
         ]
 
 

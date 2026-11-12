@@ -179,7 +179,7 @@ class CheckDetailScreen(Screen):
         if isinstance(value, dict) and not is_check(value):
             await lines.mount_all(_sections(value, self._overrides(results)))
         else:
-            await lines.mount(_section((self.path[-1],), value))
+            await lines.mount_all(_field_sections((self.path[-1],), value))
         # A remount drops focus; keep it on the group the user just linked.
         for row in lines.query(SelectableRow):
             if row.key == focused:
@@ -230,9 +230,26 @@ def _sections(
         if isinstance(child, dict) and child and not is_check(child):
             yield from _sections(child, keys=(*keys, key))
         elif key == "texture_maps":
-            yield _section((*keys, key), child, overrides)
+            yield from _field_sections((*keys, key), child, overrides)
         else:
-            yield _section((*keys, key), child)
+            yield from _field_sections((*keys, key), child)
+
+
+def _field_sections(
+    keys: tuple[str, ...],
+    value: object,
+    overrides: Sequence[TextureMapOverride] = (),
+) -> Iterator[Vertical]:
+    yield _section(keys, value, overrides)
+    if is_check(value) and (duplicates := value.get("duplicates")):
+        rows: list[Widget] = [
+            SelectableRow(tuple(group), _text(group), classes="check-line")
+            for group in duplicates
+        ]
+        rows.append(Static(_DUPLICATES_HELP, classes="config-detail", markup=False))
+        section = Vertical(*rows, classes="check-section")
+        section.border_title = " > ".join((*keys, "duplicates"))
+        yield section
 
 
 def _section(
@@ -252,16 +269,6 @@ def _section(
         children: list[Widget] = _statics(
             [f"{icon(status)} {_STATES[status]}", *_fact_lines(facts)]
         )
-        duplicates = value.get("duplicates", []) if is_check(value) else []
-        if duplicates:
-            children += _statics(["duplicates:"])
-            children += [
-                SelectableRow(tuple(group), _text(group), classes="check-line")
-                for group in duplicates
-            ]
-            children.append(
-                Static(_DUPLICATES_HELP, classes="config-detail", markup=False)
-            )
         if overrides:
             children += _statics(
                 [

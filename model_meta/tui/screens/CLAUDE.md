@@ -216,10 +216,10 @@ in the app (analogous to a route in a web app).
     `⚠️ warning` (a failing `warning` check) or `❌ failing`. A warning or a
     failure lists every failure's facts as `key: value` lines (the first
     marked `- `), minus the facts its fixes restate (`_RESTATED`:
-    `texture_maps` hides `expected`). A check with `duplicates`
-    lists them after its failures, passing or not, as `duplicates:` and one
-    `SelectableRow` per group, keyed by the group as a tuple, then
-    `_DUPLICATES_HELP`. On a role's page, the `texture_maps` section then
+    `texture_maps` hides `expected`). A check with `duplicates`, passing or
+    not, gets its own section right after it (`_field_sections`), titled
+    `<keys> > duplicates`: one `SelectableRow` per group, keyed by the group
+    as a tuple, then `_DUPLICATES_HELP`. On a role's page, the `texture_maps` section then
     lists that role's `texture_map_overrides` as `key: value` lines. `enter`
     on a group runs `_link`, a `@work(exclusive=True,
     group="texture-map-override")` worker that `push_screen_wait`s a
