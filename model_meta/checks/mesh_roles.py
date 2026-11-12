@@ -66,20 +66,29 @@ def evaluate(
         name: _role_result(
             role,
             report.meshes,
-            replace(scene, stems=_stems(overrides.get(name, ()))),
+            replace(scene, stems=stems_of(overrides.get(name, ()))),
         )
         for name, role in roles.items()
     }
 
 
-def _stems(overrides: Sequence[TextureMapOverride]) -> dict[tuple[str, str], str]:
-    """`(mesh, map)` → the name its texture file starts with. The first override wins."""
-    stems: dict[tuple[str, str], str] = {}
+Stems = dict[tuple[str, str], str]
+
+
+def stems_of(overrides: Sequence[TextureMapOverride]) -> Stems:
+    """One role's `(mesh, map)` → the override name its file starts with. The first
+    override wins."""
+    stems: Stems = {}
     for override in overrides:
         for mesh in override.meshes:
             for name in override.maps:
                 stems.setdefault((mesh, name), override.name)
     return stems
+
+
+def texture_file(stems: Stems, mesh: str, name: str) -> str:
+    """The file the check looks for: the override's name, else the mesh's."""
+    return f"{stems.get((mesh, name), mesh)}_{name}.png"
 
 
 def _by_mesh(targets: list[MeshTarget], results: list | None) -> dict | None:
@@ -98,7 +107,7 @@ class _Scene:
     textures: dict[str, MeshTextures] | None
     uvs: dict[str, MeshUvs] | None
     duplicates: list[list[str]]
-    stems: dict[tuple[str, str], str]
+    stems: Stems
 
 
 def _role_result(
@@ -171,7 +180,7 @@ def _texture_maps(
             if image.filepath is not None
         ]
         expected = {
-            name: f"{scene.stems.get((mesh.name, name), mesh.name)}_{name}.png"
+            name: texture_file(scene.stems, mesh.name, name)
             for name in role.texture_maps
         }
         missing = [

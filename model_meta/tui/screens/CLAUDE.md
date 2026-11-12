@@ -236,10 +236,14 @@ in the app (analogous to a route in a web app).
     warning check has fixes. `_fixes` walks the value: each such check gets
     a bold label (its section's title, e.g. `modifiers > warn`), then its
     `_FIXES` entry's items as a numbered list. A `_FIXES` entry maps the
-    check's failures to items: one fixed text (`_once`), or `texture_maps`'
-    "Bake a texture map named <expected> for <mesh>", one per `expected`
-    file, so an override's name shows. A check with no items (a failure
-    that is only an `error`) gets no label.
+    check's failures, and the role's override `Stems`, to items: one fixed
+    text (`_once`), or `texture_maps`' "Bake a texture map named <file> for
+    <mesh>", one per `missing` map. `<file>` comes from
+    `checks.mesh_roles.texture_file` with the role's current
+    `texture_map_overrides`, not from the stored `expected`. That way, an
+    override saved with no scene report to re-check (Manual Mode, or before
+    Blender's first save) still renames the list on the next publish. A
+    check with no items (a failure that is only an `error`) gets no label.
   A missing value, an empty container or an unreadable file shows `No results
   yet.` A new field's fix text is a `_FIXES` entry, never a new screen.
   It subscribes to `source.results_changed` on mount and redraws on each

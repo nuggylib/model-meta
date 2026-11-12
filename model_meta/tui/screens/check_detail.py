@@ -15,6 +15,8 @@ from textual.signal import Signal
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Static
 
+from model_meta.checks import mesh_roles
+from model_meta.checks.mesh_roles import Stems, texture_file
 from model_meta.core.results import Results, TextureMapOverride
 from model_meta.specs.modifiers import format_list
 from model_meta.tui.bindings import MOVE
@@ -25,23 +27,26 @@ from model_meta.tui.widgets.selectable_row import SelectableRow
 _NO_RESULTS = "No results yet."
 _STATES = {True: "passing", WARNING: "warning", False: "failing"}
 
-Fixes = Callable[[list[dict]], list[str]]
+Fixes = Callable[[list[dict], Stems], list[str]]
 
 
 def _once(text: str) -> Fixes:
-    return lambda _failures: [text]
+    return lambda _failures, _stems: [text]
 
 
-def _texture_fixes(failures: list[dict]) -> list[str]:
+def _texture_fixes(failures: list[dict], stems: Stems) -> list[str]:
+    # Named from `missing` and the current overrides, not the stored `expected`, so
+    # a new override shows before Blender saves again.
     return [
-        f"Bake a texture map named {file} for {failure['mesh']}"
+        f"Bake a texture map named {texture_file(stems, mesh, name)} for {mesh}"
         for failure in failures
-        for file in failure.get("expected", [])
+        if isinstance(mesh := failure.get("mesh"), str)
+        for name in failure.get("missing", [])
     ]
 
 
 # Keyed by a check's key in the results file, wherever it sits: its fixes, from its
-# failures.
+# failures and the role's overrides.
 _FIXES: dict[str, Fixes] = {
     "armature": _once(
         "Name the armature object in Blender as the spec's `object_name`."
@@ -166,7 +171,9 @@ class CheckDetailScreen(Screen):
         if value is None or value == {}:
             await lines.mount(Static(_NO_RESULTS, classes="config-detail"))
             return
-        fixes = list(_fixes(value, () if isinstance(value, dict) else self.path[-1:]))
+        keys = () if isinstance(value, dict) else self.path[-1:]
+        stems = mesh_roles.stems_of(self._overrides(results))
+        fixes = list(_fixes(value, keys, stems))
         if fixes:
             await lines.mount(_fix_section(fixes))
         if isinstance(value, dict) and not is_check(value):
@@ -278,16 +285,18 @@ def _section(
     return section
 
 
-def _fixes(value: object, keys: tuple[str, ...]) -> Iterator[tuple[str, list[str]]]:
+def _fixes(
+    value: object, keys: tuple[str, ...], stems: Stems
+) -> Iterator[tuple[str, list[str]]]:
     """Each failing or warning check's label (its section's title) and fixes."""
     if isinstance(value, bool) or is_check(value):
         fixes = _FIXES.get(keys[-1])
         failures = value["failures"] if is_check(value) else []
-        if status_of(value) is not True and fixes and (items := fixes(failures)):
+        if status_of(value) is not True and fixes and (items := fixes(failures, stems)):
             yield " > ".join(keys), items
     elif isinstance(value, dict):
         for key, child in value.items():
-            yield from _fixes(child, (*keys, key))
+            yield from _fixes(child, (*keys, key), stems)
 
 
 def _fix_section(fixes: list[tuple[str, list[str]]]) -> Vertical:

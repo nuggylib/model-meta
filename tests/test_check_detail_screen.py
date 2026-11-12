@@ -211,7 +211,9 @@ async def test_texture_fixes_name_the_override_file_and_skip_errors():
         {"mesh": "arm_top.FR", "error": "no mesh"},
     ]
     roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck(failures)})}
-    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=roles))
+    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
+    results = _results(mesh_roles=roles, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app)["Needs Fixes"] == [

@@ -742,6 +742,61 @@ async def test_check_detail_follows_live_results(tmp_path, monkeypatch):
         assert await _wait_for(pilot, lambda: "✅ wheels" in lines())
 
 
+_RENAMED_FIXES = [
+    f"{n}. Bake a texture map named wheel_hub_albedo.png for {mesh}"
+    for n, mesh in enumerate(_FRONTS, 1)
+]
+
+
+def _fix_lines(detail):
+    box = detail.query_one(".check-fixes")
+    return [_text(line) for line in box.query(Static)]
+
+
+async def _open_wheels(pilot, screen):
+    await pilot.press("down", "enter")
+    app = screen.app
+    assert await _wait_for(pilot, lambda: isinstance(app.screen, CheckDetailScreen))
+    await pilot.pause()
+    await pilot.press("enter")
+    assert await _wait_for(pilot, lambda: app.screen.path == ("mesh_roles", "wheels"))
+    return app.screen
+
+
+async def test_an_added_override_regenerates_the_live_fix_list(tmp_path, monkeypatch):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, lambda: _role_rows(screen)[1] == "✅ wheels")
+        detail = await _open_wheels(pilot, screen)
+        assert not detail.query(".check-fixes")
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        assert await _wait_for(pilot, lambda: detail.query(".check-fixes"))
+        assert _fix_lines(detail) == ["texture_maps", *_RENAMED_FIXES]
+
+
+async def test_an_override_renames_the_stored_fixes_without_a_report(
+    tmp_path, monkeypatch
+):
+    failures = [
+        {"mesh": name, "missing": ["albedo"], "expected": [f"{name}_albedo.png"]}
+        for name in _FRONTS
+    ]
+    roles = {"wheels": MeshRoleResult(_FRONTS, {"texture_maps": FieldCheck(failures)})}
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES, mesh_roles=roles)
+    async with _Host(screen).run_test() as pilot:
+        detail = await _open_wheels(pilot, screen)
+        assert _fix_lines(detail)[1] == (
+            "1. Bake a texture map named wheel_hub.front.L_albedo.png for "
+            "wheel_hub.front.L"
+        )
+        screen.add_texture_map_override("wheels", _FRONT_OVERRIDE)
+        assert await _wait_for(pilot, lambda: _fix_lines(detail)[1:] == _RENAMED_FIXES)
+
+
 async def test_dropped_mesh_connection_falls_back_to_manual_mode(tmp_path, monkeypatch):
     _fake_running(monkeypatch, True)
     _fake_bridge(monkeypatch)

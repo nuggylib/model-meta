@@ -13,9 +13,12 @@ Textual, no UI.
   - `evaluate(roles, report, overrides)`: one `MeshRoleResult` per role. It
     re-runs `plan` to line the report's items up with their targets, so the
     report must come from the same roles. `overrides` is the results file's
-    `texture_map_overrides`. Each role gets its own `_Scene.stems`, mapping
-    `(mesh, map)` to the override name its file must start with. When two
-    overrides name the same mesh and map, the first wins.
+    `texture_map_overrides`. Each role gets its own `_Scene.stems` from
+    `stems_of(overrides)`, mapping `(mesh, map)` to the override name its
+    file must start with. When two overrides name the same mesh and map, the
+    first wins. `texture_file(stems, mesh, map)` is the filename the check
+    looks for. The check detail screen calls both, so its fix list names
+    the same files.
   - A role's meshes are the scene meshes whose whole name matches
     `mesh_regex` (`re.fullmatch`).
   - Each set field becomes a `FieldCheck` holding one dict of facts per
