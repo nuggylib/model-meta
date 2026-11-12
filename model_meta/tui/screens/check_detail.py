@@ -257,51 +257,60 @@ def _field_sections(
     # Overrides outlive their group (a renamed mesh), so they alone keep the section.
     if not duplicates and not overrides:
         return
-    children: list[Widget] = []
+    blocks: list[list[Widget]] = []
     if duplicates:
-        children.append(Static(_DUPLICATES_HELP, classes="config-detail", markup=False))
-        children += [
-            SelectableRow(tuple(group), _text(group), classes="check-line")
-            for group in duplicates
-        ]
-    if overrides:
-        children += _statics(
+        blocks.append([Static(_DUPLICATES_HELP, classes="config-detail", markup=False)])
+        blocks.append(
             [
-                "texture_map_overrides:",
-                *_fact_lines([override.to_dict() for override in overrides]),
+                SelectableRow(tuple(group), _text(group), classes="check-line")
+                for group in duplicates
             ]
         )
-    section = Vertical(*children, classes="check-section")
-    section.border_title = " > ".join((*keys, "duplicates"))
-    yield section
+    if overrides:
+        blocks.append(
+            _statics(
+                [
+                    "texture_map_overrides:",
+                    *_fact_lines([override.to_dict() for override in overrides]),
+                ]
+            )
+        )
+    yield _box(" > ".join((*keys, "duplicates")), blocks)
 
 
 def _section(keys: tuple[str, ...], value: object) -> Vertical:
     key = keys[-1]
-    if isinstance(value, bool) or is_check(value):
-        status = status_of(value)
-        failures = value["failures"] if is_check(value) else []
-        restated = _RESTATED.get(key, set())
-        facts = [
-            {k: v for k, v in failure.items() if k not in restated}
-            for failure in failures
-        ]
-        children: list[Widget] = _statics(
-            [f"{icon(status)} {_STATES[status]}", *_fact_lines(facts)]
-        )
-        children += [
+    if not (isinstance(value, bool) or is_check(value)):
+        return _box(" > ".join(keys), [_statics([_text(value)])])
+    status = status_of(value)
+    failures = value["failures"] if is_check(value) else []
+    restated = _RESTATED.get(key, set())
+    facts = [
+        {k: v for k, v in failure.items() if k not in restated} for failure in failures
+    ]
+    blocks = [_statics([f"{icon(status)} {_STATES[status]}", *_fact_lines(facts)])]
+    blocks += [
+        [
             Static(
-                f"Warning: {text}",
-                classes="config-detail check-warning",
-                markup=False,
+                f"Warning: {text}", classes="config-detail check-warning", markup=False
             )
-            for fact, text in _WARNINGS.items()
-            if any(failure.get(fact) is True for failure in failures)
         ]
-    else:
-        children = _statics([_text(value)])
-    section = Vertical(*children, classes="check-section")
-    section.border_title = " > ".join(keys)
+        for fact, text in _WARNINGS.items()
+        if any(failure.get(fact) is True for failure in failures)
+    ]
+    return _box(" > ".join(keys), blocks)
+
+
+def _box(title: str, blocks: list[list[Widget]], classes: str = "") -> Vertical:
+    # Not `:first-child`: Textual can match it stale on constructor children.
+    section = Vertical(
+        *(
+            Vertical(*block, classes="check-block" + (" spaced" if i else ""))
+            for i, block in enumerate(blocks)
+        ),
+        classes=f"check-section {classes}".strip(),
+    )
+    section.border_title = title
     return section
 
 
@@ -320,16 +329,17 @@ def _fixes(
 
 
 def _fix_section(fixes: list[tuple[str, list[str]]]) -> Vertical:
-    children: list[Widget] = []
-    for label, items in fixes:
-        children.append(Static(label, classes="check-line fix-label", markup=False))
-        children += [
-            Static(f"{n}. {item}", classes="check-line fix-item", markup=False)
-            for n, item in enumerate(items, 1)
+    blocks: list[list[Widget]] = [
+        [
+            Static(label, classes="check-line fix-label", markup=False),
+            *(
+                Static(f"{n}. {item}", classes="check-line fix-item", markup=False)
+                for n, item in enumerate(items, 1)
+            ),
         ]
-    section = Vertical(*children, classes="check-section check-fixes")
-    section.border_title = "Needs Fixes"
-    return section
+        for label, items in fixes
+    ]
+    return _box("Needs Fixes", blocks, "check-fixes")
 
 
 def _statics(lines: list[str]) -> list[Widget]:

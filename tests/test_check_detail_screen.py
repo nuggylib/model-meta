@@ -279,6 +279,22 @@ async def test_a_passing_texture_check_lists_its_duplicates_and_overrides():
         ]
 
 
+async def test_help_groups_and_overrides_are_spaced_blocks():
+    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
+    results = _results(mesh_roles=_ARM_ROLES, texture_map_overrides=overrides)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        section = app.screen.query(".check-section").last()
+        blocks = section.query_children(".check-block")
+        assert [str(block.query(Static).first().render()) for block in blocks] == [
+            _DUPLICATES_HELP,
+            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
+            "texture_map_overrides:",
+        ]
+        assert [block.has_class("spaced") for block in blocks] == [False, True, True]
+
+
 async def test_overrides_keep_the_duplicates_section_without_a_group():
     roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck([])})}
     overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}

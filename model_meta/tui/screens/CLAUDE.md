@@ -233,6 +233,12 @@ in the app (analogous to a route in a web app).
     A list (`meshes`) shows `format_list`. Only set fields
     have a check, so only they get a section.
   - **A bool or a check** (`armature`): that one section, titled by its key.
+  - **Blocks:** `_box` builds every section from blocks, each a
+    `.check-block` `Vertical`: the status and facts, each warning, the
+    duplicates help, its group rows, the overrides, and each check's fixes.
+    Every block after the first gets `spaced` (a blank line above). Order
+    is set in Python, not with `:first-child`, which Textual can leave stale
+    on children passed to a constructor.
   - **Needs Fixes:** every fix on the page sits in one `Needs Fixes` section
     (`.check-fixes`) above the others. It shows only when a failing or
     warning check has fixes. `_fixes` walks the value: each such check gets
