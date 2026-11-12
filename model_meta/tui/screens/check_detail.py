@@ -8,6 +8,7 @@ from typing import Protocol
 
 from textual import work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import Screen
@@ -20,6 +21,7 @@ from model_meta.checks.mesh_roles import Stems, texture_file
 from model_meta.core.results import Results, TextureMapOverride
 from model_meta.specs.modifiers import format_list
 from model_meta.tui.bindings import MOVE
+from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.texture_map_override_modal import TextureMapOverrideModal
 from model_meta.tui.status import WARNING, icon, is_check, lookup, status_of
 from model_meta.tui.widgets.selectable_row import SelectableRow
@@ -118,12 +120,20 @@ class ResultsSource(Protocol):
         self, role: str, override: TextureMapOverride
     ) -> None: ...
 
+    def delete_texture_map_override(
+        self, role: str, override: TextureMapOverride
+    ) -> None: ...
+
 
 class CheckDetailScreen(Screen):
     """Pushed as an instance, per model and key path. `headings` title each key in
     `path`."""
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), *MOVE]
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Back"),
+        Binding("x", "delete_override", "Delete"),
+        *MOVE,
+    ]
 
     def __init__(
         self, source: ResultsSource, path: tuple[str, ...], headings: tuple[str, ...]
@@ -150,8 +160,33 @@ class CheckDetailScreen(Screen):
         self.source.results_changed.subscribe(self, self._show)
         await self._show(self._results)
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        if action == "delete_override":
+            return self._focused_override() is not None
+        return True
+
+    def action_delete_override(self) -> None:
+        if (override := self._focused_override()) is not None:
+            self._delete_override(override)
+
+    def _focused_override(self) -> TextureMapOverride | None:
+        focused = self.focused
+        if isinstance(focused, SelectableRow) and isinstance(
+            focused.key, TextureMapOverride
+        ):
+            return focused.key
+        return None
+
+    @work(exclusive=True, group="texture-map-override")
+    async def _delete_override(self, override: TextureMapOverride) -> None:
+        question = ConfirmModal(f"Delete texture map override '{override.name}'?")
+        if await self.app.push_screen_wait(question):
+            self.source.delete_texture_map_override(self.path[-1], override)
+
     def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
         key = message.row.key
+        if isinstance(key, TextureMapOverride):
+            return
         if isinstance(key, tuple):
             self._link(list(key))
             return
@@ -276,12 +311,20 @@ def _field_sections(
         blocks.append([Static(_NO_DUPLICATES, classes="config-detail", markup=False)])
     if overrides:
         blocks.append(
-            _statics(
-                [
-                    "texture_map_overrides:",
-                    *_fact_lines([override.to_dict() for override in overrides]),
-                ]
-            )
+            [
+                *_statics(["texture_map_overrides:"]),
+                *(
+                    SelectableRow(
+                        override,
+                        "\n  ".join(
+                            f"{key}: {_text(value)}"
+                            for key, value in override.to_dict().items()
+                        ),
+                        classes="check-line",
+                    )
+                    for override in overrides
+                ),
+            ]
         )
     yield _box(" > ".join((*keys, "duplicates")), blocks)
 

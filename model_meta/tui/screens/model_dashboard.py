@@ -146,23 +146,40 @@ class ModelDashboardScreen(Screen):
         return self._roles[role].texture_maps or []
 
     def add_texture_map_override(self, role: str, override: TextureMapOverride) -> None:
-        def add(results: Results) -> Results:
-            overrides = results.texture_map_overrides
+        self._change_overrides(role, lambda overrides: [*overrides, override], "saved")
+
+    def delete_texture_map_override(
+        self, role: str, override: TextureMapOverride
+    ) -> None:
+        def delete(overrides: list[TextureMapOverride]) -> list[TextureMapOverride]:
+            if override not in overrides:
+                raise ValueError(f"override '{override.name}' is no longer in it")
+            index = overrides.index(override)
+            return [*overrides[:index], *overrides[index + 1 :]]
+
+        self._change_overrides(role, delete, "deleted")
+
+    def _change_overrides(
+        self,
+        role: str,
+        change: Callable[[list[TextureMapOverride]], list[TextureMapOverride]],
+        done: str,
+    ) -> None:
+        def apply(results: Results) -> Results:
+            current = results.texture_map_overrides
+            updated = {**current, role: change(current.get(role, []))}
             return replace(
                 results,
-                texture_map_overrides={
-                    **overrides,
-                    role: [*overrides.get(role, []), override],
-                },
+                texture_map_overrides={n: o for n, o in updated.items() if o},
             )
 
-        if not self._update(add):
+        if not self._update(apply):
             return
         if self._report is None:
-            self.notify("Override saved. It's checked when Blender next saves.")
+            self.notify(f"Override {done}. It's checked when Blender next saves.")
             return
         self._check_mesh_roles(self._report)
-        self.notify("Override saved and checked.")
+        self.notify(f"Override {done} and checked.")
 
     @work(exclusive=True, group="blender-check")
     async def _refresh(self) -> None:

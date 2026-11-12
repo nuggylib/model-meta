@@ -588,6 +588,37 @@ async def test_an_override_added_before_any_report_is_saved_for_later(
     assert saved.mesh_roles is None
 
 
+async def test_deleting_the_last_override_drops_the_role_and_rechecks(
+    tmp_path, monkeypatch
+):
+    _fake_bridge(monkeypatch)
+    meshes = _fake_meshes(monkeypatch)
+    overrides = {"wheels": [_FRONT_OVERRIDE]}
+    screen = _screen(
+        tmp_path, "Rig", roles=_TEXTURED_ROLES, texture_map_overrides=overrides
+    )
+    async with _Host(screen).run_test() as pilot:
+        meshes.put_nowait(_on_model(tmp_path))
+        meshes.put_nowait(_WHEELS)
+        assert await _wait_for(pilot, lambda: _role_rows(screen)[1] == "❌ wheels")
+        screen.delete_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+        assert _role_rows(screen)[1] == "✅ wheels"
+    assert Results.load(screen.results_path).texture_map_overrides == {}
+
+
+async def test_deleting_an_override_no_longer_saved_writes_nothing(
+    tmp_path, monkeypatch
+):
+    screen = _screen(tmp_path, "Rig", roles=_TEXTURED_ROLES)
+    async with _Host(screen).run_test() as pilot:
+        await pilot.pause()
+        before = screen.results_path.read_text()
+        screen.delete_texture_map_override("wheels", _FRONT_OVERRIDE)
+        await pilot.pause()
+        assert screen.results_path.read_text() == before
+
+
 async def test_modifier_results_are_saved_at_the_root_and_per_role(
     tmp_path, monkeypatch
 ):

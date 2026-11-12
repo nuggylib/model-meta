@@ -13,6 +13,7 @@ from model_meta.core.results import (
     TextureMapOverride,
 )
 from model_meta.tui.screens.check_detail import CheckDetailScreen
+from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.texture_map_override_modal import TextureMapOverrideModal
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
@@ -70,12 +71,16 @@ class _Source:
         self.results = results
         self.results_changed = updates
         self.saved = []
+        self.deleted = []
 
     def texture_maps(self, _role):
         return ["albedo", "orm", "normal"]
 
     def add_texture_map_override(self, role, override):
         self.saved.append((role, override))
+
+    def delete_texture_map_override(self, role, override):
+        self.deleted.append((role, override))
 
 
 class _Host(App):
@@ -264,9 +269,7 @@ _NO_DUPLICATES = "No more duplicates to override."
 _FRONT_ARMS = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
 _FRONT_ARMS_LINES = [
     "texture_map_overrides:",
-    "- name: arm_top",
-    "  maps: albedo",
-    "  meshes: arm_top.FL, arm_top.FR",
+    "▸ name: arm_top\n  maps: albedo\n  meshes: arm_top.FL, arm_top.FR",
 ]
 _QUAD = [*_ARMS, "arm_top.RR"]
 _QUAD_ROLES = {
@@ -311,7 +314,8 @@ async def test_a_group_with_one_unlinked_mesh_leaves_a_placeholder():
             _NO_DUPLICATES,
             *_FRONT_ARMS_LINES,
         ]
-        assert not app.screen.query(SelectableRow)
+        rows = app.screen.query(SelectableRow)
+        assert not [row for row in rows if isinstance(row.key, tuple)]
 
 
 async def test_overrides_keep_the_duplicates_section_without_a_group():
@@ -324,6 +328,42 @@ async def test_overrides_keep_the_duplicates_section_without_a_group():
             _NO_DUPLICATES,
             *_FRONT_ARMS_LINES,
         ]
+
+
+def _override_row(app):
+    return next(
+        row
+        for row in app.screen.query(SelectableRow)
+        if isinstance(row.key, TextureMapOverride)
+    )
+
+
+@pytest.mark.parametrize(("answer", "deleted"), [("yes", True), ("no", False)])
+async def test_x_on_an_override_deletes_it_once_confirmed(answer, deleted):
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        _override_row(app).focus()
+        await pilot.press("x")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmModal)
+        app.screen.query_one(f"#confirm-{answer}", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
+        expected = [("arms", _FRONT_ARMS["arms"][0])] if deleted else []
+        assert app.source.deleted == expected
+
+
+async def test_x_on_a_group_does_nothing():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.screen.query_one(SelectableRow).focus()
+        await pilot.press("x")
+        await pilot.pause()
+        assert isinstance(app.screen, CheckDetailScreen)
 
 
 async def test_focus_moves_to_the_group_left_after_a_link():

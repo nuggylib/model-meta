@@ -134,9 +134,13 @@ in the app (analogous to a route in a web app).
   that `watch_results` publishes, so the detail screen follows live results
   while the worker keeps running beneath it. Nested rows are indented past
   the root rows' rail and `▸ `.
-  **Overrides:** `texture_maps(role)` gives a role's spec `texture_maps`, and
-  `add_texture_map_override(role, override)` appends one through `_update`,
-  which loads the file right before. It then re-runs `_check_mesh_roles` on
+  **Overrides:** `texture_maps(role)` gives a role's spec `texture_maps`.
+  `add_texture_map_override(role, override)` appends one and
+  `delete_texture_map_override(role, override)` removes the first equal one;
+  both go through `_change_overrides`, then `_update`, which loads the file
+  right before. A role left with no overrides is dropped from the file. An
+  override no longer in the file is a `ValueError`, so the error notice
+  shows and nothing is written. Each then re-runs `_check_mesh_roles` on
   `_report`, the last report checked on the model's file, so the icons and
   `expected` names change without a Blender save. A fresh scene query would
   pick up unsaved edits; the report keeps every result tied to the last save.
@@ -195,8 +199,9 @@ in the app (analogous to a route in a web app).
 - `check_detail.py` — `CheckDetailScreen(source, path, headings)`, one
   model's results at a key path in `Results.to_dict()`. `source` is a
   `ResultsSource` (the model dashboard): `model`, `results`,
-  `results_changed`, `texture_maps(role)` and
-  `add_texture_map_override(role, override)`. The screen never writes the
+  `results_changed`, `texture_maps(role)`,
+  `add_texture_map_override(role, override)` and
+  `delete_texture_map_override(role, override)`. The screen never writes the
   results file itself. It reads the value with `tui.status.lookup`, and is
   pushed by `enter` on a model dashboard root row and
   by `enter` on its own rows. Not in `SCREENS`. The title is `Models - <model
@@ -224,8 +229,13 @@ in the app (analogous to a route in a web app).
     dropped. With no group left, the help and rows give way to a muted
     `_NO_DUPLICATES` line. On a role's page, the
     `texture_maps` duplicates section then lists that role's
-    `texture_map_overrides` as `key: value` lines; overrides alone (their
-    group gone) still show the section, with `_NO_DUPLICATES`. `enter`
+    `texture_map_overrides` under a `texture_map_overrides:` line, one
+    `SelectableRow` each, keyed by the override, its `key: value` lines in
+    one label. Overrides alone (their group gone) still show the section,
+    with `_NO_DUPLICATES`. `x` (`check_action`: only on an override row)
+    runs `_delete_override` in the same worker group: a `ConfirmModal`, and
+    on Yes `source.delete_texture_map_override`. `enter` on an override does
+    nothing yet. `enter`
     on a group runs `_link`, a `@work(exclusive=True,
     group="texture-map-override")` worker that `push_screen_wait`s a
     `TextureMapOverrideModal` and passes a non-`None` result to
