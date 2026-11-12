@@ -139,9 +139,28 @@ CheckDetailScreen .check-section {
     width: 100%;
     height: auto;
     margin-bottom: 1;
-    padding: 0 1;
+    padding: 1 1;
     border: round $panel;
     border-title-color: $accent;
+}
+
+/* Prose (help, warnings) and each check's fixes get a blank line around them; the
+   section's padding already covers its edges. */
+CheckDetailScreen .check-section .config-detail {
+    margin: 1 0;
+}
+
+CheckDetailScreen .fix-label {
+    margin-top: 1;
+}
+
+CheckDetailScreen .check-section .config-detail:first-child,
+CheckDetailScreen .fix-label:first-child {
+    margin-top: 0;
+}
+
+CheckDetailScreen .check-section .config-detail:last-child {
+    margin-bottom: 0;
 }
 
 /* The page's fixes, above its checks: each check's label, then its numbered fixes. */
@@ -158,7 +177,6 @@ CheckDetailScreen .fix-item {
 }
 
 CheckDetailScreen .check-warning {
-    margin-top: 1;
     color: $warning;
 }
 
