@@ -102,6 +102,7 @@ _DUPLICATES_HELP = (
     "The meshes in each `duplicates` group have the same shape, so they can share "
     "texture maps. Select a group to link some of its maps under one name."
 )
+_NO_DUPLICATES = "No more duplicates to override."
 
 
 class ResultsSource(Protocol):
@@ -192,10 +193,11 @@ class CheckDetailScreen(Screen):
             await lines.mount_all(_sections(value, self._overrides(results)))
         else:
             await lines.mount_all(_field_sections((self.path[-1],), value))
-        # A remount drops focus; keep it on the group the user just linked.
-        for row in lines.query(SelectableRow):
-            if row.key == focused:
-                row.focus()
+        # A remount drops focus. Linking shrinks or removes the focused group, so fall
+        # back to the first group left.
+        rows = list(lines.query(SelectableRow))
+        if focused is not None and rows:
+            next((row for row in rows if row.key == focused), rows[0]).focus()
 
     def _overrides(self, results: Results) -> list[TextureMapOverride]:
         """The overrides of the role at `path`, or none when it isn't a role."""
@@ -257,15 +259,21 @@ def _field_sections(
     # Overrides outlive their group (a renamed mesh), so they alone keep the section.
     if not duplicates and not overrides:
         return
+    linked = {mesh for override in overrides for mesh in override.meshes}
+    unlinked = [[mesh for mesh in group if mesh not in linked] for group in duplicates]
+    # An override links two or more meshes, so a group of one has nothing left.
+    groups = [group for group in unlinked if len(group) > 1]
     blocks: list[list[Widget]] = []
-    if duplicates:
+    if groups:
         blocks.append([Static(_DUPLICATES_HELP, classes="config-detail", markup=False)])
         blocks.append(
             [
                 SelectableRow(tuple(group), _text(group), classes="check-line")
-                for group in duplicates
+                for group in groups
             ]
         )
+    else:
+        blocks.append([Static(_NO_DUPLICATES, classes="config-detail", markup=False)])
     if overrides:
         blocks.append(
             _statics(

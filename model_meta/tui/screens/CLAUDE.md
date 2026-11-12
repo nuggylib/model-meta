@@ -219,15 +219,18 @@ in the app (analogous to a route in a web app).
     `texture_maps` hides `expected`). A check with `duplicates`, passing or
     not, gets its own section right after it (`_field_sections`), titled
     `<keys> > duplicates`: `_DUPLICATES_HELP`, then one `SelectableRow` per
-    group, keyed by the group as a tuple. On a role's page, the
+    group, keyed by the group as a tuple. A mesh in any of the role's
+    overrides is dropped from its group, and a group left with one mesh is
+    dropped. With no group left, the help and rows give way to a muted
+    `_NO_DUPLICATES` line. On a role's page, the
     `texture_maps` duplicates section then lists that role's
     `texture_map_overrides` as `key: value` lines; overrides alone (their
-    group gone) still show the section, without the help. `enter`
+    group gone) still show the section, with `_NO_DUPLICATES`. `enter`
     on a group runs `_link`, a `@work(exclusive=True,
     group="texture-map-override")` worker that `push_screen_wait`s a
     `TextureMapOverrideModal` and passes a non-`None` result to
     `source.add_texture_map_override`. A remount refocuses the group row that
-    had focus. A `_WARNINGS` entry, keyed by a failure fact, shows once
+    had focus, or the first group left when a link changed it. A `_WARNINGS` entry, keyed by a failure fact, shows once
     as `Warning: ...` (`.check-warning`) when any failure has that fact
     `True`; `texture_maps`' `has_default_uv_map` is the only one.
     A list (`meshes`) shows `format_list`. Only set fields

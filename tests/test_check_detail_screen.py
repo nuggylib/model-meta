@@ -260,10 +260,22 @@ _ARM_ROLES = {
 }
 
 
-async def test_a_passing_texture_check_lists_its_duplicates_and_overrides():
-    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
-    results = _results(mesh_roles=_ARM_ROLES, texture_map_overrides=overrides)
-    app = _Host(("mesh_roles", "arms"), results)
+_NO_DUPLICATES = "No more duplicates to override."
+_FRONT_ARMS = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
+_FRONT_ARMS_LINES = [
+    "texture_map_overrides:",
+    "- name: arm_top",
+    "  maps: albedo",
+    "  meshes: arm_top.FL, arm_top.FR",
+]
+_QUAD = [*_ARMS, "arm_top.RR"]
+_QUAD_ROLES = {
+    "arms": MeshRoleResult(_QUAD, {"texture_maps": FieldCheck([], duplicates=[_QUAD])})
+}
+
+
+async def test_a_passing_texture_check_lists_its_duplicates():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_ARM_ROLES))
     async with app.run_test() as pilot:
         await pilot.pause()
         sections = _sections(app)
@@ -272,42 +284,58 @@ async def test_a_passing_texture_check_lists_its_duplicates_and_overrides():
         assert sections["texture_maps > duplicates"] == [
             _DUPLICATES_HELP,
             "▸ arm_top.FL, arm_top.FR, arm_top.RL",
-            "texture_map_overrides:",
-            "- name: arm_top",
-            "  maps: albedo",
-            "  meshes: arm_top.FL, arm_top.FR",
         ]
 
 
-async def test_help_groups_and_overrides_are_spaced_blocks():
-    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
-    results = _results(mesh_roles=_ARM_ROLES, texture_map_overrides=overrides)
+async def test_linked_meshes_leave_their_group_and_overrides_follow():
+    results = _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
     app = _Host(("mesh_roles", "arms"), results)
     async with app.run_test() as pilot:
         await pilot.pause()
         section = app.screen.query(".check-section").last()
-        blocks = section.query_children(".check-block")
-        assert [str(block.query(Static).first().render()) for block in blocks] == [
+        assert _sections(app)["texture_maps > duplicates"] == [
             _DUPLICATES_HELP,
-            "▸ arm_top.FL, arm_top.FR, arm_top.RL",
-            "texture_map_overrides:",
+            "▸ arm_top.RL, arm_top.RR",
+            *_FRONT_ARMS_LINES,
         ]
+        blocks = section.query_children(".check-block")
         assert [block.has_class("spaced") for block in blocks] == [False, True, True]
 
 
-async def test_overrides_keep_the_duplicates_section_without_a_group():
-    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck([])})}
-    overrides = {"arms": [TextureMapOverride("arm_top", ["albedo"], _ARMS[:2])]}
-    results = _results(mesh_roles=roles, texture_map_overrides=overrides)
+async def test_a_group_with_one_unlinked_mesh_leaves_a_placeholder():
+    results = _results(mesh_roles=_ARM_ROLES, texture_map_overrides=_FRONT_ARMS)
     app = _Host(("mesh_roles", "arms"), results)
     async with app.run_test() as pilot:
         await pilot.pause()
         assert _sections(app)["texture_maps > duplicates"] == [
-            "texture_map_overrides:",
-            "- name: arm_top",
-            "  maps: albedo",
-            "  meshes: arm_top.FL, arm_top.FR",
+            _NO_DUPLICATES,
+            *_FRONT_ARMS_LINES,
         ]
+        assert not app.screen.query(SelectableRow)
+
+
+async def test_overrides_keep_the_duplicates_section_without_a_group():
+    roles = {"arms": MeshRoleResult(_ARMS, {"texture_maps": FieldCheck([])})}
+    results = _results(mesh_roles=roles, texture_map_overrides=_FRONT_ARMS)
+    app = _Host(("mesh_roles", "arms"), results)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _sections(app)["texture_maps > duplicates"] == [
+            _NO_DUPLICATES,
+            *_FRONT_ARMS_LINES,
+        ]
+
+
+async def test_focus_moves_to_the_group_left_after_a_link():
+    app = _Host(("mesh_roles", "arms"), _results(mesh_roles=_QUAD_ROLES))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.screen.query_one(SelectableRow).focus()
+        app.updates.publish(
+            _results(mesh_roles=_QUAD_ROLES, texture_map_overrides=_FRONT_ARMS)
+        )
+        await pilot.pause()
+        assert app.screen.focused.key == ("arm_top.RL", "arm_top.RR")
 
 
 async def _open_link_modal(pilot, app):
