@@ -30,13 +30,13 @@ from textual import work
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.css.query import NoMatches
-from textual.screen import Screen
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Static
 
 from model_meta.core.app_connection import PathState
 from model_meta.specs import store as specs_store
 from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.specs import plural_specs
+from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.section_card import SectionCard
 
 if TYPE_CHECKING:
@@ -47,7 +47,7 @@ _FOUND = "[green]✓ found[/]"
 _MISSING = "[red]✗ not found[/]"
 
 
-class DashboardScreen(Screen):
+class DashboardScreen(Layout):
     """The landing view: the configured anchors plus live validity markers.
 
     Reads `self.app.settings` and re-renders whenever it changes (an edit via `s`
@@ -69,8 +69,7 @@ class DashboardScreen(Screen):
         *MOVE,
     ]
 
-    def compose(self) -> ComposeResult:
-        yield Header()
+    def compose_body(self) -> ComposeResult:
         settings = cast("ModelMetaApp", self.app).settings
         if settings is None:
             yield Static(
@@ -86,7 +85,6 @@ class DashboardScreen(Screen):
                 self._godot_section(settings),
                 id="config-panel",
             )
-        yield Footer()
 
     def on_mount(self) -> None:
         # Kick off the (filesystem-walking) Godot count once the sections exist,
