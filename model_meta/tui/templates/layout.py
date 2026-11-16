@@ -11,12 +11,16 @@ class Layout(Screen):
     they will end up with an empty body instead of an error.
     """
 
-    description = "PAGE DESCRIPTION"
+    # Optional description; when empty, does not render a Static Widget. Use this to
+    # explain the purpose of a root page. Leave it empty for pages with multiple interaction
+    # areas and instead use nested descriptions in those locations.
+    description = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="body", classes=("body")):
-            yield Static(content=self.description, classes=("description"))
+            if len(self.description) > 0:
+                yield Static(content=self.description, classes=("description"))
             # Anything yielded inside the with block becomes a child of this container
             # without the subclass knowing about it.
             yield from self.compose_body()
