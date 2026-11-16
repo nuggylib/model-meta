@@ -1,5 +1,9 @@
 /* Application-level styles for Model Meta. */
 
+.body {
+    margin: 1;
+}
+
 /* The shared config vocabulary. The dashboard and the per-section detail
    screens render the same kinds of line — a heading, a configured value, a
    muted sub-detail — so these are app-level classes rather than per-screen
@@ -14,6 +18,10 @@
 }
 
 .config-detail {
+    color: $text-muted;
+}
+
+.description {
     color: $text-muted;
 }
 

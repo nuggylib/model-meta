@@ -69,6 +69,13 @@ class DashboardScreen(Layout):
         *MOVE,
     ]
 
+    def __init__(self):
+        super().__init__()
+        self.description = (
+            "Welcome to model-meta! To get started, create a spec to describe a model file (or, select a model "
+            "file directly - you'll be prompted to create a spec, if needed)."
+        )
+
     def compose_body(self) -> ComposeResult:
         settings = cast("ModelMetaApp", self.app).settings
         if settings is None:

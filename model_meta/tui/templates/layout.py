@@ -1,7 +1,7 @@
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header
+from textual.widgets import Footer, Header, Static
 
 
 class Layout(Screen):
@@ -11,9 +11,12 @@ class Layout(Screen):
     they will end up with an empty body instead of an error.
     """
 
+    description = "PAGE DESCRIPTION"
+
     def compose(self) -> ComposeResult:
         yield Header()
-        with Vertical(id="body"):
+        with Vertical(id="body", classes=("body")):
+            yield Static(content=self.description, classes=("description"))
             # Anything yielded inside the with block becomes a child of this container
             # without the subclass knowing about it.
             yield from self.compose_body()
