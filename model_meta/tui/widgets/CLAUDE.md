@@ -77,9 +77,12 @@ in the screen that owns it.
   is rebuilt each time and must read app state on mount, never hold its own.
   `blender_label(status)` renders `○ Blender` (probing), `✗ Blender` (not
   detected), or a dot plus `Blender <version>`: `$success` running,
-  `$text-muted` not running. `BlenderStatus(version, running)` is the app's
-  state; `version` `None` means not detected. No styling of its own: colors
-  are theme variables in markup.
+  `grey` not running, the version always `grey`. Not `$text-muted`: that's
+  `auto 60%`, a fade that doesn't stand out against the footer.
+  `BlenderStatus(version, running)` is the app's state; `version` `None`
+  means not detected. No styling of its own: colors are theme variables in
+  markup, and the `.align-right` primitive puts it against the command
+  palette key (a second `dock: right` would overlap that key).
 
 ## Conventions
 - **A widget never navigates.** It names where it leads (`target`) and posts a

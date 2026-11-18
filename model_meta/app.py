@@ -174,11 +174,18 @@ class ModelMetaApp(App):
         running = await asyncio.to_thread(BlenderConnection.is_running)
         self.blender_status = BlenderStatus(probe.version, running)
 
-    @work(exclusive=True, group="blender-running")
-    async def _check_blender_running(self) -> None:
+    def _check_blender_running(self) -> None:
         status = self.blender_status
         if status is None or status.version is None:
             return
+        # Skip, not `exclusive`: cancelling the in-flight check on each tick would
+        # starve it whenever `ps` outlasts the interval.
+        if any(w.group == "blender-running" and w.is_running for w in self.workers):
+            return
+        self._update_blender_running(status)
+
+    @work(group="blender-running")
+    async def _update_blender_running(self, status: BlenderStatus) -> None:
         running = await asyncio.to_thread(BlenderConnection.is_running)
         if self.blender_status is status:  # a re-probe that landed meanwhile wins
             self.blender_status = replace(status, running=running)

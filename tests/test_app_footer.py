@@ -54,7 +54,9 @@ def _app(tmp_path, monkeypatch, *, detected=True, running=None):
 
 
 def _label(app):
-    return app.screen.query_one(BlenderStatusLabel).content
+    """`""` while `Footer` is between dropping the old label and mounting the new."""
+    labels = app.screen.query(BlenderStatusLabel)
+    return labels.first().content if labels else ""
 
 
 async def _wait_for(pilot, predicate, attempts=50):
@@ -68,10 +70,10 @@ async def _wait_for(pilot, predicate, attempts=50):
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        (None, "[$text-muted]○ Blender[/]"),
+        (None, "[grey]○ Blender[/]"),
         (BlenderStatus(version=None), "[$error]✗[/] Blender"),
-        (BlenderStatus("4.5.0", running=False), "[$text-muted]●[/] Blender 4.5.0"),
-        (BlenderStatus("4.5.0", running=True), "[$success]●[/] Blender 4.5.0"),
+        (BlenderStatus("4.5.0", running=False), "[grey]●[/] Blender [grey]4.5.0[/]"),
+        (BlenderStatus("4.5.0", running=True), "[$success]●[/] Blender [grey]4.5.0[/]"),
     ],
 )
 def test_blender_label(status, expected):
@@ -85,12 +87,14 @@ async def test_footer_shows_blender_not_detected(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("running", "dot"), [(False, "[$text-muted]●[/]"), (True, "[$success]●[/]")]
+    ("running", "dot"), [(False, "[grey]●[/]"), (True, "[$success]●[/]")]
 )
 async def test_footer_shows_detected_blender(tmp_path, monkeypatch, running, dot):
     app, _calls = _app(tmp_path, monkeypatch, running=[running])
     async with app.run_test() as pilot:
-        assert await _wait_for(pilot, lambda: _label(app) == f"{dot} Blender 4.5.0")
+        assert await _wait_for(
+            pilot, lambda: _label(app) == f"{dot} Blender [grey]4.5.0[/]"
+        )
 
 
 async def test_not_detected_blender_is_never_polled(tmp_path, monkeypatch):
@@ -106,7 +110,7 @@ async def test_poll_picks_up_blender_starting(tmp_path, monkeypatch):
     running = [False]
     app, _calls = _app(tmp_path, monkeypatch, running=running)
     async with app.run_test() as pilot:
-        assert await _wait_for(pilot, lambda: "text-muted]●" in _label(app))
+        assert await _wait_for(pilot, lambda: "grey]●" in _label(app))
         running[0] = True
         assert await _wait_for(pilot, lambda: "success]●" in _label(app))
 
@@ -123,7 +127,7 @@ async def test_blur_pauses_polling_and_focus_checks_at_once(tmp_path, monkeypatc
         running[0] = True
         await pilot.pause(0.2)
         assert len(calls) == paused_at
-        assert "text-muted]●" in _label(app)
+        assert "grey]●" in _label(app)
 
         app.post_message(events.AppFocus())
         assert await _wait_for(pilot, lambda: "success]●" in _label(app))

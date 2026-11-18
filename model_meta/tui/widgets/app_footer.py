@@ -14,12 +14,13 @@ class BlenderStatus:
 
 def blender_label(status: BlenderStatus | None) -> str:
     """`None` is a probe that hasn't finished yet."""
+    # Not `$text-muted`: it's `auto 60%`, a fade that reads no different here.
     if status is None:
-        return "[$text-muted]○ Blender[/]"
+        return "[grey]○ Blender[/]"
     if status.version is None:
         return "[$error]✗[/] Blender"
-    dot = "[$success]●[/]" if status.running else "[$text-muted]●[/]"
-    return f"{dot} Blender {status.version}"
+    dot = "[$success]●[/]" if status.running else "[grey]●[/]"
+    return f"{dot} Blender [grey]{status.version}[/]"
 
 
 class BlenderStatusLabel(Static):
@@ -35,4 +36,4 @@ class AppFooter(Footer):
         # `Footer` recomposes on every bindings change, so the label is rebuilt
         # each time and reads the app's current status on mount.
         yield from super().compose()
-        yield BlenderStatusLabel()
+        yield BlenderStatusLabel(classes="align-right")
