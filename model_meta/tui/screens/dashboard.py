@@ -1,24 +1,3 @@
-"""The dashboard screen — the app's landing view and navigation hub.
-
-Displays four sections — **Blender → Specs → Models → Godot**. The three
-configured anchors each carry a lightweight live existence/validity marker so
-the user can tell at a glance whether a saved path has since moved or been
-deleted; Specs is config-free — its location is a path convention, not an
-anchor — so it renders a muted live spec count with no marker.
-
-**Navigation:** each section is a focusable `SectionCard`. `↑`/`↓` (and `j`/`k`)
-step through them, `enter` opens the focused section's detail screen. The cards
-are the screen's only focus stops, so the arrow keys never land somewhere
-unexpected — see `SectionCard` for how that invariant is held.
-
-**Layering:** the screen holds no config of its own — it reads `self.app.settings`
-(app-level state) and never touches TOML or spawns a subprocess. Cheap file stats
-(`is_dir` / `AppConnection.state`) run inline; the one job that walks the filesystem —
-counting Godot projects — is delegated to `GodotConnection` inside a Textual
-`@work` worker (via `asyncio.to_thread`), exactly as the setup wizard does, so the
-event loop never blocks.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +13,6 @@ from textual.widgets import Static
 
 from model_meta.core.app_connection import PathState
 from model_meta.specs import store as specs_store
-from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.specs import plural_specs
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.section_card import SectionCard
@@ -48,27 +26,6 @@ _MISSING = "[red]✗ not found[/]"
 
 
 class DashboardScreen(Layout):
-    """The landing view: the configured anchors plus live validity markers.
-
-    Reads `self.app.settings` and re-renders whenever it changes (an edit via `s`
-    reassigns it). When there is no valid config (`settings is None`) it shows a
-    "run setup" prompt in place of the config-derived sections — but the Specs
-    card reads no settings, so it renders there too and the navigation keys act
-    on exactly that one card.
-
-    The Specs count is refreshed on `ScreenResume` as well as on compose: a spec
-    created on the Specs page lands while this screen is suspended, and a pop
-    does not recompose.
-
-    Future: live validation results driven by a Blender-polling worker, filling
-    in the detail screens the sections already open.
-    """
-
-    BINDINGS = [
-        ("s", "app.open_setup", "Setup"),
-        *MOVE,
-    ]
-
     def __init__(self):
         super().__init__()
         self.description = (
@@ -80,7 +37,7 @@ class DashboardScreen(Layout):
         settings = cast("ModelMetaApp", self.app).settings
         if settings is None:
             yield Static(
-                "Setup incomplete or unreadable — press 's' to run setup.",
+                "Setup incomplete or unreadable — run `model-meta --setup`.",
                 id="setup-prompt",
             )
             yield Vertical(self._specs_section(), id="config-panel")
@@ -124,19 +81,9 @@ class DashboardScreen(Layout):
     # -- navigation --------------------------------------------------------
 
     def on_section_card_opened(self, message: SectionCard.Opened) -> None:
-        """A card was activated — push the detail screen it stands for.
-
-        Navigation is the hub's job, not the card's; the card only names its
-        target. Screens are pushed by name, per the `SCREENS` convention.
-        """
         self.app.push_screen(message.target)
 
     def _focus_section(self, section_id: str | None = None) -> None:
-        """Focus `section_id`, falling back to the first section.
-
-        The fallback covers both the initial mount and a recompose that dropped
-        the previously focused section (a config edit can remove one).
-        """
         cards = list(self.query(SectionCard))
         if not cards:
             return

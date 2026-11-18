@@ -21,7 +21,14 @@ this package sits at the repository root, not under `src/`).
   no config it *is* the first run (`_first_run`, cancel exits), and with a config
   it opens the wizard over the dashboard via `_open_setup` (edit mode when valid;
   a cancel keeps the prior config) — so a cancelled `--setup` never strands a
-  config-less dashboard. The dashboard's `s` key also re-opens via `_open_setup`.
+  config-less dashboard. `--setup` is the only way back into the wizard.
+  `blender_status: reactive[BlenderStatus | None]` (`None` until the first
+  probe) feeds the footer. `_find_blender(settings)` picks the configured
+  executable when set, else `BlenderConnection.candidates()[0]`; tests stub it
+  in `tests/conftest.py`. `_detect_blender` re-probes whenever `settings`
+  changes. `_check_blender_running` polls `is_running` every
+  `BLENDER_POLL_SECONDS` (5) only while a Blender is detected; the timer
+  pauses on `AppBlur` and checks at once on `AppFocus`.
   `SCREENS` registers the dashboard (the hub) plus the per-section detail
   screens its cards name as their `target` — `blender-detail`, `specs`,
   `models`, `godot-detail`, in the dashboard's visual order. Everything there

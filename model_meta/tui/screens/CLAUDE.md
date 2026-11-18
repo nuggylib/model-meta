@@ -27,11 +27,10 @@ in the app (analogous to a route in a web app).
   filesystem *walk* — the Godot project count — runs in a `@work` worker
   (`asyncio.to_thread(godot.find_projects)`) showing "Scanning…" until it
   returns (zero projects is a valid `0`). It `watch`es the app's `settings`
-  reactive and `recompose`s on change, so editing config via `s` refreshes the
-  view without a restart. When `self.app.settings is None` (absent/corrupt
-  config) it shows a "run setup" prompt in place of the three config-derived
-  sections — prompt first, with the Specs card below it. Its `s` binding
-  (`app.open_setup`) re-opens the setup wizard in edit mode.
+  reactive and `recompose`s on change, so editing config via `--setup` refreshes
+  the view without a restart. When `self.app.settings is None` (absent/corrupt
+  config) it shows a "run `model-meta --setup`" prompt in place of the three
+  config-derived sections — prompt first, with the Specs card below it.
   **Navigation:** each section is a focusable `SectionCard` (see
   `../widgets/CLAUDE.md`); `down`/`j` → `app.focus_next` and `up`/`k` →
   `app.focus_previous` step through them (wrapping at both ends), and `enter` on
@@ -525,8 +524,6 @@ in the app (analogous to a route in a web app).
   `SetupWizard` / `NewSpecModal` shape, minus the return value. Adding a
   `current_spec` to app state would be persisting a selected spec, which nothing
   asks for. The rule's purpose holds because nothing in `SCREENS` names them.
-- **Setup (`s` → `app.open_setup`) is bound on the dashboard only.** No other
-  screen offers it, nor tells the user to press `s`.
 - **Spec screens read with `Spec.load(self.path)` and write through
   `specs.store`.** They load fresh for each read and never hold a `Spec` to
   save later, so a hand edit made while the screen is open is never

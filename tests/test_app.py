@@ -368,28 +368,6 @@ async def test_corrupt_config_boots_dashboard_and_is_not_overwritten(tmp_path):
     assert cfg.read_text() == "this is not valid toml {{{"
 
 
-async def test_dashboard_s_reopens_wizard_prefilled_and_cancel_preserves(tmp_path):
-    """Re-run in edit mode: `s` opens the wizard pre-populated; cancel keeps the
-    prior config unchanged."""
-    cfg = tmp_path / "config.toml"
-    _seed_valid_config(cfg)
-    app = ModelMetaApp(config_path=cfg)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        assert isinstance(app.screen, DashboardScreen)
-        await pilot.press("s")
-        assert await _wait_for(
-            pilot, lambda: app.screen.__class__.__name__ == "SetupWizard"
-        )
-        assert app.screen.query_one("#blender-path", Input).value == "blender"
-        await pilot.press("escape")  # cancel keeps prior config
-        assert await _wait_for(pilot, lambda: isinstance(app.screen, DashboardScreen))
-
-    state, settings = store.load(cfg)
-    assert state == store.VALID
-    assert settings.blender_executable == "blender"
-
-
 async def test_typing_q_in_a_field_does_not_quit(tmp_path):
     """`q` typed into a focused path field is text input, not the quit binding."""
     app = ModelMetaApp(config_path=tmp_path / "config.toml")
@@ -408,7 +386,8 @@ async def test_typing_q_in_a_field_does_not_quit(tmp_path):
 
 
 async def test_force_setup_opens_wizard_over_dashboard(tmp_path):
-    """--setup opens the wizard even when a valid config exists, pre-populated."""
+    """--setup opens the wizard even when a valid config exists, pre-populated;
+    cancel keeps the prior config unchanged."""
     cfg = tmp_path / "config.toml"
     _seed_valid_config(cfg)
     app = ModelMetaApp(config_path=cfg, force_setup=True)
@@ -419,6 +398,11 @@ async def test_force_setup_opens_wizard_over_dashboard(tmp_path):
         )
         assert app.screen.query_one("#blender-path", Input).value == "blender"
         await pilot.press("escape")
+        assert await _wait_for(pilot, lambda: isinstance(app.screen, DashboardScreen))
+
+    state, settings = store.load(cfg)
+    assert state == store.VALID
+    assert settings.blender_executable == "blender"
 
 
 async def test_q_on_a_focused_button_does_not_quit(tmp_path):

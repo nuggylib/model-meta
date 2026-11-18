@@ -118,8 +118,7 @@ class SpecsScreen(Screen):
     async def _new_spec(self) -> None:
         """Open the modal and reload if it wrote something.
 
-        `exclusive` means a fast double `n` cannot stack two modals — the same
-        guard `app._open_setup` relies on.
+        `exclusive` means a fast double `n` cannot stack two modals.
         """
         path = await self.app.push_screen_wait(NewSpecModal())
         if path is None:

@@ -12,7 +12,6 @@ exercise the wiring (worker → count) and the live existence markers.
 
 from pathlib import Path
 
-import pytest
 from textual.widgets import Button, ContentSwitcher, Input, ListView, Static
 
 from model_meta.app import ModelMetaApp
@@ -30,7 +29,6 @@ from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.godot_detail import GodotDetailScreen
 from model_meta.tui.screens.models import ModelsScreen
 from model_meta.tui.screens.new_spec_modal import NewSpecModal
-from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.screens.specs import SpecsScreen
 from model_meta.tui.widgets.section_card import SectionCard
 
@@ -288,7 +286,7 @@ async def test_dashboard_godot_count_from_worker(tmp_path, monkeypatch):
 
 
 async def test_dashboard_refreshes_after_edit(tmp_path, monkeypatch):
-    """Scenario 3 — editing config via `s` and saving updates the dashboard's
+    """Scenario 3 — editing config via `--setup` and saving updates the dashboard's
     displayed value without an app restart."""
     monkeypatch.setattr(
         BlenderConnection,
@@ -305,12 +303,11 @@ async def test_dashboard_refreshes_after_edit(tmp_path, monkeypatch):
     godot.mkdir()
     _seed(cfg, models, godot)
 
-    app = ModelMetaApp(config_path=cfg)
+    app = ModelMetaApp(config_path=cfg, force_setup=True)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _models_rows(app.screen) == [f"{models}  ✓ found"]
+        assert _models_rows(app.get_screen("dashboard")) == [f"{models}  ✓ found"]
 
-        await pilot.press("s")
         assert await _wait_for(
             pilot, lambda: app.screen.__class__.__name__ == "SetupWizard"
         )
@@ -449,29 +446,6 @@ async def test_dashboard_enter_opens_each_sections_detail_screen(tmp_path, monke
             await pilot.press("down")
 
 
-@pytest.mark.parametrize(
-    "screen",
-    ["blender-detail", "specs", "models", "godot-detail", "spec-detail"],
-)
-async def test_setup_key_is_unbound_off_the_dashboard(tmp_path, monkeypatch, screen):
-    """Setup is reachable from the dashboard only; `s` does nothing elsewhere."""
-    app = _seeded_app(tmp_path, monkeypatch)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        await app.push_screen(
-            SpecDetailScreen("vehicle", tmp_path / "specs" / "vehicle.json")
-            if screen == "spec-detail"
-            else screen
-        )
-        await pilot.pause()
-        pushed = app.screen
-        assert "s" not in pushed.active_bindings
-
-        await pilot.press("s")
-        await pilot.pause()
-        assert app.screen is pushed
-
-
 async def test_dashboard_restores_focus_after_settings_change(tmp_path, monkeypatch):
     """A config change recomposes the screen — the highlight must not move.
 
@@ -568,7 +542,6 @@ async def test_dashboard_footer_advertises_the_navigation_keys(tmp_path, monkeyp
         assert ("↑↓", "Move") in shown
         assert [entry for entry in shown if entry[1] == "Move"] == [("↑↓", "Move")]
         assert ("enter", "Open") in shown
-        assert ("s", "Setup") in shown
         assert ("q", "Quit") in shown
 
 
@@ -588,4 +561,3 @@ async def test_dashboard_footer_keeps_open_without_a_valid_config(tmp_path):
             if binding.show and enabled
         }
         assert "Open" in descriptions
-        assert "Setup" in descriptions
