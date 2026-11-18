@@ -15,7 +15,6 @@ from model_meta.config import legacy_dir, paths, store
 from model_meta.config.settings import Settings
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.diagnostics import run_headless_check
-from model_meta.tui.screens.blender_detail import BlenderDetailScreen
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.godot_detail import GodotDetailScreen
 from model_meta.tui.screens.models import ModelsScreen
@@ -50,7 +49,6 @@ class ModelMetaApp(App):
     # with arguments — screens read app-level state instead.
     SCREENS = {
         "dashboard": DashboardScreen,
-        "blender-detail": BlenderDetailScreen,
         "specs": SpecsScreen,
         "models": ModelsScreen,
         "godot-detail": GodotDetailScreen,

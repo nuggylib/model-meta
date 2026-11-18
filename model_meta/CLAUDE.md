@@ -31,8 +31,8 @@ this package sits at the repository root, not under `src/`).
   while a check is still in flight; the timer pauses on `AppBlur` and checks at
   once on `AppFocus`.
   `SCREENS` registers the dashboard (the hub) plus the per-section detail
-  screens its cards name as their `target` — `blender-detail`, `specs`,
-  `models`, `godot-detail`, in the dashboard's visual order. Everything there
+  screens its cards name as their `target` — `specs`, `models`,
+  `godot-detail`, in the dashboard's visual order. Everything there
   is pushed **by name** and constructed with no arguments; screens receive data
   by reading app-level state instead.
   Both `_first_run`/`_open_setup` are `@work(exclusive=True, group="setup")`

@@ -69,7 +69,7 @@ FixPanel .fix-step {
 
 /* -- dashboard ----------------------------------------------------------- */
 
-/* A top-aligned column of config sections (Blender → Models → Godot), not a
+/* A top-aligned column of config sections (Specs → Models → Godot), not a
    single centered line. */
 DashboardScreen #config-panel {
     width: 100%;
