@@ -46,7 +46,6 @@ async def _open_specs(pilot, app):
     test's own thread races the new `Header`'s mount.
     """
     await pilot.pause()
-    await pilot.press("down")  # Blender → Specs
     await pilot.press("enter")
     assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecsScreen))
 

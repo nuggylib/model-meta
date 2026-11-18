@@ -75,7 +75,7 @@ def _app(tmp_path, monkeypatch, directories, blend_files=None):
 async def _open_models(pilot, app):
     """Navigate the dashboard to the Models screen."""
     await pilot.pause()
-    await pilot.press("down", "down")  # Blender → Specs → Models
+    await pilot.press("down")  # Specs → Models
     await pilot.press("enter")
     assert await _wait_for(pilot, lambda: isinstance(app.screen, ModelsScreen))
 

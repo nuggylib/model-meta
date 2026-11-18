@@ -43,7 +43,6 @@ class DashboardScreen(Layout):
             yield Vertical(self._specs_section(), id="config-panel")
         else:
             yield Vertical(
-                self._blender_section(settings),
                 self._specs_section(),
                 self._models_section(settings),
                 self._godot_section(settings),
@@ -89,30 +88,6 @@ class DashboardScreen(Layout):
             return
         target = next((card for card in cards if card.id == section_id), cards[0])
         target.focus()
-
-    # -- sections ----------------------------------------------------------
-
-    def _blender_section(self, settings: Settings) -> SectionCard:
-        state = settings.blender.state()
-        if state is PathState.OK:
-            marker = "[green]✓ executable[/]"
-        elif state is PathState.INVALID:
-            marker = "[yellow]⚠ present, not executable[/]"
-        else:
-            marker = _MISSING
-        version = settings.blender_version or "unknown version"
-        return SectionCard(
-            Static("Blender", classes="section-title"),
-            Static(
-                f"{escape(settings.blender_executable)}  {marker}",
-                id="blender-value",
-                classes="config-value",
-            ),
-            Static(f"Recorded version: {escape(version)}", classes="config-detail"),
-            target="blender-detail",
-            id="section-blender",
-            classes="section",
-        )
 
     def _specs_section(self) -> SectionCard:
         # No `settings` argument and no ✓/✗ marker: the specs location is a path
