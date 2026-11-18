@@ -1,24 +1,3 @@
-"""The dashboard screen — the app's landing view and navigation hub.
-
-Displays four sections — **Blender → Specs → Models → Godot**. The three
-configured anchors each carry a lightweight live existence/validity marker so
-the user can tell at a glance whether a saved path has since moved or been
-deleted; Specs is config-free — its location is a path convention, not an
-anchor — so it renders a muted live spec count with no marker.
-
-**Navigation:** each section is a focusable `SectionCard`. `↑`/`↓` (and `j`/`k`)
-step through them, `enter` opens the focused section's detail screen. The cards
-are the screen's only focus stops, so the arrow keys never land somewhere
-unexpected — see `SectionCard` for how that invariant is held.
-
-**Layering:** the screen holds no config of its own — it reads `self.app.settings`
-(app-level state) and never touches TOML or spawns a subprocess. Cheap file stats
-(`is_dir` / `AppConnection.state`) run inline; the one job that walks the filesystem —
-counting Godot projects — is delegated to `GodotConnection` inside a Textual
-`@work` worker (via `asyncio.to_thread`), exactly as the setup wizard does, so the
-event loop never blocks.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -30,13 +9,12 @@ from textual import work
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.css.query import NoMatches
-from textual.screen import Screen
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Static
 
 from model_meta.core.app_connection import PathState
 from model_meta.specs import store as specs_store
-from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.specs import plural_specs
+from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.section_card import SectionCard
 
 if TYPE_CHECKING:
@@ -47,46 +25,29 @@ _FOUND = "[green]✓ found[/]"
 _MISSING = "[red]✗ not found[/]"
 
 
-class DashboardScreen(Screen):
-    """The landing view: the configured anchors plus live validity markers.
+class DashboardScreen(Layout):
+    def __init__(self):
+        super().__init__()
+        self.description = (
+            "Welcome to model-meta! To get started, create a spec to describe a model file (or, select a model "
+            "file directly - you'll be prompted to create a spec, if needed)."
+        )
 
-    Reads `self.app.settings` and re-renders whenever it changes (an edit via `s`
-    reassigns it). When there is no valid config (`settings is None`) it shows a
-    "run setup" prompt in place of the config-derived sections — but the Specs
-    card reads no settings, so it renders there too and the navigation keys act
-    on exactly that one card.
-
-    The Specs count is refreshed on `ScreenResume` as well as on compose: a spec
-    created on the Specs page lands while this screen is suspended, and a pop
-    does not recompose.
-
-    Future: live validation results driven by a Blender-polling worker, filling
-    in the detail screens the sections already open.
-    """
-
-    BINDINGS = [
-        ("s", "app.open_setup", "Setup"),
-        *MOVE,
-    ]
-
-    def compose(self) -> ComposeResult:
-        yield Header()
+    def compose_body(self) -> ComposeResult:
         settings = cast("ModelMetaApp", self.app).settings
         if settings is None:
             yield Static(
-                "Setup incomplete or unreadable — press 's' to run setup.",
+                "Setup incomplete or unreadable — run `model-meta --setup`.",
                 id="setup-prompt",
             )
             yield Vertical(self._specs_section(), id="config-panel")
         else:
             yield Vertical(
-                self._blender_section(settings),
                 self._specs_section(),
                 self._models_section(settings),
                 self._godot_section(settings),
                 id="config-panel",
             )
-        yield Footer()
 
     def on_mount(self) -> None:
         # Kick off the (filesystem-walking) Godot count once the sections exist,
@@ -119,48 +80,14 @@ class DashboardScreen(Screen):
     # -- navigation --------------------------------------------------------
 
     def on_section_card_opened(self, message: SectionCard.Opened) -> None:
-        """A card was activated — push the detail screen it stands for.
-
-        Navigation is the hub's job, not the card's; the card only names its
-        target. Screens are pushed by name, per the `SCREENS` convention.
-        """
         self.app.push_screen(message.target)
 
     def _focus_section(self, section_id: str | None = None) -> None:
-        """Focus `section_id`, falling back to the first section.
-
-        The fallback covers both the initial mount and a recompose that dropped
-        the previously focused section (a config edit can remove one).
-        """
         cards = list(self.query(SectionCard))
         if not cards:
             return
         target = next((card for card in cards if card.id == section_id), cards[0])
         target.focus()
-
-    # -- sections ----------------------------------------------------------
-
-    def _blender_section(self, settings: Settings) -> SectionCard:
-        state = settings.blender.state()
-        if state is PathState.OK:
-            marker = "[green]✓ executable[/]"
-        elif state is PathState.INVALID:
-            marker = "[yellow]⚠ present, not executable[/]"
-        else:
-            marker = _MISSING
-        version = settings.blender_version or "unknown version"
-        return SectionCard(
-            Static("Blender", classes="section-title"),
-            Static(
-                f"{escape(settings.blender_executable)}  {marker}",
-                id="blender-value",
-                classes="config-value",
-            ),
-            Static(f"Recorded version: {escape(version)}", classes="config-detail"),
-            target="blender-detail",
-            id="section-blender",
-            classes="section",
-        )
 
     def _specs_section(self) -> SectionCard:
         # No `settings` argument and no ✓/✗ marker: the specs location is a path

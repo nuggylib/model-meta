@@ -5,8 +5,9 @@ in the app (analogous to a route in a web app).
 
 ## Contents
 - `dashboard.py` — `DashboardScreen`, the landing view **and navigation hub**.
-  Renders four stacked sections — **Blender → Specs → Models → Godot**. The
-  three configured anchors each carry a live existence/validity marker; **Specs
+  Renders three stacked sections — **Specs → Models → Godot**. Blender is not
+  a section: its status lives in the app footer. The
+  two configured anchors each carry a live existence/validity marker; **Specs
   is config-free** — it reads no settings and renders a muted `#specs-value`
   line with no `✓`/`✗`, because its location is a path convention
   (`app.specs_dir`) rather than a configured anchor, so there is nothing to
@@ -20,24 +21,21 @@ in the app (analogous to a route in a web app).
   stored order, each with its own independent marker (the schema and the wizard
   both enforce at least one, so there is no empty state). It reads
   `self.app.settings` (app-level state) and never touches TOML or the filesystem
-  beyond cheap stats: Blender validity via `settings.blender.state()` (three
-  states — valid / present-but-not-executable / missing — platform-aware, no
-  subprocess), Models existence via `is_dir` and the Godot root via
+  beyond cheap stats: Models existence via `is_dir` and the Godot root via
   `settings.godot.state()`, both inline. The one
   filesystem *walk* — the Godot project count — runs in a `@work` worker
   (`asyncio.to_thread(godot.find_projects)`) showing "Scanning…" until it
   returns (zero projects is a valid `0`). It `watch`es the app's `settings`
-  reactive and `recompose`s on change, so editing config via `s` refreshes the
-  view without a restart. When `self.app.settings is None` (absent/corrupt
-  config) it shows a "run setup" prompt in place of the three config-derived
-  sections — prompt first, with the Specs card below it. Its `s` binding
-  (`app.open_setup`) re-opens the setup wizard in edit mode.
+  reactive and `recompose`s on change, so editing config via `--setup` refreshes
+  the view without a restart. When `self.app.settings is None` (absent/corrupt
+  config) it shows a "run `model-meta --setup`" prompt in place of the two
+  config-derived sections — prompt first, with the Specs card below it.
   **Navigation:** each section is a focusable `SectionCard` (see
   `../widgets/CLAUDE.md`); `down`/`j` → `app.focus_next` and `up`/`k` →
   `app.focus_previous` step through them (wrapping at both ends), and `enter` on
   a card posts `SectionCard.Opened`, which `on_section_card_opened` turns into a
   `push_screen(target)`. The cards are the screen's **only** focus stops — a
-  test asserts the chain is exactly the four sections, because anything else
+  test asserts the chain is exactly the three sections, because anything else
   focusable here is a widget the user has to arrow past. `_focus_section()`
   focuses the first section on mount and, critically, **re-focuses the same
   section after `recompose()`**: a config edit tears down every widget, so
@@ -447,11 +445,11 @@ in the app (analogous to a route in a web app).
   (`Moved X, Y out of warn; Z out of fail.`), computed against the fresh read.
   Failures keep the checks and write nothing. `escape` closes the checklist
   unsaved, else leaves. `q` shadowed.
-- `blender_detail.py`, `godot_detail.py` — the other two detail screens
-  (`blender-detail`, `godot-detail` in `SCREENS`). Still **placeholders**: they
-  render the configured value they own plus a `#placeholder-note`. They exist so
-  navigation is uniform and no `enter` is a dead key; `models.py` is the pattern
-  each should follow when it grows real content.
+- `godot_detail.py` — the other detail screen (`godot-detail` in `SCREENS`).
+  Still a **placeholder**: it renders the configured value it owns plus a
+  `#placeholder-note`. It exists so navigation is uniform and no `enter` is a
+  dead key; `models.py` is the pattern it should follow when it grows real
+  content.
 - `new_spec_modal.py` — `NewSpecModal(ModalScreen[Path | None])`, the one
   question a new spec needs: a model-type name. Returns the created file's path
   via `dismiss()`, or `None` on cancel. The codebase's **first `ModalScreen`**
@@ -525,8 +523,6 @@ in the app (analogous to a route in a web app).
   `SetupWizard` / `NewSpecModal` shape, minus the return value. Adding a
   `current_spec` to app state would be persisting a selected spec, which nothing
   asks for. The rule's purpose holds because nothing in `SCREENS` names them.
-- **Setup (`s` → `app.open_setup`) is bound on the dashboard only.** No other
-  screen offers it, nor tells the user to press `s`.
 - **Spec screens read with `Spec.load(self.path)` and write through
   `specs.store`.** They load fresh for each read and never hold a `Spec` to
   save later, so a hand edit made while the screen is open is never

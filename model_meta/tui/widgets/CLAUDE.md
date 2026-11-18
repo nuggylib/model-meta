@@ -71,6 +71,19 @@ in the screen that owns it.
   so set it after them. On: `#parenting-list`, `#role-list` and
   `#role-fields`.
 
+- `app_footer.py` — `AppFooter(Footer)`, the footer `Layout` composes: the
+  bindings, then a `BlenderStatusLabel` that `watch`es the app's
+  `blender_status`. `Footer` recomposes on every bindings change, so the label
+  is rebuilt each time and must read app state on mount, never hold its own.
+  `blender_label(status)` renders `○ Blender` (probing), `✗ Blender` (not
+  detected), or a dot plus `Blender <version>`: `$success` running,
+  `grey` not running, the version always `grey`. Not `$text-muted`: that's
+  `auto 60%`, a fade that doesn't stand out against the footer.
+  `BlenderStatus(version, running)` is the app's state; `version` `None`
+  means not detected. No styling of its own: colors are theme variables in
+  markup, and the `.align-right` primitive puts it against the command
+  palette key (a second `dock: right` would overlap that key).
+
 ## Conventions
 - **A widget never navigates.** It names where it leads (`target`) and posts a
   message; the hub screen handling that message owns `push_screen`. This is what

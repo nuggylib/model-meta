@@ -12,7 +12,6 @@ exercise the wiring (worker → count) and the live existence markers.
 
 from pathlib import Path
 
-import pytest
 from textual.widgets import Button, ContentSwitcher, Input, ListView, Static
 
 from model_meta.app import ModelMetaApp
@@ -25,12 +24,10 @@ from model_meta.core.blender_connection import (
 )
 from model_meta.core.godot_connection import GodotConnection
 from model_meta.specs import store as specs_store
-from model_meta.tui.screens.blender_detail import BlenderDetailScreen
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.godot_detail import GodotDetailScreen
 from model_meta.tui.screens.models import ModelsScreen
 from model_meta.tui.screens.new_spec_modal import NewSpecModal
-from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.screens.specs import SpecsScreen
 from model_meta.tui.widgets.section_card import SectionCard
 
@@ -67,8 +64,8 @@ async def _wait_for(pilot, predicate, tries=100):
     return False
 
 
-async def test_dashboard_shows_four_sections_in_order(tmp_path, monkeypatch):
-    """Scenario 1 — a valid config renders Blender → Specs → Models → Godot."""
+async def test_dashboard_shows_three_sections_in_order(tmp_path, monkeypatch):
+    """Scenario 1 — a valid config renders Specs → Models → Godot."""
     monkeypatch.setattr(GodotConnection, "find_projects", lambda self, max_depth=4: [])
     cfg = tmp_path / "config.toml"
     models = tmp_path / "models"
@@ -85,7 +82,6 @@ async def test_dashboard_shows_four_sections_in_order(tmp_path, monkeypatch):
 
         order = [section.id for section in screen.query(".section")]
         assert order == [
-            "section-blender",
             "section-specs",
             "section-models",
             "section-godot",
@@ -214,7 +210,7 @@ async def test_dashboard_specs_count_refreshes_on_screen_resume(tmp_path, monkey
         await pilot.pause()
         assert "No specs yet" in _text(app.screen.query_one("#specs-value", Static))
 
-        await pilot.press("down", "enter")  # Blender → Specs → open
+        await pilot.press("enter")
         assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecsScreen))
 
         await pilot.press("n")
@@ -288,7 +284,7 @@ async def test_dashboard_godot_count_from_worker(tmp_path, monkeypatch):
 
 
 async def test_dashboard_refreshes_after_edit(tmp_path, monkeypatch):
-    """Scenario 3 — editing config via `s` and saving updates the dashboard's
+    """Scenario 3 — editing config via `--setup` and saving updates the dashboard's
     displayed value without an app restart."""
     monkeypatch.setattr(
         BlenderConnection,
@@ -305,12 +301,11 @@ async def test_dashboard_refreshes_after_edit(tmp_path, monkeypatch):
     godot.mkdir()
     _seed(cfg, models, godot)
 
-    app = ModelMetaApp(config_path=cfg)
+    app = ModelMetaApp(config_path=cfg, force_setup=True)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert _models_rows(app.screen) == [f"{models}  ✓ found"]
+        assert _models_rows(app.get_screen("dashboard")) == [f"{models}  ✓ found"]
 
-        await pilot.press("s")
         assert await _wait_for(
             pilot, lambda: app.screen.__class__.__name__ == "SetupWizard"
         )
@@ -368,32 +363,31 @@ async def test_dashboard_focuses_first_section_on_mount(tmp_path, monkeypatch):
         await pilot.pause()
         focused = app.screen.focused
         assert isinstance(focused, SectionCard)
-        assert focused.id == "section-blender"
+        assert focused.id == "section-specs"
 
 
 async def test_dashboard_focus_chain_is_exactly_the_sections(tmp_path, monkeypatch):
-    """`down` steps through the four section cards and nothing else.
+    """`down` steps through the three section cards and nothing else.
 
     Guards the navigation contract: a focusable widget sneaking onto the screen
     (a Button in a card, a scrolling wrapper) would add a stop the user has to
     arrow past to reach the next section. The wrap back to the top is what
-    proves there is no fifth stop.
+    proves there is no fourth stop.
     """
     app = _seeded_app(tmp_path, monkeypatch, directories=3)
     async with app.run_test() as pilot:
         await pilot.pause()
         visited = [app.screen.focused]
-        for _ in range(4):
+        for _ in range(3):
             await pilot.press("down")
             visited.append(app.screen.focused)
 
         assert all(isinstance(widget, SectionCard) for widget in visited)
         assert [widget.id for widget in visited] == [
-            "section-blender",
             "section-specs",
             "section-models",
             "section-godot",
-            "section-blender",
+            "section-specs",
         ]
 
 
@@ -412,20 +406,19 @@ async def test_dashboard_vim_keys_move_focus(tmp_path, monkeypatch):
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press("j")
-        assert app.screen.focused.id == "section-specs"
+        assert app.screen.focused.id == "section-models"
         await pilot.press("k")
-        assert app.screen.focused.id == "section-blender"
+        assert app.screen.focused.id == "section-specs"
 
 
 async def test_dashboard_enter_opens_each_sections_detail_screen(tmp_path, monkeypatch):
     """Each section opens its own detail screen, and `escape` comes back.
 
-    Walks all four in one app so the full round trip — push, pop, and the focus
+    Walks all three in one app so the full round trip — push, pop, and the focus
     still being where it was left — is exercised, not just a single hop.
     """
     app = _seeded_app(tmp_path, monkeypatch)
     expected = [
-        ("section-blender", BlenderDetailScreen),
         ("section-specs", SpecsScreen),
         ("section-models", ModelsScreen),
         ("section-godot", GodotDetailScreen),
@@ -449,29 +442,6 @@ async def test_dashboard_enter_opens_each_sections_detail_screen(tmp_path, monke
             await pilot.press("down")
 
 
-@pytest.mark.parametrize(
-    "screen",
-    ["blender-detail", "specs", "models", "godot-detail", "spec-detail"],
-)
-async def test_setup_key_is_unbound_off_the_dashboard(tmp_path, monkeypatch, screen):
-    """Setup is reachable from the dashboard only; `s` does nothing elsewhere."""
-    app = _seeded_app(tmp_path, monkeypatch)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        await app.push_screen(
-            SpecDetailScreen("vehicle", tmp_path / "specs" / "vehicle.json")
-            if screen == "spec-detail"
-            else screen
-        )
-        await pilot.pause()
-        pushed = app.screen
-        assert "s" not in pushed.active_bindings
-
-        await pilot.press("s")
-        await pilot.pause()
-        assert app.screen is pushed
-
-
 async def test_dashboard_restores_focus_after_settings_change(tmp_path, monkeypatch):
     """A config change recomposes the screen — the highlight must not move.
 
@@ -481,7 +451,7 @@ async def test_dashboard_restores_focus_after_settings_change(tmp_path, monkeypa
     app = _seeded_app(tmp_path, monkeypatch)
     async with app.run_test() as pilot:
         await pilot.pause()
-        await pilot.press("down", "down")  # focus Models
+        await pilot.press("down")  # focus Models
         assert app.screen.focused.id == "section-models"
 
         replacement = tmp_path / "replacement"
@@ -511,7 +481,7 @@ async def test_dashboard_restores_focus_to_first_when_section_is_gone(
     async with app.run_test() as pilot:
         await pilot.pause()
         app.screen._focus_section("section-does-not-exist")
-        assert app.screen.focused.id == "section-blender"
+        assert app.screen.focused.id == "section-specs"
 
 
 async def test_dashboard_navigation_without_a_valid_config_acts_on_the_one_card(
@@ -568,7 +538,6 @@ async def test_dashboard_footer_advertises_the_navigation_keys(tmp_path, monkeyp
         assert ("↑↓", "Move") in shown
         assert [entry for entry in shown if entry[1] == "Move"] == [("↑↓", "Move")]
         assert ("enter", "Open") in shown
-        assert ("s", "Setup") in shown
         assert ("q", "Quit") in shown
 
 
@@ -588,4 +557,3 @@ async def test_dashboard_footer_keeps_open_without_a_valid_config(tmp_path):
             if binding.show and enabled
         }
         assert "Open" in descriptions
-        assert "Setup" in descriptions
