@@ -12,7 +12,6 @@ from textual.widgets import Static
 
 from model_meta.core.app_connection import PathState
 from model_meta.specs import store as specs_store
-from model_meta.tui.screens.specs import plural_specs
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.option_list_container import ListEntry, OptionListContainer
 from model_meta.tui.widgets.section_card import SectionCard
@@ -57,15 +56,6 @@ class DashboardScreen(Layout):
         self._focus_section()
         self.watch(self.app, "settings", self._on_settings_changed, init=False)
 
-    def on_screen_resume(self) -> None:
-        """Refresh the spec count — a spec created on the Specs page lands while
-        this screen is suspended, and a pop does not recompose.
-
-        Targeted at `#specs-value` only: a full `recompose` would re-trigger the
-        Godot filesystem scan on every `escape`.
-        """
-        self._update_specs_count()
-
     async def _on_settings_changed(self, _settings: Settings | None) -> None:
         # `recompose` destroys every widget, the focused card included, so note
         # which section held focus and hand it back afterwards — otherwise saving
@@ -98,23 +88,6 @@ class DashboardScreen(Layout):
             "The list of specifications ('specs') that you've created for your model files.",
             built,
         )
-
-    def _specs_count(self) -> str:
-        """`No specs yet` / `N specs`.
-
-        A single-directory glob with no parsing — the same class of work as the
-        `is_dir()` the other cards do inline, so it needs no worker.
-        """
-        count = specs_store.count(cast("ModelMetaApp", self.app).specs_dir)
-        if not count:
-            return "No specs yet — open to create one."
-        return plural_specs(count)
-
-    def _update_specs_count(self) -> None:
-        try:
-            self.query_one("#specs-value", Static).update(self._specs_count())
-        except NoMatches:
-            return  # recomposed away
 
     def _models_section(self, settings: Settings) -> SectionCard:
         built: list[ListEntry] = []
