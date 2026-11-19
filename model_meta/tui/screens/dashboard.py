@@ -89,19 +89,14 @@ class DashboardScreen(Layout):
         target.focus()
 
     def _specs_section(self) -> SectionCard:
-        # # No `settings` argument and no ✓/✗ marker: the specs location is a path
-        # # convention, not a configured anchor, so there is nothing to validate.
-        # return SectionCard(
-        #     Static("Specs", classes="section-title"),
-        #     Static(self._specs_count(), id="specs-value", classes="config-detail"),
-        #     target="specs",
-        #     id="section-specs",
-        #     classes="section",
-        # )
+        built: list[ListEntry] = []
+        specs = specs_store.list_specs(cast("ModelMetaApp", self.app).specs_dir)
+        for spec in specs:
+            built.append(spec.model_type)
         return OptionListContainer(
             "Specs",
             "The list of specifications ('specs') that you've created for your model files.",
-            [],
+            built,
         )
 
     def _specs_count(self) -> str:

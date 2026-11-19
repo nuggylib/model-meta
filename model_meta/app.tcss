@@ -1,5 +1,6 @@
 /* Application-level styles for Model Meta. */
 
+# TODO: Move this to the dashboard layout
 .body {
     margin: 1;
 }
@@ -75,6 +76,12 @@ DashboardScreen #config-panel {
     width: 100%;
     height: auto;
     padding: 1 2;
+}
+DashboardScreen #config-panel > * {
+    margin-bottom: 1;
+}
+DashboardScreen #config-panel > :last-child {
+    margin-bottom: 0;
 }
 
 /* Sections are focusable cards (SectionCard): arrow keys move between them and
