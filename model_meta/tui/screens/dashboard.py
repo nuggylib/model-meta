@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from rich.markup import escape
@@ -15,6 +14,7 @@ from model_meta.core.app_connection import PathState
 from model_meta.specs import store as specs_store
 from model_meta.tui.screens.specs import plural_specs
 from model_meta.tui.templates.layout import Layout
+from model_meta.tui.widgets.option_list_container import ListEntry, OptionListContainer
 from model_meta.tui.widgets.section_card import SectionCard
 
 if TYPE_CHECKING:
@@ -43,9 +43,8 @@ class DashboardScreen(Layout):
             yield Vertical(self._specs_section(), id="config-panel")
         else:
             yield Vertical(
-                self._specs_section(),
                 self._models_section(settings),
-                self._godot_section(settings),
+                self._specs_section(),
                 id="config-panel",
             )
 
@@ -90,14 +89,19 @@ class DashboardScreen(Layout):
         target.focus()
 
     def _specs_section(self) -> SectionCard:
-        # No `settings` argument and no ✓/✗ marker: the specs location is a path
-        # convention, not a configured anchor, so there is nothing to validate.
-        return SectionCard(
-            Static("Specs", classes="section-title"),
-            Static(self._specs_count(), id="specs-value", classes="config-detail"),
-            target="specs",
-            id="section-specs",
-            classes="section",
+        # # No `settings` argument and no ✓/✗ marker: the specs location is a path
+        # # convention, not a configured anchor, so there is nothing to validate.
+        # return SectionCard(
+        #     Static("Specs", classes="section-title"),
+        #     Static(self._specs_count(), id="specs-value", classes="config-detail"),
+        #     target="specs",
+        #     id="section-specs",
+        #     classes="section",
+        # )
+        return OptionListContainer(
+            "Specs",
+            "The list of specifications ('specs') that you've created for your model files.",
+            [],
         )
 
     def _specs_count(self) -> str:
@@ -118,23 +122,13 @@ class DashboardScreen(Layout):
             return  # recomposed away
 
     def _models_section(self, settings: Settings) -> SectionCard:
-        # One row per configured location, in stored order (the order the user
-        # added them in the wizard). The schema and the wizard both enforce at
-        # least one, so there is no empty-list state to render.
-        rows = [
-            Static(
-                f"{escape(directory)}  "
-                f"{_FOUND if Path(directory).expanduser().is_dir() else _MISSING}",
-                classes="config-value models-value",
-            )
-            for directory in settings.models_directories
-        ]
-        return SectionCard(
-            Static("Models", classes="section-title"),
-            *rows,
-            target="models",
-            id="section-models",
-            classes="section",
+        built: list[ListEntry] = []
+        for dir in settings.models_directories:
+            built.append(dir)
+        return OptionListContainer(
+            "Model Directories",
+            "The list of directories you've configured as sources for Blender model files.",
+            built,
         )
 
     def _godot_section(self, settings: Settings) -> SectionCard:
