@@ -9,6 +9,7 @@ is the focus, so the app is not named after Blender.
 * Before creating a new branch, read `.claude/skills/branch-naming/SKILL.md`
 * Before committing changes, read `.claude/skills/committing/SKILL.md`
 * Before running tests locally, read `.claude/skills/running-tests/SKILL.md`
+* Before fixing a ruff formatting or lint error, read `.claude/skills/auto-fixing/SKILL.md`
 
 ## Project Structure
 
