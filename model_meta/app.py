@@ -20,6 +20,7 @@ from model_meta.tui.screens.godot_detail import GodotDetailScreen
 from model_meta.tui.screens.models import ModelsScreen
 from model_meta.tui.screens.setup_wizard import SetupWizard
 from model_meta.tui.screens.specs import SpecsScreen
+from model_meta.tui.theme import MCNUGGIES
 from model_meta.tui.widgets.app_footer import BlenderStatus
 
 
@@ -88,7 +89,8 @@ class ModelMetaApp(App):
         return paths.results_dir(self._config_path)
 
     def on_mount(self) -> None:
-        self.theme = "textual-dark"
+        self.register_theme(MCNUGGIES)
+        self.theme = MCNUGGIES.name
         self._blender_poll = self.set_interval(
             self.BLENDER_POLL_SECONDS, self._check_blender_running
         )

@@ -20,6 +20,10 @@ The Textual UI layer: everything the user sees and interacts with.
   `None`. `most_severe` ranks fail, then warning, then pending, then pass.
   `lookup(data, path)` is the value at a key path, `None` when missing. Shared
   by the model dashboard and the check detail screen.
+- `theme.py` — `MCNUGGIES`, the app's Textual `Theme`, registered and set in
+  `ModelMetaApp.on_mount`. Only `primary` (`#C003FF`, the studio color) is set.
+  The other colors are listed commented out until each is picked against the
+  contrast rules; until then Textual derives them from `primary`.
 - `bindings.py` — `MOVE`, the `↑↓` / `j` / `k` focus bindings every screen
   with a list of focus stops spreads into its `BINDINGS`.
 
