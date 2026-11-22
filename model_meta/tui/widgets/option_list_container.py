@@ -45,7 +45,7 @@ class OptionListContainer(VerticalGroup):
             yield Static(content=self._label, classes=("h2"))
             yield Static(content=self._description, classes=("description"))
             yield OptionList(*self._entries)
-            with HorizontalGroup(classes="button-row"):
+            with HorizontalGroup():
                 yield Button("Add", variant="primary")
                 yield Static(classes="spacer")
                 yield Button("Remove", variant="default")
