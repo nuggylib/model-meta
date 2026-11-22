@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, cast
 
-from rich.markup import escape
 from textual import work
 from textual.app import ComposeResult
 from textual.containers import Vertical
@@ -19,9 +18,6 @@ from model_meta.tui.widgets.section_card import SectionCard
 if TYPE_CHECKING:
     from model_meta.app import ModelMetaApp
     from model_meta.config.settings import Settings
-
-_FOUND = "[green]✓ found[/]"
-_MISSING = "[red]✗ not found[/]"
 
 
 class DashboardScreen(Layout):
@@ -97,26 +93,6 @@ class DashboardScreen(Layout):
             "Model Directories",
             "The list of directories you've configured as sources for Blender model files.",
             built,
-        )
-
-    def _godot_section(self, settings: Settings) -> SectionCard:
-        found = settings.godot.state() is PathState.OK
-        # The count is filled in by `_scan_godot` (it walks the fs); until then show
-        # a placeholder, or a dash when the root is missing and there is nothing to
-        # scan.
-        count = "Scanning…" if found else "—"
-        return SectionCard(
-            Static("Godot", classes="section-title"),
-            Static(
-                f"{escape(settings.godot_projects_root)}  "
-                f"{_FOUND if found else _MISSING}",
-                id="godot-value",
-                classes="config-value",
-            ),
-            Static(count, id="godot-count", classes="config-detail"),
-            target="godot-detail",
-            id="section-godot",
-            classes="section",
         )
 
     # -- workers -----------------------------------------------------------
