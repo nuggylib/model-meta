@@ -28,6 +28,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "ruff>=0.6",
+    "coloraide>=8.16",
 ]
 # Isolated so CI (and local packaging) can `uv sync --group build` without
 # pulling the full dev toolchain. Not part of `dev`.
