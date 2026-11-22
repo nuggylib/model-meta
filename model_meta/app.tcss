@@ -2,10 +2,15 @@
 
 .body {
     margin: 2;
+    padding-right: 1;
 }
 
 .options-list-container > * {
     margin-bottom: 1;
+}
+
+.options-list-container OptionList {
+    height: 11;  /* 5 options + 4 separators + 2 border */
 }
 
 /* The shared config vocabulary. The dashboard and the per-section detail

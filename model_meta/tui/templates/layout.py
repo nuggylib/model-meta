@@ -1,5 +1,5 @@
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Header, Static
 
@@ -24,7 +24,8 @@ class Layout(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Vertical(id="body", classes=("body")):
+        # can_focus=False keeps the body out of the MOVE focus chain.
+        with VerticalScroll(id="body", classes=("body"), can_focus=False):
             if len(self.description) > 0:
                 yield Static(content=self.description, classes=("description"))
             # Anything yielded inside the with block becomes a child of this container
