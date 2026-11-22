@@ -1,8 +1,11 @@
 /* Application-level styles for Model Meta. */
 
-# TODO: Move this to the dashboard layout
 .body {
-    margin: 1;
+    margin: 2;
+}
+
+.options-list-container > * {
+    margin-bottom: 1;
 }
 
 /* The shared config vocabulary. The dashboard and the per-section detail
@@ -31,6 +34,24 @@
     width: 1fr;
     text-align: right;
     padding-right: 1;
+}
+
+/* Empty filler that takes a horizontal row's free space, pushing what follows
+   it to the right end. */
+.spacer {
+    width: 1fr;
+    height: auto;
+}
+
+Button {
+    width: 3;
+    height: 1;
+    border: none;
+}
+
+HorizontalGroup {
+    width: 100%;
+    height: auto;
 }
 
 /* The rail is painted on every row and only its color changes, keeping the text

@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import TypeAlias
 
 from textual.app import ComposeResult
-from textual.containers import VerticalGroup
-from textual.widgets import OptionList, Static
+from textual.containers import HorizontalGroup, VerticalGroup
+from textual.widgets import Button, OptionList, Static
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,11 @@ class OptionListContainer(VerticalGroup):
         self._entries = tuple(built)
 
     def compose(self) -> ComposeResult:
-        yield Static(content=self._label, classes=("h2"))
-        yield Static(content=self._description, classes=("description"))
-        yield OptionList(*self._entries)
+        with VerticalGroup(classes=("options-list-container")):
+            yield Static(content=self._label, classes=("h2"))
+            yield Static(content=self._description, classes=("description"))
+            yield OptionList(*self._entries)
+            with HorizontalGroup(classes="button-row"):
+                yield Button("Add", variant="primary")
+                yield Static(classes="spacer")
+                yield Button("Remove", variant="default")
