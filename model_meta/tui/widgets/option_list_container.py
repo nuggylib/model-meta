@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TypeAlias
 
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import HorizontalGroup, VerticalGroup
 from textual.content import Content
@@ -67,7 +68,14 @@ class OptionListContainer(VerticalGroup):
                 for idx, tab in enumerate(self._tabs):
                     # Content, not str: a directory name like `cars[wip]` isn't markup.
                     with TabPane(Content(tab.label), id=f"tab-{idx}"):
-                        yield OptionList(*self._with_separators(tab.entries))
+                        # Not constructor args: those highlight the first option.
+                        yield OptionList().add_options(
+                            self._with_separators(tab.entries)
+                        )
+
+    def on_descendant_blur(self, event: events.DescendantBlur) -> None:
+        if isinstance(event.widget, OptionList):
+            event.widget.highlighted = None
 
     def set_entries(self, idx: int, entries: Sequence[ListEntry]) -> None:
         """Replace tab `idx`'s entries. Raises `NoMatches` once unmounted."""
