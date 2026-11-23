@@ -48,12 +48,21 @@ Header {
     color: #FFFFFF;
 }
 
+Tabs:focus Tab.-active {
+    background: $accent;
+}
+
 OptionList {
     border: tall $panel;
 }
 
 OptionList:focus {
-    border: tall $primary;
+    border: tall $accent;
+}
+
+OptionList:focus > .option-list--option-highlighted {
+    background: $panel 50%;
+    color: $accent
 }
 
 Button {
