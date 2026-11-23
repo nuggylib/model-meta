@@ -75,8 +75,10 @@ class ModelReportScreen(Layout):
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
         self.description = (
-            "Your model's 'readiness' check, based on the spec file you've linked to this model's"
-            "report."
+            f"Your model's 'readiness' check for \"{model.name}\", based on the spec file, {self.spec_path.stem}.json."
+            " Once all checks are passing, your model is ready for export into Godot"
+            " If you're seeing issues in your model after export, check to see that your"
+            " linked spec file is adequate."
         )
 
     def compose_body(self) -> ComposeResult:
@@ -89,12 +91,6 @@ class ModelReportScreen(Layout):
         self._modifiers = spec.modifiers if spec else Modifiers()
         self._load_results()
         self._rows = self._items()
-        yield Static(
-            f"Model type: {self.spec_path.stem}",
-            id="model-type",
-            classes="model-item",
-            markup=False,
-        )
         for index, (depth, _, path) in enumerate(self._rows):
             options = {
                 "id": f"model-item-{index}",
