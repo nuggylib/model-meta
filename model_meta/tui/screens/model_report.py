@@ -32,7 +32,7 @@ from model_meta.core.spec import MeshRole, Modifiers, Spec
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
-from model_meta.tui.widgets.model_report_section import ModelReportSection
+from model_meta.tui.widgets.model_report.model_report_section import ModelReportSection
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _WRONG_FILE = "Wrong File"
