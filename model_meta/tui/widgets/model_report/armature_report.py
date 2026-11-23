@@ -15,8 +15,7 @@ class ArmatureReport(VerticalGroup):
         with VerticalGroup():
             ModelReportSection(
                 title="Armature",
-                description="The armature(s) that this model requires in order for its animations to be fully functional once"
-                " exported to Godot. This check ensures your model has the expected armature.",
+                description="",
             )
             Static(content="% Complete")
             ProgressBar()

@@ -12,7 +12,6 @@ from pathlib import Path
 from textual import work
 from textual.app import ComposeResult
 from textual.css.query import NoMatches
-from textual.markup import escape
 from textual.reactive import reactive
 from textual.signal import Signal
 from textual.widgets import Static
@@ -67,13 +66,6 @@ class ModelReportScreen(Layout):
         self._rows: list[Row] = []
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
-        self.description = (
-            f"Your model's 'readiness' check for [b $primary]\"{escape(model.name)}\"[/],"
-            f" based on the spec file, [b $primary]{escape(self.spec_path.stem)}.json[/]."
-            " Once all checks are passing, your model is ready for export into Godot."
-            " If you're seeing issues in your model after export, check to see that your"
-            " linked spec file is adequate."
-        )
 
     def compose_body(self) -> ComposeResult:
         try:
