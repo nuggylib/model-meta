@@ -12,6 +12,7 @@ from pathlib import Path
 from textual import work
 from textual.app import ComposeResult
 from textual.css.query import NoMatches
+from textual.markup import escape
 from textual.reactive import reactive
 from textual.signal import Signal
 from textual.widgets import Static
@@ -38,10 +39,9 @@ from model_meta.tui.status import (
     status_of,
 )
 from model_meta.tui.templates.layout import Layout
+from model_meta.tui.widgets.section_description import SectionDescription
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
-_NOT_FOUND = "not found"
-_INACTIVE = "Inactive"
 _WRONG_FILE = "Wrong File"
 _LIVE_HINT = "Results update when you load a file, or save one, in Blender."
 _INACTIVE_HINT = "Start Blender to continuously-evaluate the file."
@@ -75,8 +75,9 @@ class ModelReportScreen(Layout):
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
         self.description = (
-            f"Your model's 'readiness' check for \"{model.name}\", based on the spec file, {self.spec_path.stem}.json."
-            " Once all checks are passing, your model is ready for export into Godot"
+            f"Your model's 'readiness' check for [b $primary]\"{escape(model.name)}\"[/],"
+            f" based on the spec file, [b $primary]{escape(self.spec_path.stem)}.json[/]."
+            " Once all checks are passing, your model is ready for export into Godot."
             " If you're seeing issues in your model after export, check to see that your"
             " linked spec file is adequate."
         )
@@ -97,8 +98,20 @@ class ModelReportScreen(Layout):
                 "classes": f"model-item model-item-depth-{depth}",
             }
             label = self._label(index)
+            desc = ""
+            if path == ("armature",):
+                found_response_str = (
+                    "[b $success]FOUND[/]"
+                    if self._get_field_status(index) is True
+                    else "[b $error]NOT FOUND[/]"
+                )
+                desc = f"The expected armature, [b $primary]{escape(self._armature)}[/], was {found_response_str}"
             if depth == 0:
-                yield SelectableRow(path[0], label, **options)
+                # yield SelectableRow(path[0], label, **options)
+                yield SectionDescription(
+                    label=label,
+                    description=desc,
+                )
             else:
                 yield Static(label, markup=False, **options)
 
@@ -286,12 +299,15 @@ class ModelReportScreen(Layout):
             status.update("")
         hint.update(_INACTIVE_HINT)
 
+    def _get_field_status(self, index: int) -> Status:
+        data = None if self.results is None else self.results.to_dict()
+        return self._status(index, data)
+
     def _label(self, index: int) -> str:
         text = self._rows[index][1]
         if self.is_refreshing:
             return f"{REFRESHING} {text}"
-        data = None if self.results is None else self.results.to_dict()
-        return f"{icon(self._status(index, data))} {text}"
+        return f"{icon(self._get_field_status(index))} {text}"
 
     def _status(self, index: int, data: dict | None) -> Status:
         """A row with rows beneath it shows the most severe of theirs."""
@@ -313,7 +329,7 @@ class ModelReportScreen(Layout):
 
     def _items(self) -> list[Row]:
         return [
-            (0, f"{_ROOTS['armature']}: {self._armature or _NOT_FOUND}", ("armature",)),
+            (0, f"{_ROOTS['armature']}", ("armature",)),
             (0, f"{_ROOTS['mesh_roles']}:", ("mesh_roles",)),
             *((1, name, ("mesh_roles", name)) for name in self._roles),
             (0, _ROOTS["modifiers"], ("modifiers",)),
