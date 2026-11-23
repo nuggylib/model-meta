@@ -1,7 +1,7 @@
 /* Application-level styles for Model Meta. */
 
 .body {
-    margin: 2;
+    margin: 2 0 2 2;
     padding-right: 1;
 }
 
