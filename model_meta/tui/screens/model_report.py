@@ -117,18 +117,6 @@ class ModelReportScreen(Layout):
 
     def _pick_description(self, index: int, path: str) -> str:
         desc = ""
-        if path == ("armature",):
-            found_response_str = (
-                "[b $success]FOUND[/]"
-                if self._get_field_status(index) is True
-                else "[b $error]NOT FOUND[/]"
-            )
-            desc = (
-                "The armature(s) that this model requires in order for its animations to be fully functional once"
-                " exported to Godot. This check ensures your model has the expected armature."
-                "\n\n"
-                f"The expected armature, [b $primary]{escape(self._armature)}[/], was {found_response_str}"
-            )
         return desc
 
     def _swap_override(
