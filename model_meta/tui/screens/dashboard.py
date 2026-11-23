@@ -102,6 +102,8 @@ class DashboardScreen(Layout):
             " detected. To evaluate a model file, select one from the list. If a model does not have an associated"
             " spec file, yet, you will be prompted to create one. Blender must be running!",
             tabs,
+            highlight_last=True,
+            delimiter="/",
         )
         container.id = "models-list"
         return container
