@@ -11,7 +11,6 @@ from pathlib import Path
 
 from textual import work
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.signal import Signal
@@ -64,7 +63,7 @@ class ModelReportScreen(Layout):
     results: reactive[Results | None] = reactive(None)
 
     def __init__(self, model: Path, spec_path: Path, results_path: Path) -> None:
-        super().__init__(page_title="Model Report")
+        super().__init__(page_title=f'Model Report > "{model.name}"')
         self.model = model
         self.spec_path = spec_path
         self.results_path = results_path
@@ -75,7 +74,10 @@ class ModelReportScreen(Layout):
         self._rows: list[Row] = []
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
-        self.description = ""
+        self.description = (
+            "Your model's 'readiness' check, based on the spec file you've linked to this model's"
+            "report."
+        )
 
     def compose_body(self) -> ComposeResult:
         try:
@@ -87,15 +89,6 @@ class ModelReportScreen(Layout):
         self._modifiers = spec.modifiers if spec else Modifiers()
         self._load_results()
         self._rows = self._items()
-        with Vertical(id="model-header"):
-            with Horizontal(id="model-heading"):
-                yield Static(
-                    f"Models - {self.model.stem}",
-                    id="model-title",
-                    classes="section-title",
-                    markup=False,
-                )
-                yield Static(id="connection-status", classes="config-detail")
         yield Static(
             f"Model type: {self.spec_path.stem}",
             id="model-type",

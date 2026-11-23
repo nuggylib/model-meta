@@ -5,10 +5,12 @@ from typing import TypeAlias
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import HorizontalGroup, VerticalGroup
+from textual.containers import VerticalGroup
 from textual.content import Content
-from textual.widgets import OptionList, Static, TabbedContent, TabPane
+from textual.widgets import OptionList, TabbedContent, TabPane
 from textual.widgets.option_list import Option
+
+from model_meta.tui.widgets.section_description import SectionDescription
 
 ADD_TAB_LABEL = "+"
 
@@ -73,9 +75,7 @@ class OptionListContainer(VerticalGroup):
 
     def compose(self) -> ComposeResult:
         with VerticalGroup(classes=("options-list-container")):
-            with HorizontalGroup(classes="section-heading"):
-                yield Static(content=self._label, classes="h2")
-            yield Static(content=self._description, classes=("description"))
+            yield SectionDescription(label=self._label, description=self._description)
             with TabbedContent():
                 for idx, tab in enumerate(self._tabs):
                     # Content, not str: a directory name like `cars[wip]` isn't markup.
