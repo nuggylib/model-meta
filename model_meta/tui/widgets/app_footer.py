@@ -6,10 +6,12 @@ from textual.widgets import Footer, Static
 
 @dataclass(frozen=True)
 class BlenderStatus:
-    """`version` is `None` when no working Blender was found."""
+    """`version` is `None` when no working Blender was found. `bridge_version` is `None`
+    when the add-on isn't reachable or predates `get_version`."""
 
     version: str | None
     running: bool = False
+    bridge_version: str | None = None
 
 
 def blender_label(status: BlenderStatus | None) -> str:
@@ -19,8 +21,14 @@ def blender_label(status: BlenderStatus | None) -> str:
         return "[grey]○ Blender[/]"
     if status.version is None:
         return "[$error]✗[/] Blender"
-    dot = "[$success]●[/]" if status.running else "[grey]●[/]"
-    return f"{dot} Blender [grey]{status.version}[/]"
+    if not status.running:
+        return f"[grey]●[/] Blender [grey]{status.version}[/]"
+    bridge = (
+        f"[grey](bridge v{status.bridge_version})[/]"
+        if status.bridge_version
+        else "[$error](bridge not found)[/]"
+    )
+    return f"[$success]●[/] Blender [grey]{status.version}[/] {bridge}"
 
 
 class BlenderStatusLabel(Static):
