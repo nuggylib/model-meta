@@ -189,7 +189,8 @@ class ModelsScreen(Screen):
             except NoMatches:
                 return  # recomposed away mid-scan
             await container.mount_all(
-                SelectableRow(model, self._label(model, path)) for model in found
+                SelectableRow(model, discovery.relative_label(model, path))
+                for model in found
             )
         summary = (
             f"{_plural(len(settings.models_directories), 'directory', 'directories')}"
@@ -206,15 +207,6 @@ class ModelsScreen(Screen):
         except NoMatches:
             return  # recomposed away mid-scan
         panel.steps = tuple(_FIX_STEPS[state] for state in _STEP_ORDER if state in seen)
-
-    @staticmethod
-    def _label(model: Path, root: Path) -> str:
-        """The model's path relative to its configured directory."""
-        try:
-            return str(model.relative_to(root.resolve()))
-        except ValueError:
-            # The scan resolves its root, so a symlinked dir yields outside paths.
-            return model.name
 
     def _focus_first_row(self) -> None:
         """Focus the first model, unless the user already focused one."""
