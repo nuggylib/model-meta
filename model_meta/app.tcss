@@ -21,7 +21,7 @@
 
 .h2 {
     text-style: bold;
-    color: #FFFFFF;
+    color: #000000;
 }
 
 .config-value {
@@ -45,7 +45,7 @@
 
 Header {
     background: $primary;
-    color: #FFFFFF;
+    color: #000000;
 }
 
 Tabs:focus Tab.-active {
