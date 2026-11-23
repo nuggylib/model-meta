@@ -6,7 +6,6 @@ from collections.abc import Iterable
 from typing import Literal
 
 PENDING = "🟡"
-REFRESHING = "🔄"
 PASS = "✅"
 # Escaped: many viewers drop U+FE0F and draw the text-style warning sign.
 WARN = "⚠️"

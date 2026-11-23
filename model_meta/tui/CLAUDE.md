@@ -13,8 +13,8 @@ The Textual UI layer: everything the user sees and interacts with.
   mesh-roles, mesh-role and modifiers forms).
 - `status.py` — check status from a results file's JSON. A `Status` is `True`
   (pass), `WARNING`, `False` (fail) or `None` (pending). The icons are
-  `PENDING`, `REFRESHING`, `PASS`, `WARN` (⚠️, written as escapes) and `FAIL`,
-  via `icon(status)`. `is_check` matches a `{passed, failures}` object with an
+  `PENDING`, `PASS`, `WARN` (⚠️, written as escapes) and `FAIL`, via
+  `icon(status)`, used by the check detail screen. `is_check` matches a `{passed, failures}` object with an
   optional `warning` and `duplicates`. `status_of(value)` returns a bool, a check's `passed`
   (`WARNING` for a failing `warning` check), a container's most severe, else
   `None`. `most_severe` ranks fail, then warning, then pending, then pass.

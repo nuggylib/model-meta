@@ -30,14 +30,7 @@ from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import Results, TextureMapOverride
 from model_meta.core.spec import MeshRole, Modifiers, Spec
 from model_meta.tui.screens.check_detail import CheckDetailScreen
-from model_meta.tui.status import (
-    REFRESHING,
-    Status,
-    icon,
-    lookup,
-    most_severe,
-    status_of,
-)
+from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.model_report_section import ModelReportSection
 from model_meta.tui.widgets.selectable_row import SelectableRow
@@ -233,11 +226,7 @@ class ModelReportScreen(Layout):
         checked, roles = modifiers.evaluate(self._modifiers, roles, report.modifiers)
         self._save(mesh_roles=roles, modifiers=checked)
 
-    def watch_is_refreshing(self) -> None:
-        self._update_rows()
-
     def watch_results(self) -> None:
-        self._update_rows()
         self.results_changed.publish(self.results)
 
     def _load_results(self) -> None:
@@ -274,17 +263,6 @@ class ModelReportScreen(Layout):
     def watch_wrong_file(self) -> None:
         self._update_connection()
 
-    def _update_rows(self) -> None:
-        for index in range(len(self._rows)):
-            try:
-                row = self.query_one(f"#model-item-{index}")
-            except NoMatches:
-                return
-            if isinstance(row, SelectableRow):
-                row.label = self._label(index)
-            elif isinstance(row, Static):
-                row.update(self._label(index))
-
     def _update_connection(self) -> None:
         try:
             status = self.query_one("#connection-status", Static)
@@ -313,12 +291,6 @@ class ModelReportScreen(Layout):
     def _get_text_for_row(self, index: int) -> str:
         return self._rows[index][1]
 
-    def _label(self, index: int) -> str:
-        text = self._get_text_for_row(index)
-        if self.is_refreshing:
-            return f"{REFRESHING} {text}"
-        return f"{icon(self._get_field_status(index))} {text}"
-
     def _status(self, index: int, data: dict | None) -> Status:
         """A row with rows beneath it shows the most severe of theirs."""
         path = self._rows[index][2]
@@ -340,7 +312,7 @@ class ModelReportScreen(Layout):
     def _items(self) -> list[Row]:
         return [
             (0, f"{_ROOTS['armature']}", ("armature",)),
-            (0, f"{_ROOTS['mesh_roles']}:", ("mesh_roles",)),
+            (0, f"{_ROOTS['mesh_roles']}", ("mesh_roles",)),
             *((1, name, ("mesh_roles", name)) for name in self._roles),
             (0, _ROOTS["modifiers"], ("modifiers",)),
             (1, "Required:", ("modifiers", "required")),

@@ -85,7 +85,7 @@ in the app (analogous to a route in a web app).
 - `model_report.py` — `ModelReportScreen(model, spec_path,
   results_path)`, one model (its `.blend` path) against its spec, pushed by
   `enter` on a dashboard Model Directories row. Not in `SCREENS`. `Models - <model stem>` heading,
-  an unprefixed `Model type: <spec stem>`, then emoji-prefixed rows nested by
+  an unprefixed `Model type: <spec stem>`, then rows nested by
   depth (`.model-item-depth-{n}`): `Armature:` (`object_name`, or `not
   found`), `Mesh Roles:` with one row per role, and `Modifiers` with
   `Required:` → `Skinned Meshes`, `Warnings` and `Blocked` (the results'
@@ -110,15 +110,14 @@ in the app (analogous to a route in a web app).
   right before. A role left with no overrides is dropped from the file. An
   override no longer in the file is a `ValueError`, so the error notice
   shows and nothing is written. Each then re-runs `_check_mesh_roles` on
-  `_report`, the last report checked on the model's file, so the icons and
+  `_report`, the last report checked on the model's file, so the results and
   `expected` names change without a Blender save. A fresh scene query would
   pick up unsaved edits; the report keeps every result tied to the last save.
   With no report yet, the override is only saved, and a notice says it's
   checked when Blender next saves.
-  **Icons always come from the results file**, in every mode (Live, Wrong
-  File, Manual, Inactive): ✅ for `True`, ❌ for `False`, ⚠️ for a failing
-  `warning` check, and 🟡 for a check never run or a results file that can't
-  be read. The loaded file is the
+  **Statuses always come from the results file**, in every mode (Live, Wrong
+  File, Manual, Inactive). A check never run or a results file that can't be
+  read is pending (`None`). The loaded file is the
   `results` reactive. It is read in `compose` and again on `r`. Each `Row`
   carries its key path in `Results.to_dict()` (`None` for a row nothing
   checks yet). A row whose path is missing is pending. A row with rows
@@ -126,8 +125,7 @@ in the app (analogous to a route in a web app).
   warning, else a pending row, else a pass). Any other row shows
   `tui.status.status_of` of its value, so a role passes when every check in
   it, its `modifiers` included, passes. Every role keeps its own row.
-  Failures are never shown here, only their icons; the detail screen lists
-  them.
+  Failures are never shown here; the detail screen lists them.
   **Connection:** on mount and on `r` (**Refresh**), the
   `@work(exclusive=True, group="blender-check")` worker runs both
   `core.blender_bridge` subscriptions in one `asyncio.TaskGroup`, each through
@@ -147,17 +145,15 @@ in the app (analogous to a route in a web app).
   through `_save(**fields)`, a `replace` passed to `_update(change)`: load
   right before, apply `change`, save only when something changed (other keys
   kept), then set `results`. A failed load or save is an error notice and
-  returns `False`, and the icons keep the stored results. A
+  returns `False`, and `results` keeps the stored results. A
   `busy` `None` armature list checks nothing. With the wrong file open,
-  results are ignored and nothing is written; the icons keep showing the
-  results file.
+  results are ignored and nothing is written.
   When either subscription raises `BridgeError` (unreachable or dropped), the
-  `TaskGroup` cancels the other, `live` and `wrong_file` reset (the icons keep
-  the stored results), and the worker falls back to the **Manual Mode**
+  `TaskGroup` cancels the other, `live` and `wrong_file` reset (`results`
+  keeps the stored results), and the worker falls back to the **Manual Mode**
   check: `BlenderConnection.is_running` via `asyncio.to_thread`, which only
-  asks whether Blender is running. While
-  connecting or checking, the `is_refreshing` reactive swaps every row's
-  prefix to 🔄. The muted `#connection-status` beside the heading reads
+  asks whether Blender is running. The `is_refreshing` reactive is `True`
+  while connecting or checking. The muted `#connection-status` beside the heading reads
   `Wrong File` in Live Mode on the wrong file, `Live Mode`, else from
   `blender_running`: `Manual Mode` when running, `Inactive` when not, empty
   before the first check. The muted `#connection-hint` below it always shows:
