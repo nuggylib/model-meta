@@ -13,13 +13,9 @@
     height: 11;  /* 5 options + 4 separators + 2 border */
 }
 
-/* The shared config vocabulary. The dashboard and the per-section detail
-   screens render the same kinds of line — a heading, a configured value, a
-   muted sub-detail — so these are app-level classes rather than per-screen
-   copies. */
-.section-title {
+.h2 {
     text-style: bold;
-    color: $accent;
+    color: $primary;
 }
 
 .config-value {
