@@ -4,15 +4,20 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from textual import work
+from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.css.query import NoMatches
-from textual.widgets import Static
+from textual.widgets import OptionList, Static
 
 from model_meta.core.app_connection import PathState
+from model_meta.core.results import Results
+from model_meta.core.spec import Spec
 from model_meta.models import discovery
 from model_meta.specs import store as specs_store
+from model_meta.specs.store import SpecState
+from model_meta.tui.screens.link_spec_modal import LinkSpecModal
+from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.option_list_container import (
     ListEntry,
@@ -133,6 +138,43 @@ class DashboardScreen(Layout):
                 )
             except NoMatches:
                 return  # recomposed away before the scan returned
+
+    @on(OptionList.OptionSelected, "#models-list OptionList")
+    def _on_model_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_id is not None:
+            self._open_model(Path(event.option_id))
+
+    @work(exclusive=True, group="open-model")
+    async def _open_model(self, model: Path) -> None:
+        """Open the model's dashboard, linking it to a spec first if it has no results."""
+        app = cast("ModelMetaApp", self.app)
+        results_path = Results.path_for(app.results_dir, model)
+        try:
+            spec = Results.load(results_path).spec
+        except FileNotFoundError:
+            entries = await asyncio.to_thread(specs_store.list_specs, app.specs_dir)
+            names = [
+                entry.model_type for entry in entries if entry.state is SpecState.OK
+            ]
+            spec = await app.push_screen_wait(LinkSpecModal(model.name, names))
+            if spec is None:
+                return
+            try:
+                Results(model_file=str(model), spec=spec, path=results_path).create()
+            except OSError as error:
+                self.notify(
+                    f"Couldn't save {results_path.name}: {error}", severity="error"
+                )
+                return
+        except (OSError, ValueError):
+            self.notify(f"{results_path.name} can't be read.", severity="error")
+            return
+        try:
+            spec_path = Spec.path_for(app.specs_dir, spec)
+        except ValueError:
+            self.notify(f"{results_path.name} names an invalid spec.", severity="error")
+            return
+        app.push_screen(ModelDashboardScreen(model, spec_path, results_path))
 
     @work(exclusive=True, group="godot-scan")
     async def _scan_godot(self) -> None:
