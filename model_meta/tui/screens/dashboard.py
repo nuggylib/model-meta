@@ -90,7 +90,9 @@ class DashboardScreen(Layout):
         ]
         return OptionListContainer(
             "Specs",
-            "The list of specifications ('specs') that you've created for your model files.",
+            "The list of specifications ('specs') that you've created for your model files. You can either create a"
+            " spec manually, or select a model file that is not yet associated with a spec; you will be prompted to "
+            " create one any time you attempt to evaluate a model file that has not been linked to a spec.",
             tabs,
         )
 
@@ -100,7 +102,7 @@ class DashboardScreen(Layout):
             "Model Directories",
             "Your model directories, separated by tab. Each tab contains the full list of .blend files that were"
             " detected. To evaluate a model file, select one from the list. If a model does not have an associated"
-            " spec file, yet, you will be prompted to create one. Blender must be running!",
+            " spec file, yet, you will be prompted to create one.",
             tabs,
             highlight_last=True,
             delimiter="/",
