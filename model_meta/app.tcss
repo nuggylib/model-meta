@@ -1,8 +1,8 @@
 /* Application-level styles for Model Meta. */
 
 .body {
-    margin: 2 0 2 2;
-    padding-right: 1;
+    margin: 1;
+    padding: 0;
 }
 
 .options-list-container > * {
@@ -41,17 +41,19 @@
     padding-right: 1;
 }
 
-/* Empty filler that takes a horizontal row's free space, pushing what follows
-   it to the right end. */
-.spacer {
-    width: 1fr;
-    height: auto;
+Header {
+    background: $secondary;
+    color: #FFFFFF;
 }
 
 Button {
     width: 3;
     height: 1;
     border: none;
+}
+
+Button.-primary {
+    background: $accent;
 }
 
 HorizontalGroup {
@@ -108,23 +110,6 @@ DashboardScreen #config-panel > * {
 }
 DashboardScreen #config-panel > :last-child {
     margin-bottom: 0;
-}
-
-/* Sections are focusable cards (SectionCard): arrow keys move between them and
-   enter opens one. The left rail is painted on *every* card, not just the
-   focused one, so only its color changes with focus — a border that appeared on
-   focus would shift the row's text sideways as the user moved through. */
-DashboardScreen .section {
-    width: 100%;
-    height: auto;
-    margin-bottom: 1;
-    border-left: thick $panel;
-    padding-left: 1;
-}
-
-DashboardScreen .section:focus {
-    border-left: thick $accent;
-    background: $boost;
 }
 
 /* -- detail screens ------------------------------------------------------ */

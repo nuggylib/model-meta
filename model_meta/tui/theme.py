@@ -14,15 +14,5 @@ MCNUGGIES = Theme(
     background="#121212",
     surface="#000000",
     panel="#363636",
-    # boost=,
-    # variables={
-    #     "scrollbar": ,
-    #     "scrollbar-background": ,
-    #     "scrollbar-hover": ,
-    #     "scrollbar-active": ,
-    #     "footer-key-foreground": ,
-    #     "footer-background": ,
-    #     "block-cursor-foreground": ,
-    #     "block-cursor-background": ,
-    # },
+    boost="#518041",
 )
