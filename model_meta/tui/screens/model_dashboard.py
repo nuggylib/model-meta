@@ -11,12 +11,11 @@ from pathlib import Path
 
 from textual import work
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.reactive import reactive
-from textual.screen import Screen
 from textual.signal import Signal
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Static
 
 from model_meta.checks import mesh_roles, modifiers
 from model_meta.core.blender_bridge import (
@@ -30,7 +29,6 @@ from model_meta.core.blender_bridge import (
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import Results, TextureMapOverride
 from model_meta.core.spec import MeshRole, Modifiers, Spec
-from model_meta.tui.bindings import MOVE
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import (
     REFRESHING,
@@ -40,6 +38,7 @@ from model_meta.tui.status import (
     most_severe,
     status_of,
 )
+from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _NOT_FOUND = "not found"
@@ -58,14 +57,8 @@ _ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modi
 Row = tuple[int, str, tuple[str, ...] | None]
 
 
-class ModelDashboardScreen(Screen):
+class ModelDashboardScreen(Layout):
     """Pushed as an instance, like `SpecDetailScreen`: it is per model and spec."""
-
-    BINDINGS = [
-        ("escape", "app.pop_screen", "Back"),
-        ("r", "refresh", "Refresh"),
-        *MOVE,
-    ]
 
     is_refreshing: reactive[bool] = reactive(False)
     blender_running: reactive[bool | None] = reactive(None)
@@ -86,7 +79,7 @@ class ModelDashboardScreen(Screen):
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
 
-    def compose(self) -> ComposeResult:
+    def compose_body(self) -> ComposeResult:
         try:
             spec = Spec.load(self.spec_path)
         except (OSError, ValueError):
@@ -96,46 +89,39 @@ class ModelDashboardScreen(Screen):
         self._modifiers = spec.modifiers if spec else Modifiers()
         self._load_results()
         self._rows = self._items()
-        yield Header()
-        with VerticalScroll(id="detail-panel", can_focus=False):
-            with Vertical(id="model-header"):
-                with Horizontal(id="model-heading"):
-                    yield Static(
-                        f"Models - {self.model.stem}",
-                        id="model-title",
-                        classes="section-title",
-                        markup=False,
-                    )
-                    yield Static(id="connection-status", classes="config-detail")
+        with Vertical(id="model-header"):
+            with Horizontal(id="model-heading"):
                 yield Static(
-                    _REFRESH_HINT,
-                    id="connection-hint",
-                    classes="config-detail",
+                    f"Models - {self.model.stem}",
+                    id="model-title",
+                    classes="section-title",
                     markup=False,
                 )
+                yield Static(id="connection-status", classes="config-detail")
             yield Static(
-                f"Model type: {self.spec_path.stem}",
-                id="model-type",
-                classes="model-item",
+                _REFRESH_HINT,
+                id="connection-hint",
+                classes="config-detail",
                 markup=False,
             )
-            for index, (depth, _, path) in enumerate(self._rows):
-                options = {
-                    "id": f"model-item-{index}",
-                    "classes": f"model-item model-item-depth-{depth}",
-                }
-                label = self._label(index)
-                if depth == 0:
-                    yield SelectableRow(path[0], label, **options)
-                else:
-                    yield Static(label, markup=False, **options)
-        yield Footer()
+        yield Static(
+            f"Model type: {self.spec_path.stem}",
+            id="model-type",
+            classes="model-item",
+            markup=False,
+        )
+        for index, (depth, _, path) in enumerate(self._rows):
+            options = {
+                "id": f"model-item-{index}",
+                "classes": f"model-item model-item-depth-{depth}",
+            }
+            label = self._label(index)
+            if depth == 0:
+                yield SelectableRow(path[0], label, **options)
+            else:
+                yield Static(label, markup=False, **options)
 
     def on_mount(self) -> None:
-        self._refresh()
-
-    def action_refresh(self) -> None:
-        self._load_results()
         self._refresh()
 
     def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
