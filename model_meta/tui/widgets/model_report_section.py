@@ -13,7 +13,8 @@ class ModelReportSection(VerticalGroup):
         self._description = description
 
     def compose(self):
-        yield SectionDescription(
-            label=self._title,
-            description=self._description,
-        )
+        with VerticalGroup():
+            yield SectionDescription(
+                label=self._title,
+                description=self._description,
+            )
