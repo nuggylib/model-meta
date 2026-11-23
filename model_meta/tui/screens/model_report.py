@@ -42,13 +42,10 @@ from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _NOT_FOUND = "not found"
-_LIVE_MODE = "Live Mode"
-_MANUAL_MODE = "Manual Mode"
 _INACTIVE = "Inactive"
 _WRONG_FILE = "Wrong File"
 _LIVE_HINT = "Results update when you load a file, or save one, in Blender."
-_REFRESH_HINT = "Press r to refresh."
-_INACTIVE_HINT = "Start Blender, then press r to refresh."
+_INACTIVE_HINT = "Start Blender to continuously-evaluate the file."
 
 # Each root row's results file key, and the title its detail screen shows.
 _ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modifiers"}
@@ -78,6 +75,7 @@ class ModelReportScreen(Layout):
         self._rows: list[Row] = []
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
+        self.description = ""
 
     def compose_body(self) -> ComposeResult:
         try:
@@ -98,12 +96,6 @@ class ModelReportScreen(Layout):
                     markup=False,
                 )
                 yield Static(id="connection-status", classes="config-detail")
-            yield Static(
-                _REFRESH_HINT,
-                id="connection-hint",
-                classes="config-detail",
-                markup=False,
-            )
         yield Static(
             f"Model type: {self.spec_path.stem}",
             id="model-type",
@@ -298,15 +290,12 @@ class ModelReportScreen(Layout):
             )
             return
         if self.live:
-            status.update(_LIVE_MODE)
             hint.update(_LIVE_HINT)
             return
         running = self.blender_running
         if running is None:
             status.update("")
-        else:
-            status.update(_MANUAL_MODE if running else _INACTIVE)
-        hint.update(_INACTIVE_HINT if running is False else _REFRESH_HINT)
+        hint.update(_INACTIVE_HINT)
 
     def _label(self, index: int) -> str:
         text = self._rows[index][1]

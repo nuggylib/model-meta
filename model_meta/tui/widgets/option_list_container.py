@@ -15,7 +15,13 @@ ADD_TAB_LABEL = "+"
 
 class _Options(OptionList):
     # `OptionList` hides its own `enter`; the footer shows the focused widget's first.
-    BINDINGS = [Binding("enter", "select", "Select")]
+    BINDINGS = [
+        Binding("enter", "select", "Select"),
+        Binding("down", "cursor_down", "Move", key_display="↑↓/jk"),
+        Binding("up", "cursor_up", "Move", show=False),
+        Binding("j", "cursor_down", "Move", show=False),
+        Binding("k", "cursor_up", "Move", show=False),
+    ]
 
 
 @dataclass(frozen=True)

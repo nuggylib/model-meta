@@ -16,7 +16,11 @@ class Layout(Screen):
     are defined in the root app.tcss file.
     """
 
-    BINDINGS = [Binding("escape", "back", "Back"), *MOVE]
+    BINDINGS = [
+        Binding("escape", "back", "Back"),
+        *MOVE,
+        Binding("tab", "app.focus_next", "Next"),
+    ]
 
     # Optional description; when empty, does not render a Static Widget. Use this to
     # explain the purpose of a root page. Leave it empty for pages with multiple interaction
