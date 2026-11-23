@@ -11,7 +11,8 @@ directories. This category only *locates* models — reading what is inside one
   paths. `DEFAULT_MAX_DEPTH` is exported so the UI can tell the user where the
   scan stopped looking instead of hard-coding a number that would drift.
   `relative_label(model, root)` is a found model's path relative to its
-  directory (just its name when a symlinked root puts it outside), shared by
+  directory, always `/`-separated so the dashboard's `"/"` highlight delimiter
+  holds on Windows (just its name when a symlinked root puts it outside), shared by
   the Models screen rows and the dashboard's Model Directories tabs.
 
 ## Conventions

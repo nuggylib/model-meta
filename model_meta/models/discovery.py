@@ -52,9 +52,9 @@ def find_blend_files(directory: Path, max_depth: int = DEFAULT_MAX_DEPTH) -> lis
 
 
 def relative_label(model: Path, root: Path) -> str:
-    """The model's path relative to its configured directory."""
+    """The model's path relative to its configured directory, `/`-separated on every OS."""
     try:
-        return str(model.relative_to(root.resolve()))
+        return model.relative_to(root.resolve()).as_posix()
     except ValueError:
         # The scan resolves its root, so a symlinked dir yields outside paths.
         return model.name
