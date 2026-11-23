@@ -151,33 +151,33 @@ DashboardScreen #config-panel > :last-child {
     margin-top: 1;
 }
 
-/* -- model dashboard screen ---------------------------------------------- */
+/* -- model report screen ------------------------------------------------- */
 
-ModelDashboardScreen #model-header {
+ModelReportScreen #model-header {
     height: auto;
     margin-bottom: 1;
 }
 
-ModelDashboardScreen #model-heading {
+ModelReportScreen #model-heading {
     height: auto;
 }
 
-ModelDashboardScreen #model-title {
+ModelReportScreen #model-title {
     width: auto;
 }
 
-ModelDashboardScreen #connection-status {
+ModelReportScreen #connection-status {
     width: auto;
     margin-left: 1;
 }
 
 /* Root rows are SelectableRows: rail, padding and "▸ " put their text 4 columns
    in, so nested rows start there too. */
-ModelDashboardScreen .model-item-depth-1 {
+ModelReportScreen .model-item-depth-1 {
     padding-left: 7;
 }
 
-ModelDashboardScreen .model-item-depth-2 {
+ModelReportScreen .model-item-depth-2 {
     padding-left: 10;
 }
 

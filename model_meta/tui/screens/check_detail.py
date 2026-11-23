@@ -108,7 +108,7 @@ _NO_DUPLICATES = "No more duplicates to override."
 
 
 class ResultsSource(Protocol):
-    """The model dashboard: the results it follows, and where overrides are saved."""
+    """The model report: the results it follows, and where overrides are saved."""
 
     model: Path
     results: Results | None

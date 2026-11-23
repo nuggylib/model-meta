@@ -1,4 +1,4 @@
-"""The model dashboard — one model checked against the spec it was built from."""
+"""The model report — one model checked against the spec it was built from."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ _ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modi
 Row = tuple[int, str, tuple[str, ...] | None]
 
 
-class ModelDashboardScreen(Layout):
+class ModelReportScreen(Layout):
     """Pushed as an instance, like `SpecDetailScreen`: it is per model and spec."""
 
     is_refreshing: reactive[bool] = reactive(False)

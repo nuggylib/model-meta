@@ -63,7 +63,7 @@ _ROLES = {
 
 
 class _Source:
-    """Stands in for the model dashboard, recording each saved override."""
+    """Stands in for the model report, recording each saved override."""
 
     model = Path("/m/sedan.blend")
 

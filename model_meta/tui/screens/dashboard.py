@@ -17,7 +17,7 @@ from model_meta.models import discovery
 from model_meta.specs import store as specs_store
 from model_meta.specs.store import SpecState
 from model_meta.tui.screens.link_spec_modal import LinkSpecModal
-from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
+from model_meta.tui.screens.model_report import ModelReportScreen
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.option_list_container import (
     ListEntry,
@@ -174,7 +174,7 @@ class DashboardScreen(Layout):
         except ValueError:
             self.notify(f"{results_path.name} names an invalid spec.", severity="error")
             return
-        app.push_screen(ModelDashboardScreen(model, spec_path, results_path))
+        app.push_screen(ModelReportScreen(model, spec_path, results_path))
 
     @work(exclusive=True, group="godot-scan")
     async def _scan_godot(self) -> None:

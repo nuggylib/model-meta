@@ -82,7 +82,7 @@ in the app (analogous to a route in a web app).
   `"modifiers"` → `ModifiersFormScreen(path)`.
   A new root field is one `FIELDS` entry in the picker, one route here, and one
   `FieldSummary` with its rows.
-- `model_dashboard.py` — `ModelDashboardScreen(model, spec_path,
+- `model_report.py` — `ModelReportScreen(model, spec_path,
   results_path)`, one model (its `.blend` path) against its spec, pushed by
   `enter` on a dashboard Model Directories row. Not in `SCREENS`. `Models - <model stem>` heading,
   an unprefixed `Model type: <spec stem>`, then emoji-prefixed rows nested by
@@ -167,13 +167,13 @@ in the app (analogous to a route in a web app).
   r to refresh." when `Inactive`. Every watcher is `NoMatches`-guarded.
 - `check_detail.py` — `CheckDetailScreen(source, path, headings)`, one
   model's results at a key path in `Results.to_dict()`. `source` is a
-  `ResultsSource` (the model dashboard): `model`, `results`,
+  `ResultsSource` (the model report): `model`, `results`,
   `results_changed`, `texture_maps(role)`,
   `add_texture_map_override(role, override)`,
   `replace_texture_map_override(role, old, new)` and
   `delete_texture_map_override(role, override)`. The screen never writes the
   results file itself. It reads the value with `tui.status.lookup`, and is
-  pushed by `enter` on a model dashboard root row and
+  pushed by `enter` on a model report root row and
   by `enter` on its own rows. Not in `SCREENS`. The title is `Models - <model
   stem>` then each of `headings`. One class serves every path: it reads
   nothing per field and lays the value out by its shape, mirroring the JSON.
@@ -484,7 +484,7 @@ in the app (analogous to a route in a web app).
   reads no settings at all — only `self.app.specs_dir` — so it works in every
   config state.
   `spec_detail.py`, `armature_form.py`, `mesh_roles_form.py`,
-  `mesh_role_form.py`, `modifiers_form.py`, `model_dashboard.py` and
+  `mesh_role_form.py`, `modifiers_form.py`, `model_report.py` and
   `check_detail.py` are the
   named exemptions: they are *per spec* (or per model), with no app-level "current spec" to read, so they take
   the spec as a constructor argument and are **not** registered in `SCREENS` — the
