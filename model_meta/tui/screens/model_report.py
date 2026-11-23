@@ -86,18 +86,11 @@ class ModelReportScreen(Layout):
         self._load_results()
         self._rows = self._items()
         for index, (depth, _, path) in enumerate(self._rows):
-            # options = {
-            #     "id": f"model-item-{index}",
-            #     "classes": f"model-item model-item-depth-{depth}",
-            # }
-            # label = self._label(index)
             if depth == 0:
                 yield ModelReportSection(
                     title=self._get_text_for_row(index),
                     description=self._pick_description(index, path),
                 )
-            # else:
-            #     yield Static(label, markup=False, **options)
 
     def on_mount(self) -> None:
         self._refresh()
