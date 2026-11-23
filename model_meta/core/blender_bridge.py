@@ -294,20 +294,39 @@ def _targets(targets: Sequence[WeightTarget | MeshTarget]) -> dict:
     return {"meshes": [asdict(target) for target in targets]}
 
 
+async def fetch_version(port: int = PORT, timeout: float = 2.0) -> str | None:
+    """`None` for an add-on older than `get_version`. Raises `BridgeError` when the add-on
+    can't be reached, doesn't answer within `timeout`, or answers anything else."""
+    async with _connection("get_version", port, timeout) as bridge:
+        await bridge.send({"type": "get_version"})
+        try:
+            message = await asyncio.wait_for(bridge.receive(), timeout)
+        except TimeoutError as exc:
+            raise BridgeError("The Blender add-on didn't answer.") from exc
+    if not isinstance(message, _Version):
+        raise _unexpected()
+    return message.version
+
+
 @asynccontextmanager
-async def _subscription(kind: str, port: int, timeout: float):
+async def _connection(kind: str, port: int, timeout: float):
     try:
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(HOST, port), timeout
         )
     except (OSError, TimeoutError) as exc:
         raise BridgeError("The Blender add-on isn't reachable.") from exc
-    bridge = _Bridge(reader, writer, kind)
     try:
-        await bridge.subscribe()
-        yield bridge
+        yield _Bridge(reader, writer, kind)
     finally:
         writer.close()
+
+
+@asynccontextmanager
+async def _subscription(kind: str, port: int, timeout: float):
+    async with _connection(kind, port, timeout) as bridge:
+        await bridge.subscribe()
+        yield bridge
 
 
 class _Bridge:
