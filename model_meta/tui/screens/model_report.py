@@ -39,7 +39,7 @@ from model_meta.tui.status import (
     status_of,
 )
 from model_meta.tui.templates.layout import Layout
-from model_meta.tui.widgets.section_description import SectionDescription
+from model_meta.tui.widgets.model_report_section import ModelReportSection
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _WRONG_FILE = "Wrong File"
@@ -93,27 +93,18 @@ class ModelReportScreen(Layout):
         self._load_results()
         self._rows = self._items()
         for index, (depth, _, path) in enumerate(self._rows):
-            options = {
-                "id": f"model-item-{index}",
-                "classes": f"model-item model-item-depth-{depth}",
-            }
-            label = self._label(index)
-            desc = ""
-            if path == ("armature",):
-                found_response_str = (
-                    "[b $success]FOUND[/]"
-                    if self._get_field_status(index) is True
-                    else "[b $error]NOT FOUND[/]"
-                )
-                desc = f"The expected armature, [b $primary]{escape(self._armature)}[/], was {found_response_str}"
+            # options = {
+            #     "id": f"model-item-{index}",
+            #     "classes": f"model-item model-item-depth-{depth}",
+            # }
+            # label = self._label(index)
             if depth == 0:
-                # yield SelectableRow(path[0], label, **options)
-                yield SectionDescription(
-                    label=label,
-                    description=desc,
+                yield ModelReportSection(
+                    title=self._get_text_for_row(index),
+                    description=self._pick_description(index, path),
                 )
-            else:
-                yield Static(label, markup=False, **options)
+            # else:
+            #     yield Static(label, markup=False, **options)
 
     def on_mount(self) -> None:
         self._refresh()
@@ -137,6 +128,20 @@ class ModelReportScreen(Layout):
         self, role: str, override: TextureMapOverride
     ) -> None:
         self._swap_override(role, override, [], "deleted")
+
+    def _pick_description(self, index: int, path: str) -> str:
+        desc = ""
+        if path == ("armature",):
+            found_response_str = (
+                "[b $success]FOUND[/]"
+                if self._get_field_status(index) is True
+                else "[b $error]NOT FOUND[/]"
+            )
+            desc = (
+                "\n\n"
+                f"The expected armature, [b $primary]{escape(self._armature)}[/], was {found_response_str}"
+            )
+        return desc
 
     def _swap_override(
         self,
@@ -303,8 +308,11 @@ class ModelReportScreen(Layout):
         data = None if self.results is None else self.results.to_dict()
         return self._status(index, data)
 
+    def _get_text_for_row(self, index: int) -> str:
+        return self._rows[index][1]
+
     def _label(self, index: int) -> str:
-        text = self._rows[index][1]
+        text = self._get_text_for_row(index)
         if self.is_refreshing:
             return f"{REFRESHING} {text}"
         return f"{icon(self._get_field_status(index))} {text}"
