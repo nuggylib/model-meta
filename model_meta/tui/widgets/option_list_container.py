@@ -4,12 +4,18 @@ from typing import TypeAlias
 
 from textual import events
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import HorizontalGroup, VerticalGroup
 from textual.content import Content
 from textual.widgets import OptionList, Static, TabbedContent, TabPane
 from textual.widgets.option_list import Option
 
 ADD_TAB_LABEL = "+"
+
+
+class _Options(OptionList):
+    # `OptionList` hides its own `enter`; the footer shows the focused widget's first.
+    BINDINGS = [Binding("enter", "select", "Select")]
 
 
 @dataclass(frozen=True)
@@ -69,9 +75,7 @@ class OptionListContainer(VerticalGroup):
                     # Content, not str: a directory name like `cars[wip]` isn't markup.
                     with TabPane(Content(tab.label), id=f"tab-{idx}"):
                         # Not constructor args: those highlight the first option.
-                        yield OptionList().add_options(
-                            self._with_separators(tab.entries)
-                        )
+                        yield _Options().add_options(self._with_separators(tab.entries))
 
     def on_descendant_blur(self, event: events.DescendantBlur) -> None:
         if isinstance(event.widget, OptionList):

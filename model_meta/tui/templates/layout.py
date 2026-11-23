@@ -1,4 +1,5 @@
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Header, Static
@@ -15,7 +16,7 @@ class Layout(Screen):
     are defined in the root app.tcss file.
     """
 
-    BINDINGS = MOVE
+    BINDINGS = [Binding("escape", "back", "Back"), *MOVE]
 
     # Optional description; when empty, does not render a Static Widget. Use this to
     # explain the purpose of a root page. Leave it empty for pages with multiple interaction
@@ -32,6 +33,15 @@ class Layout(Screen):
             # without the subclass knowing about it.
             yield from self.compose_body()
         yield AppFooter()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        # Index 0 is Textual's default screen; popping onto it leaves a blank app.
+        if action == "back":
+            return self.app.screen_stack.index(self) > 1
+        return True
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
 
     # A subclass that doesn't override compose_body() gets an empty body instead of an error.
     def compose_body() -> ComposeResult:
