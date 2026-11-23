@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from textual import work
@@ -10,9 +11,15 @@ from textual.css.query import NoMatches
 from textual.widgets import Static
 
 from model_meta.core.app_connection import PathState
+from model_meta.models import discovery
 from model_meta.specs import store as specs_store
 from model_meta.tui.templates.layout import Layout
-from model_meta.tui.widgets.option_list_container import ListEntry, OptionListContainer
+from model_meta.tui.widgets.option_list_container import (
+    ListEntry,
+    ListOption,
+    ListTab,
+    OptionListContainer,
+)
 from model_meta.tui.widgets.section_card import SectionCard
 
 if TYPE_CHECKING:
@@ -24,8 +31,11 @@ class DashboardScreen(Layout):
     def __init__(self):
         super().__init__()
         self.description = (
-            "Welcome to model-meta! To get started, create a spec to describe a model file (or, select a model "
-            "file directly - you'll be prompted to create a spec, if needed)."
+            "Welcome to model-meta! This is a tool intended to serve as an in-depth checklist for 3D modelers"
+            " to use when preparing an asset for export into Godot. It's especially useful for games with assets"
+            " that use repeating parts. When using a properly-configured spec file, model-meta helps ensure that: "
+            " (1) All meshes are present, (2) All meshes are parented to the correct bone(s), (3) All meshes have"
+            " the correct weights assigned to them, (4) All meshes are properly UV unwrapped, (5) TODO"
         )
 
     def compose_body(self) -> ComposeResult:
@@ -39,30 +49,23 @@ class DashboardScreen(Layout):
         else:
             yield Vertical(
                 self._models_section(settings),
-                self._specs_section(),
+                self._specs_section(settings),
                 id="config-panel",
             )
 
     def on_mount(self) -> None:
-        # Kick off the (filesystem-walking) Godot count once the sections exist,
-        # and re-render + re-scan whenever the app's config is reassigned. `init`
-        # is off so this doesn't fire redundantly against the value compose already
-        # read.
         self._scan_godot()
+        self._scan_models()
         self._focus_section()
         self.watch(self.app, "settings", self._on_settings_changed, init=False)
 
     async def _on_settings_changed(self, _settings: Settings | None) -> None:
-        # `recompose` destroys every widget, the focused card included, so note
-        # which section held focus and hand it back afterwards — otherwise saving
-        # an edit silently moves the user's highlight.
         focused = self.focused
         previous = focused.id if isinstance(focused, SectionCard) else None
         await self.recompose()
         self._focus_section(previous)
         self._scan_godot()
-
-    # -- navigation --------------------------------------------------------
+        self._scan_models()
 
     def on_section_card_opened(self, message: SectionCard.Opened) -> None:
         self.app.push_screen(message.target)
@@ -74,38 +77,61 @@ class DashboardScreen(Layout):
         target = next((card for card in cards if card.id == section_id), cards[0])
         target.focus()
 
-    def _specs_section(self) -> SectionCard:
+    def _specs_section(self, settings: Settings | None = None) -> OptionListContainer:
         built: list[ListEntry] = []
         specs = specs_store.list_specs(cast("ModelMetaApp", self.app).specs_dir)
         for spec in specs:
-            built.append(spec.model_type)
+            built.append(ListOption(spec.model_type, spec.model_type))
+        directories = settings.models_directories if settings else ()
+        # Specs aren't namespaced on disk yet, so they all belong to the first namespace.
+        tabs = [
+            ListTab(Path(dir).name, built if idx == 0 else ())
+            for idx, dir in enumerate(directories)
+        ]
         return OptionListContainer(
             "Specs",
             "The list of specifications ('specs') that you've created for your model files.",
-            built,
+            tabs,
         )
 
-    def _models_section(self, settings: Settings) -> SectionCard:
-        built: list[ListEntry] = []
-        for dir in settings.models_directories:
-            built.append(dir)
-        return OptionListContainer(
+    def _models_section(self, settings: Settings) -> OptionListContainer:
+        tabs = [ListTab(Path(dir).name, ()) for dir in settings.models_directories]
+        container = OptionListContainer(
             "Model Directories",
-            "The list of directories you've configured as sources for Blender model files.",
-            built,
+            "Your model directories, separated by tab. Each tab contains the full list of .blend files that were"
+            " detected. To evaluate a model file, select one from the list. If a model does not have an associated"
+            " spec file, yet, you will be prompted to create one. Blender must be running!",
+            tabs,
         )
+        container.id = "models-list"
+        return container
 
-    # -- workers -----------------------------------------------------------
+    @work(exclusive=True, group="models-scan")
+    async def _scan_models(self) -> None:
+        settings = cast("ModelMetaApp", self.app).settings
+        if settings is None:
+            return
+        for idx, directory in enumerate(settings.models_directories):
+            path = Path(directory).expanduser()
+            if not path.is_dir():
+                continue
+            try:
+                found = await asyncio.to_thread(discovery.find_blend_files, path)
+            except OSError:
+                continue
+            entries = [
+                ListOption(discovery.relative_label(model, path), str(model))
+                for model in found
+            ]
+            try:
+                self.query_one("#models-list", OptionListContainer).set_entries(
+                    idx, entries
+                )
+            except NoMatches:
+                return  # recomposed away before the scan returned
 
     @work(exclusive=True, group="godot-scan")
     async def _scan_godot(self) -> None:
-        """Count Godot projects under the configured root, off the event loop.
-
-        The scan walks the filesystem, so it runs in a thread (like the wizard's).
-        A missing root needs no scan (the inline marker already says so); zero
-        projects is a valid `0`, and any failure degrades to "count unavailable"
-        rather than crashing the screen.
-        """
         settings = cast("ModelMetaApp", self.app).settings
         if settings is None:
             return
