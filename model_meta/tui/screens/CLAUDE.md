@@ -43,48 +43,17 @@ in the app (analogous to a route in a web app).
   after saving. With no valid config Specs is the only card, so the navigation
   keys act on it alone and the footer still advertises `enter Open`. Future
   work adds live validation results from a Blender-polling worker.
-- `models.py` — `ModelsScreen`, the Models detail view. One group per configured
-  directory, in stored order, each ending in **one of four states**, and that
-  distinction is the point of the page: a directory that *exists* but holds no
-  models reads as a healthy `✓ found` on the dashboard, which is exactly how a
-  mis-pointed directory hides. So **missing** (`is_dir()` inline), **unreadable**
-  (the scan raised `OSError`), **empty** (`0 models`), and **populated** each
-  render differently, and each problem state contributes a step to the
-  `#fix-panel` block (a `FixPanel`, workflow step 7). That block sits **outside**
-  the scroller so a long model list can't push it off screen, and shows only the
-  problems the scan actually found — a healthy page shows nothing and the list
-  takes the full height. The scan is delegated to the `models`
-  category inside `@work(exclusive=True, group="models-scan")` via
-  `asyncio.to_thread`, per directory, sequentially — few directories, ordered
-  output, and `exclusive` means a recompose-driven rescan cancels the one in
-  flight rather than racing it. Rows are `SelectableRow`s keyed by the model's
-  `Path` and labeled with its
-  path *relative to* its configured directory, so a model in a subfolder keeps
-  that context; they are the screen's only focus stops, which is why the
-  `VerticalScroll` wrapper passes `can_focus=False` (`ScrollableContainer` opts
-  in by default and would otherwise be a stop the user arrows past). Group
-  shells are keyed by **position** (`#models-state-{i}`, `#models-files-{i}`),
-  not by path — a path is not a usable widget id. `enter` on a row runs
-  `_open_model` (`@work(exclusive=True, group="open-model")`): it loads the
-  model's `Results` from `app.results_dir`. With none, it lists the `OK` specs
-  (in a thread), `push_screen_wait`s a `LinkSpecModal`, and `create`s the
-  results file from the choice (`escape` writes nothing). Then it pushes
-  `ModelDashboardScreen(model, spec path, results path)`. An unreadable results file,
-  an invalid spec name in it, or a failed write is a notice; the file is never
-  overwritten.
 - `specs.py` — `SpecsScreen` (`specs` in `SCREENS`), the Specs page: the
   validation specs in `specs/`, one focusable `SelectableRow` each, keyed by
-  its `SpecEntry`. Follows
-  `models.py`'s page shape — a `VerticalScroll` of rows (`can_focus=False`, so
-  the rows are the only focus stops) plus a `FixPanel` **outside** the scroller.
+  its `SpecEntry`. A `VerticalScroll` of rows (`can_focus=False`, so the rows
+  are the only focus stops) plus a `FixPanel` **outside** the scroller.
   The listing parses JSON per file, so it runs in
   `@work(exclusive=True, group="specs-load")` via `asyncio.to_thread`, and every
   post-load `query_one` is `NoMatches`-guarded. Two problem states contribute a
   fix step — `UNREADABLE` (not valid JSON) and `MISMATCHED` (the file's
   `model_type` disagrees with its filename; the filename wins). **Zero specs is
   not a problem**: on a fresh install it is the normal state, so it renders a
-  plain `#specs-empty` note and contributes no step — the opposite call from the
-  Models screen's empty directory. `enter` on a row opens `spec_detail.py` for
+  plain `#specs-empty` note and contributes no step. `enter` on a row opens `spec_detail.py` for
   that spec, pushed as an **instance** (the screen is per spec), so no `enter`
   on this page is a dead key.
   **`n` creates:** `action_new_spec` runs a `@work(exclusive=True,
@@ -115,7 +84,7 @@ in the app (analogous to a route in a web app).
   `FieldSummary` with its rows.
 - `model_dashboard.py` — `ModelDashboardScreen(model, spec_path,
   results_path)`, one model (its `.blend` path) against its spec, pushed by
-  `enter` on a Models row. Not in `SCREENS`. `Models - <model stem>` heading,
+  `enter` on a dashboard Model Directories row. Not in `SCREENS`. `Models - <model stem>` heading,
   an unprefixed `Model type: <spec stem>`, then emoji-prefixed rows nested by
   depth (`.model-item-depth-{n}`): `Armature:` (`object_name`, or `not
   found`), `Mesh Roles:` with one row per role, and `Modifiers` with
@@ -448,8 +417,7 @@ in the app (analogous to a route in a web app).
 - `godot_detail.py` — the other detail screen (`godot-detail` in `SCREENS`).
   Still a **placeholder**: it renders the configured value it owns plus a
   `#placeholder-note`. It exists so navigation is uniform and no `enter` is a
-  dead key; `models.py` is the pattern it should follow when it grows real
-  content.
+  dead key.
 - `new_spec_modal.py` — `NewSpecModal(ModalScreen[Path | None])`, the one
   question a new spec needs: a model-type name. Returns the created file's path
   via `dismiss()`, or `None` on cancel. The codebase's **first `ModalScreen`**
@@ -506,7 +474,7 @@ in the app (analogous to a route in a web app).
 - **A worker that writes to widgets must tolerate them being gone.** A
   recompose or a `pop_screen` can land while the scan is in flight, so every
   post-scan `query_one` is guarded against `NoMatches` (see `dashboard.py`'s
-  `_scan_godot` and `models.py`'s `_update`). Pair that with
+  `_scan_godot` and `_scan_models`). Pair that with
   `@work(exclusive=True, group=…)` so a rescan cancels its predecessor rather
   than racing it.
 - **A detail screen reads app-level state, it does not take constructor args.**

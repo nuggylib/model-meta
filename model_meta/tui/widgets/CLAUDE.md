@@ -16,8 +16,7 @@ in the screen that owns it.
   cannot become a stop of its own and break the "arrow keys step through
   sections" contract.
 - `selectable_row.py` — `SelectableRow(Static, can_focus=True)`, one row a
-  screen lists for the user to pick: a model on the Models screen (`key` is
-  its `Path`, `label` its path relative to the configured directory), a spec
+  screen lists for the user to pick: a spec
   on the Specs screen (`key` is its `SpecEntry`, `label` its `model_type`,
   `marker` the unreadable / mismatched note), a root check on the model
   dashboard (`key` is its results file key, `label` its icon and text), a

@@ -283,34 +283,6 @@ SpecsScreen #detail-panel {
     height: 1fr;
 }
 
-/* -- Models screen ------------------------------------------------------- */
-
-ModelsScreen #models-summary {
-    margin-bottom: 1;
-}
-
-ModelsScreen .models-group {
-    width: 100%;
-    height: auto;
-    margin-bottom: 1;
-}
-
-ModelsScreen .models-directory {
-    text-style: bold;
-}
-
-ModelsScreen .models-files {
-    width: 100%;
-    height: auto;
-}
-
-/* The model list scrolls; `height: 1fr` gives it whatever is left between the
-   header, the docked fix block, and the footer. `can_focus=False` on the
-   container (set in Python) keeps it out of the row focus chain. */
-ModelsScreen #detail-panel {
-    height: 1fr;
-}
-
 /* -- armature, mesh-roles, mesh-role and modifiers forms ----------------- */
 
 /* One box per field (FieldList); the border turns accent when it's selected. */

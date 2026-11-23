@@ -17,7 +17,6 @@ from model_meta.core.blender_connection import BlenderConnection
 from model_meta.diagnostics import run_headless_check
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.godot_detail import GodotDetailScreen
-from model_meta.tui.screens.models import ModelsScreen
 from model_meta.tui.screens.setup_wizard import SetupWizard
 from model_meta.tui.screens.specs import SpecsScreen
 from model_meta.tui.theme import MCNUGGIES
@@ -51,7 +50,6 @@ class ModelMetaApp(App):
     SCREENS = {
         "dashboard": DashboardScreen,
         "specs": SpecsScreen,
-        "models": ModelsScreen,
         "godot-detail": GodotDetailScreen,
     }
 

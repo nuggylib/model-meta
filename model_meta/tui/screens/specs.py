@@ -73,7 +73,7 @@ def plural_specs(count: int) -> str:
 class SpecsScreen(Screen):
     """Detail view for the validation specs in `specs/`.
 
-    Navigation mirrors the Models screen: rows are focusable (`SelectableRow`), `↑`/`↓`
+    Rows are focusable (`SelectableRow`), `↑`/`↓`
     and `j`/`k` step through them, `enter` selects one. The rows are the only
     focus stops — the title and summary lines are plain `Static`s.
 

@@ -279,8 +279,8 @@ async def test_specs_screen_footer_advertises_the_new_spec_key(tmp_path, monkeyp
         assert ("q", "Quit") in shown
         # The movement keys are bound but not advertised: the `VerticalScroll`
         # ancestor's own hidden scroll bindings shadow the screen's shown `Move`
-        # entry. Same on `ModelsScreen` — a scroller page trades the footer hint
-        # for the scrolling, and the keys themselves still move focus (below).
+        # entry. A scroller page trades the footer hint for the scrolling, and
+        # the keys themselves still move focus (below).
         assert "Move" not in [description for _key, description in shown]
         assert {"down", "j", "up", "k"} <= set(app.screen.active_bindings)
 
