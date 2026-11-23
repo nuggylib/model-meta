@@ -2,7 +2,7 @@
 
 .body {
     margin: 1;
-    padding: 0;
+    padding: 0 1 0 0;
 }
 
 .options-list-container > * {
@@ -75,6 +75,11 @@ Button.-primary:focus {
 
 Button.-primary {
     background: $boost;
+}
+
+* {
+    scrollbar-color: $boost;
+    scrollbar-size-vertical: 1;
 }
 
 HorizontalGroup {
