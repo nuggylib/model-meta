@@ -29,7 +29,9 @@ this package sits at the repository root, not under `src/`).
   changes. `_check_blender_running` polls `is_running` every
   `BLENDER_POLL_SECONDS` (5) only while a Blender is detected, skipping a tick
   while a check is still in flight; the timer pauses on `AppBlur` and checks at
-  once on `AppFocus`.
+  once on `AppFocus`. Each probe and poll that finds Blender running also asks
+  the add-on for its version (`blender_bridge.fetch_version`); an unreachable
+  add-on leaves `bridge_version` `None`.
   `SCREENS` registers the dashboard (the hub) plus the per-section detail
   screens its cards name as their `target` — `specs`, `models`,
   `godot-detail`, in the dashboard's visual order. Everything there

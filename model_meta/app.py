@@ -13,6 +13,7 @@ from textual.reactive import reactive
 from model_meta import __version__
 from model_meta.config import legacy_dir, paths, store
 from model_meta.config.settings import Settings
+from model_meta.core.blender_bridge import BridgeError, fetch_version
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.diagnostics import run_headless_check
 from model_meta.tui.screens.dashboard import DashboardScreen
@@ -35,6 +36,15 @@ def _resource_path(name: str) -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS) / "model_meta" / name  # type: ignore[attr-defined]
     return Path(__file__).parent / name
+
+
+async def _bridge_version(running: bool) -> str | None:
+    if not running:
+        return None
+    try:
+        return await fetch_version()
+    except BridgeError:
+        return None
 
 
 class ModelMetaApp(App):
@@ -170,7 +180,9 @@ class ModelMetaApp(App):
             self.blender_status = BlenderStatus(version=None)
             return
         running = await asyncio.to_thread(BlenderConnection.is_running)
-        self.blender_status = BlenderStatus(probe.version, running)
+        self.blender_status = BlenderStatus(
+            probe.version, running, await _bridge_version(running)
+        )
 
     def _check_blender_running(self) -> None:
         status = self.blender_status
@@ -185,8 +197,11 @@ class ModelMetaApp(App):
     @work(group="blender-running")
     async def _update_blender_running(self, status: BlenderStatus) -> None:
         running = await asyncio.to_thread(BlenderConnection.is_running)
+        bridge_version = await _bridge_version(running)
         if self.blender_status is status:  # a re-probe that landed meanwhile wins
-            self.blender_status = replace(status, running=running)
+            self.blender_status = replace(
+                status, running=running, bridge_version=bridge_version
+            )
 
     def on_app_blur(self) -> None:
         self._blender_poll.pause()
