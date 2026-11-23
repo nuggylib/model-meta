@@ -42,7 +42,7 @@ class ModelMetaApp(App):
     """The Model Meta TUI."""
 
     # Header text; Textual otherwise falls back to the class name.
-    TITLE = "model-meta"
+    TITLE = f"model-meta (v{__version__})"
     CSS_PATH = _resource_path("app.tcss")
     BINDINGS = [("q", "quit", "Quit")]
     # The dashboard is the hub; the rest are the per-section detail screens its
