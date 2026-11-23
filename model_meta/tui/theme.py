@@ -16,7 +16,7 @@ MCNUGGIES = Theme(
     panel="#363636",
     # Theme(boost=) is ignored when panel is set (textual/design.py), so it goes here.
     variables={
-        "boost": "#518041",
+        "boost": "#03DAFF",
         # "scrollbar": ,
         # "scrollbar-background": ,
         # "scrollbar-hover": ,
