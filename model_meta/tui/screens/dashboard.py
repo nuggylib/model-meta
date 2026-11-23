@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 class DashboardScreen(Layout):
     def __init__(self):
-        super().__init__()
+        super().__init__(page_title="Dashboard")
         self.description = (
             "Welcome to model-meta! This is a tool intended to serve as an in-depth checklist for 3D modelers"
             " to use when preparing an asset for export into Godot. It's especially useful for games with assets"

@@ -64,7 +64,7 @@ class ModelReportScreen(Layout):
     results: reactive[Results | None] = reactive(None)
 
     def __init__(self, model: Path, spec_path: Path, results_path: Path) -> None:
-        super().__init__()
+        super().__init__(page_title="Model Report")
         self.model = model
         self.spec_path = spec_path
         self.results_path = results_path

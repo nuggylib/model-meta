@@ -27,7 +27,12 @@ class Layout(Screen):
     # areas and instead use nested descriptions in those locations.
     description = ""
 
+    def __init__(self, page_title: str) -> None:
+        super().__init__()
+        self.page_title = page_title
+
     def compose(self) -> ComposeResult:
+        self.title = f"{self.app.title} - {self.page_title}"
         yield Header()
         # can_focus=False keeps the body out of the MOVE focus chain.
         with VerticalScroll(id="body", classes=("body"), can_focus=False):
