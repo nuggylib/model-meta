@@ -13,9 +13,19 @@
     height: 11;  /* 5 options + 4 separators + 2 border */
 }
 
+OptionList:focus {
+    background-tint: transparent;
+}
+
+.section-heading {
+    width: 100%;
+    background: $primary;
+    padding-left: 1;
+}
+
 .h2 {
     text-style: bold;
-    color: $primary;
+    color: #FFFFFF;
 }
 
 .config-value {
@@ -49,7 +59,7 @@ Button {
 }
 
 Button.-primary {
-    background: $accent;
+    background: $boost;
 }
 
 HorizontalGroup {

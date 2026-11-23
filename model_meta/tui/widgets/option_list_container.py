@@ -42,7 +42,8 @@ class OptionListContainer(VerticalGroup):
 
     def compose(self) -> ComposeResult:
         with VerticalGroup(classes=("options-list-container")):
-            yield Static(content=self._label, classes=("h2"))
+            with HorizontalGroup(classes="section-heading"):
+                yield Static(content=self._label, classes="h2")
             yield Static(content=self._description, classes=("description"))
             yield OptionList(*self._entries)
             with HorizontalGroup():
