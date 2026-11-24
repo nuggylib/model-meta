@@ -26,10 +26,24 @@ class OpenFile:
 
 
 @dataclass(frozen=True)
-class Armatures:
-    """`names` is `None` while Blender is busy."""
+class SceneBone:
+    """`parent` is `None` for a root bone."""
 
-    names: list[str] | None
+    name: str
+    parent: str | None
+
+
+@dataclass(frozen=True)
+class SceneArmature:
+    name: str
+    bones: list[SceneBone]
+
+
+@dataclass(frozen=True)
+class Armatures:
+    """`armatures` is `None` while Blender is busy."""
+
+    armatures: list[SceneArmature] | None
 
 
 @dataclass(frozen=True)
@@ -396,8 +410,7 @@ def _parse(line: bytes):
         version = result.get("version")
         if isinstance(version, str):
             return _Version(version)
-        armatures = result.get("armatures")
-        if _is_str_list(armatures):
+        if (armatures := _armatures(result.get("armatures"))) is not None:
             return Armatures(armatures)
         revision = result.get("meshes_revision")
         if _is_whole(revision):
@@ -432,6 +445,30 @@ def _page(result: dict) -> _Page | None:
     if None in items:
         return None
     return _Page(revision, key, items, next_cursor)
+
+
+def _armatures(items: object) -> list[SceneArmature] | None:
+    if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+        return None
+    parsed = [_scene_armature(item) for item in items]
+    return None if None in parsed else parsed
+
+
+def _scene_armature(item: dict) -> SceneArmature | None:
+    name, bones = item.get("name"), item.get("bones")
+    if not isinstance(name, str) or not isinstance(bones, list):
+        return None
+    parsed = [_scene_bone(bone) for bone in bones]
+    return None if None in parsed else SceneArmature(name, parsed)
+
+
+def _scene_bone(item: object) -> SceneBone | None:
+    if not isinstance(item, dict):
+        return None
+    name, parent = item.get("name"), item.get("parent")
+    if isinstance(name, str) and (parent is None or isinstance(parent, str)):
+        return SceneBone(name, parent)
+    return None
 
 
 def _scene_mesh(item: dict) -> SceneMesh | None:
