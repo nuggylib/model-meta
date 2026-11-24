@@ -1,4 +1,6 @@
-from textual.containers import VerticalGroup
+from glob import escape
+
+from textual.containers import HorizontalGroup, VerticalGroup
 from textual.widgets import ProgressBar, Static
 
 from model_meta.core.results import ArmatureResult
@@ -22,12 +24,39 @@ class ArmatureReport(VerticalGroup):
                 description="",
             )
             yield Static(content="Passing Checks")
-            yield ProgressBar(total=self._get_number_of_checks(), show_eta=False)
+            with HorizontalGroup():
+                with VerticalGroup():
+                    yield ProgressBar(
+                        total=self._get_number_of_checks(), show_eta=False
+                    )
+                with VerticalGroup():
+                    for issue in self._collect_fixes():
+                        yield Static(content=issue)
 
     def on_mount(self) -> None:
         self.query_one(ProgressBar).update(
             progress=self._get_number_of_passing_checks()
         )
+
+    def _collect_fixes(self) -> list[str]:
+        if self._get_number_of_checks() == self._get_number_of_passing_checks():
+            return ["All armature checks are passing!"]
+        armature_issues = []
+        for missing_bone in self._armature_result.missing_bones:
+            armature_issues.append(
+                f"Add bone [b $primary]{missing_bone}[/] to the armature."
+            )
+        for (
+            parenting_rule,
+            unparented_bones,
+        ) in self._armature_result.missing_parenting_rules.items():
+            bones = ", ".join(
+                f"[$primary]{escape(bone)}[/]" for bone in unparented_bones
+            )
+            armature_issues.append(
+                f"Set [b $primary]{escape(parenting_rule)}[/] as the parent bone for: {bones}"
+            )
+        return armature_issues
 
     def _get_number_of_checks(self):
         check_count = 1  # always starts at 1; the "armature existence" check
