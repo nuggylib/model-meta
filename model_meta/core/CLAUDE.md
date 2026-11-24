@@ -48,9 +48,11 @@ storage, and connections to the external apps Model Meta validates against.
   message or a closed socket raises `BridgeError`. Pure asyncio streams, so it
   runs on the event loop with no thread.
   - `subscribe_armatures(port, timeout)` yields `OpenFile(path)` (`None` for a
-    never-saved file), then each pushed `Armatures(names)` (pushed on subscribe
-    and after a save/load that changes the list), with `names` `None` for
-    `busy`. It ignores the version.
+    never-saved file), then each pushed `Armatures(armatures)` (pushed on
+    subscribe and after a save/load that changes the list), with `armatures`
+    `None` for `busy`. Each `SceneArmature(name, bones)` lists every
+    `SceneBone(name, parent)`, `parent` `None` for a root bone. It ignores the
+    version.
   - `subscribe_meshes(plan, port, timeout)` yields `OpenFile`, then one
     `MeshReport(meshes, weights, textures, uvs, modifiers, duplicates)` per
     pushed `meshes_revision` (on subscribe and after every save/load). A
@@ -118,7 +120,7 @@ storage, and connections to the external apps Model Meta validates against.
 - `results.py` — `Results(JsonDocument)`, one model's results file:
   `model_file` (the model's absolute path) and `spec` (the spec's
   `model_type`), both required strings, then one check result per spec root
-  field, written in this order: `armature` (`True` passed, `False` failed),
+  field, written in this order: `armature` (an `ArmatureResult`),
   `mesh_roles` (role name → `MeshRoleResult`) and `modifiers` (a
   `ModifiersResult`). A `None` check was never run and is omitted on write. A
   present one must be well formed (a `null` is rejected). It is the source of
@@ -130,6 +132,12 @@ storage, and connections to the external apps Model Meta validates against.
   `<mesh>_<map>.png`. It defaults to `{}`, is omitted while empty, and the
   mesh check never replaces it. Shape checks only: `name` must be a non-empty
   string.
+  `ArmatureResult(object_name, exists, missing_bones,
+  missing_parenting_rules)` is written as `{"object_name", "exists",
+  "missing_bones", "missing_parenting_rules"}`, all four always.
+  `missing_parenting_rules` maps a spec `parenting` key to the scene bones it
+  should parent that have another parent. `passed` is `exists` with both
+  lists empty.
   `MeshRoleResult(meshes, checks, modifiers)` is one role's result: the names
   `mesh_regex` matched, then a `FieldCheck(failures)` per set field, then
   that role's own `modifiers` (omitted while `None`), written as

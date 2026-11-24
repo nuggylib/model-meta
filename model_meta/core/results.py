@@ -67,6 +67,53 @@ class FieldCheck:
 
 
 @dataclass(frozen=True)
+class ArmatureResult:
+    """Each missing bone blocks its `missing_parenting_rules` check: the add-on
+    can't report a parent for a bone that doesn't exist, so the bone is only in
+    `missing_bones`."""
+
+    object_name: str
+    exists: bool
+    missing_bones: list[str] = field(default_factory=list)
+    missing_parenting_rules: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def passed(self) -> bool:
+        return (
+            self.exists and not self.missing_bones and not self.missing_parenting_rules
+        )
+
+    @classmethod
+    def from_dict(cls, data: object, *, where: str) -> Self:
+        """Raises `ValueError` naming `where`."""
+        if not isinstance(data, dict):
+            raise ValueError(f"`{where}` is not an object.")
+        object_name, exists = data.get("object_name"), data.get("exists")
+        bones, rules = data.get("missing_bones"), data.get("missing_parenting_rules")
+        if not isinstance(object_name, str):
+            raise ValueError(f"`{where}.object_name` is not a string.")
+        if not isinstance(exists, bool):
+            raise ValueError(f"`{where}.exists` is not a boolean.")
+        if not _is_str_list(bones):
+            raise ValueError(f"`{where}.missing_bones` is not a list of strings.")
+        if not isinstance(rules, dict) or not all(
+            _is_str_list(children) for children in rules.values()
+        ):
+            raise ValueError(
+                f"`{where}.missing_parenting_rules` is not a map of string lists."
+            )
+        return cls(object_name, exists, bones, rules)
+
+    def to_dict(self) -> dict:
+        return {
+            "object_name": self.object_name,
+            "exists": self.exists,
+            "missing_bones": self.missing_bones,
+            "missing_parenting_rules": self.missing_parenting_rules,
+        }
+
+
+@dataclass(frozen=True)
 class ModifiersResult:
     """`required` holds one check per `modifiers.required` list, like `skinned_meshes`."""
 
@@ -174,7 +221,7 @@ class Results(JsonDocument):
 
     model_file: str
     spec: str
-    armature: bool | None = None
+    armature: ArmatureResult | None = None
     mesh_roles: dict[str, MeshRoleResult] | None = None
     modifiers: ModifiersResult | None = None
     texture_map_overrides: dict[str, list[TextureMapOverride]] = field(
@@ -197,9 +244,9 @@ class Results(JsonDocument):
         spec = data.get("spec")
         if not isinstance(spec, str):
             raise ValueError("`spec` is not a string.")
-        armature = data.get("armature")
-        if "armature" in data and not isinstance(armature, bool):
-            raise ValueError("`armature` is not a boolean.")
+        armature = None
+        if "armature" in data:
+            armature = ArmatureResult.from_dict(data["armature"], where="armature")
         roles = data.get("mesh_roles")
         if "mesh_roles" in data and not isinstance(roles, dict):
             raise ValueError("`mesh_roles` is not an object.")
@@ -226,7 +273,7 @@ class Results(JsonDocument):
 
     def to_dict(self) -> dict:
         known = {
-            "armature": self.armature,
+            "armature": None if self.armature is None else self.armature.to_dict(),
             "mesh_roles": None
             if self.mesh_roles is None
             else {name: role.to_dict() for name, role in self.mesh_roles.items()},
@@ -244,6 +291,10 @@ class Results(JsonDocument):
             **checks,
             **self.extra,
         }
+
+
+def _is_str_list(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
 def _overrides(data: object) -> dict[str, list[TextureMapOverride]]:
