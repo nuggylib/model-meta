@@ -157,7 +157,7 @@ in the app (analogous to a route in a web app).
   while connecting or checking. Every watcher is `NoMatches`-guarded.
   `#file-path` shows the model's path from its models directory's name
   (`.../<dir>/...`), then `(Wrong file open)`, `(Connected)`, `(Bridge not
-  installed)` (running, no bridge) or `(Blender inactive)`, nothing before the
+  found)` (running, no bridge) or `(Blender inactive)`, nothing before the
   first check. The screen watches the app's `blender_status` and re-runs the
   worker once Blender runs with a `bridge_version` and no bridge is connected,
   so starting Blender reconnects without `r`.
