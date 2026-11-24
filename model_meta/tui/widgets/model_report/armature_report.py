@@ -5,6 +5,7 @@ from textual.widgets import OptionList, ProgressBar, Static
 
 from model_meta.core.results import ArmatureResult
 from model_meta.core.spec import Armature
+from model_meta.tui.widgets.labeled_field import LabeledField
 from model_meta.tui.widgets.section_description import SectionDescription
 
 
@@ -40,18 +41,15 @@ class ArmatureReport(VerticalGroup):
                         total=self._get_number_of_checks(), show_eta=False
                     )
                     with VerticalGroup(classes="progress-summary"):
-                        with HorizontalGroup():
-                            yield Static(
-                                content=f"[b]{'Armature:'}[/b]", classes="field-label"
-                            )
-                            yield Static(
-                                content=Content.from_markup(
-                                    "[$primary]$name[/] [$success](FOUND)[/]"
-                                    if self._armature_result.exists
-                                    else "[$primary]$name[/] [$error](NOT FOUND)[/]",
-                                    name=self._armature_spec.object_name,
-                                )
-                            )
+                        yield LabeledField(
+                            label="Armature",
+                            val=Content.from_markup(
+                                "[$primary]$name[/] [$success](FOUND)[/]"
+                                if self._armature_result.exists
+                                else "[$primary]$name[/] [$error](NOT FOUND)[/]",
+                                name=self._armature_spec.object_name,
+                            ),
+                        )
                 with VerticalGroup():
                     yield Static(content="Recommended Fixes")
                     yield OptionList(*self._collect_fixes(), classes="fixes-panel")

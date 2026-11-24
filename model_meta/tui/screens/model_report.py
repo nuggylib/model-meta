@@ -12,7 +12,7 @@ from pathlib import Path
 from rich.markup import escape
 from textual import work
 from textual.app import ComposeResult
-from textual.containers import HorizontalGroup, VerticalGroup
+from textual.containers import VerticalGroup
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.signal import Signal
@@ -34,6 +34,7 @@ from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.app_footer import BlenderStatus
+from model_meta.tui.widgets.labeled_field import LabeledField
 from model_meta.tui.widgets.model_report.armature_report import ArmatureReport
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
@@ -81,12 +82,13 @@ class ModelReportScreen(Layout):
         self._load_results()
         self._rows = self._items()
         with VerticalGroup(classes="layout-heading-content"):
-            with HorizontalGroup():
-                yield Static(content=f"[b]{'Spec:'}[/b]", classes="field-label")
-                yield Static(content=f"[$primary]{escape(self.spec_path.name)}[/]")
-            with HorizontalGroup():
-                yield Static(content=f"[b]{'File Path:'}[/b]", classes="field-label")
-                yield Static(content=self._file_path_text(), id="file-path")
+            yield LabeledField(
+                label="Spec",
+                val=f"[$primary]{escape(self.spec_path.name)}[/]",
+            )
+            yield LabeledField(
+                label="File Path", val=self._file_path_text(), val_id="file-path"
+            )
         yield ArmatureReport(
             armature_spec=self._armature, armature_result=self.results.armature
         )
