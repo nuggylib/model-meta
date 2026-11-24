@@ -78,7 +78,11 @@ class ArmatureReport(VerticalGroup):
                     bones,
                 )
             )
-        return armature_issues
+        width = len(str(len(armature_issues)))
+        return [
+            Content.assemble(f"{n:>{width}}). ", issue)
+            for n, issue in enumerate(armature_issues, start=1)
+        ]
 
     def _get_number_of_checks(self):
         check_count = 1  # always starts at 1; the "armature existence" check
