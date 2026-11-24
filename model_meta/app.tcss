@@ -98,6 +98,25 @@ HorizontalGroup {
     height: auto;
 }
 
+/* Equal-width children with a 5-column gap between them. */
+.columns > * {
+    width: 1fr;
+    margin-right: 5;
+}
+
+.columns > *:last-child {
+    margin-right: 0;
+}
+
+/* Textual's Bar defaults to a fixed 32 columns. */
+ProgressBar {
+    width: 100%;
+}
+
+ProgressBar Bar {
+    width: 1fr;
+}
+
 /* The rail is painted on every row and only its color changes, keeping the text
    from shifting sideways as focus moves, as on the dashboard's cards. */
 SelectableRow {
