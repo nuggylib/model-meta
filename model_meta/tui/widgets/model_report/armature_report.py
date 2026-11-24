@@ -1,11 +1,22 @@
 from glob import escape
 
 from textual.containers import HorizontalGroup, VerticalGroup
+from textual.renderables.bar import Bar
 from textual.widgets import ProgressBar, Static
 
 from model_meta.core.results import ArmatureResult
 from model_meta.core.spec import Armature
 from model_meta.tui.widgets.section_description import SectionDescription
+
+
+class BlockBar(Bar):
+    HALF_BAR_LEFT = "▐"
+    BAR = "█"
+    HALF_BAR_RIGHT = "▌"
+
+
+class BlockProgressBar(ProgressBar):
+    BAR_RENDERABLE = BlockBar
 
 
 class ArmatureReport(VerticalGroup):
@@ -24,9 +35,9 @@ class ArmatureReport(VerticalGroup):
                 description="Armature health checks.",
             )
             yield Static(content="Passing Checks")
-            with HorizontalGroup():
+            with HorizontalGroup(classes="columns"):
                 with VerticalGroup():
-                    yield ProgressBar(
+                    yield BlockProgressBar(
                         total=self._get_number_of_checks(), show_eta=False
                     )
                 with VerticalGroup():
