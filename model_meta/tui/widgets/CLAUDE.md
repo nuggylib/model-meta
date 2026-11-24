@@ -69,6 +69,12 @@ in the screen that owns it.
   alone) adds `.field-list-marked` to those rows. Assigning `lines` clears it,
   so set it after them. On: `#parenting-list`, `#role-list` and
   `#role-fields`.
+- `labeled_field.py` — `LabeledField(HorizontalGroup)`, one `Label: value`
+  line: a bold `.field-label` `Static` (the `label` is escaped, the colon
+  added) and a `Static` of `val`, which is markup or `Content` the caller
+  styles. `val_id` sets the value's id, so a screen can `update` it later
+  (`#file-path`). Display-only. Used on the model report heading and the
+  armature report.
 
 - `app_footer.py` — `AppFooter(Footer)`, the footer `Layout` composes: the
   bindings, then a `BlenderStatusLabel` that `watch`es the app's
