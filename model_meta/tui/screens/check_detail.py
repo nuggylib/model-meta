@@ -62,9 +62,7 @@ def _linked(meshes: list[str], file: str) -> str:
 # Keyed by a check's key in the results file, wherever it sits: its fixes, from its
 # failures and the role's overrides.
 _FIXES: dict[str, Fixes] = {
-    "armature": _once(
-        "Name the armature object in Blender as the spec's `object_name`."
-    ),
+    "exists": _once("Name the armature object in Blender as the spec's `object_name`."),
     "count": _once(
         "Rename the role's meshes so exactly `count` of them fully match its "
         "`mesh_regex`."

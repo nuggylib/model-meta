@@ -135,8 +135,8 @@ in the app (analogous to a route in a web app).
   `wrong_file` unless its path is the model (`Path.samefile`, so a symlink or
   a case difference still matches; a never-saved `None` or a missing file is
   wrong). A connection's results are checked only once that connection's
-  own `OpenFile` has confirmed the model is open. The armature check passes
-  when the spec's `object_name` is in the list (a blank `object_name` fails).
+  own `OpenFile` has confirmed the model is open. The armature check stores
+  `checks.armature.evaluate(armature, armatures)` with the spec's `Armature`.
   The mesh check stores `checks.mesh_roles.evaluate(roles, report,
   overrides)`, with the `texture_map_overrides` of the loaded `results`, then
   `checks.modifiers.evaluate` over those roles: the root `modifiers` and each
@@ -215,7 +215,10 @@ in the app (analogous to a route in a web app).
     `True`; `texture_maps`' `has_default_uv_map` is the only one.
     A list (`meshes`) shows `format_list`. Only set fields
     have a check, so only they get a section.
-  - **A bool or a check** (`armature`): that one section, titled by its key.
+  - **A bool or a check**: that one section, titled by its key. `armature`
+    is a container: `exists` is its bool section (its fix is keyed
+    `exists`), and `object_name`, `missing_bones` and each
+    `missing_parenting_rules` key show as values.
   - **Blocks:** `_box` builds every section from blocks, each a
     `.check-block` `Vertical`: the status and facts, each warning, the
     duplicates help, its group rows, the overrides, and each check's fixes.

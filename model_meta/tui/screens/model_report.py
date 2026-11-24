@@ -16,7 +16,7 @@ from textual.reactive import reactive
 from textual.signal import Signal
 from textual.widgets import Static
 
-from model_meta.checks import mesh_roles, modifiers
+from model_meta.checks import armature, mesh_roles, modifiers
 from model_meta.core.blender_bridge import (
     Armatures,
     BridgeError,
@@ -27,7 +27,7 @@ from model_meta.core.blender_bridge import (
 )
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import Results, TextureMapOverride
-from model_meta.core.spec import MeshRole, Modifiers, Spec
+from model_meta.core.spec import Armature, MeshRole, Modifiers, Spec
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
@@ -60,7 +60,7 @@ class ModelReportScreen(Layout):
         self.spec_path = spec_path
         self.results_path = results_path
         self.results_changed: Signal[Results | None] = Signal(self, "results_changed")
-        self._armature = ""
+        self._armature = Armature()
         self._roles: dict[str, MeshRole] = {}
         self._modifiers = Modifiers()
         self._rows: list[Row] = []
@@ -72,7 +72,7 @@ class ModelReportScreen(Layout):
             spec = Spec.load(self.spec_path)
         except (OSError, ValueError):
             spec = None
-        self._armature = spec.armature.object_name if spec else ""
+        self._armature = spec.armature if spec else Armature()
         self._roles = dict(spec.mesh_roles) if spec else {}
         self._modifiers = spec.modifiers if spec else Modifiers()
         self._load_results()
@@ -185,8 +185,8 @@ class ModelReportScreen(Layout):
 
     def _check_armature(self, message: Armatures) -> None:
         # busy (`None`): keep the last result
-        if message.names is not None:
-            self._save(armature=self._armature in message.names)
+        if message.armatures is not None:
+            self._save(armature=armature.evaluate(self._armature, message.armatures))
 
     def _check_mesh_roles(self, report: MeshReport) -> None:
         self._report = report

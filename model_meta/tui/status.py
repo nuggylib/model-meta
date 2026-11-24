@@ -25,6 +25,15 @@ def is_check(value: object) -> bool:
     )
 
 
+def is_armature(value: object) -> bool:
+    return isinstance(value, dict) and set(value) == {
+        "object_name",
+        "exists",
+        "missing_bones",
+        "missing_parenting_rules",
+    }
+
+
 def status_of(value: object) -> Status:
     """A bool, a check's `passed` (`WARNING` for a failing `warning` check), or the
     most severe status in a container.
@@ -33,6 +42,12 @@ def status_of(value: object) -> Status:
     """
     if isinstance(value, bool):
         return value
+    if is_armature(value):
+        return (
+            value["exists"]
+            and not value["missing_bones"]
+            and not value["missing_parenting_rules"]
+        )
     if is_check(value):
         if not value["passed"] and value.get("warning"):
             return WARNING
