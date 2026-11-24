@@ -31,7 +31,7 @@ from model_meta.core.spec import MeshRole, Modifiers, Spec
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
-from model_meta.tui.widgets.model_report.model_report_section import ModelReportSection
+from model_meta.tui.widgets.section_description import SectionDescription
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _WRONG_FILE = "Wrong File"
@@ -79,7 +79,7 @@ class ModelReportScreen(Layout):
         self._rows = self._items()
         for index, (depth, _, path) in enumerate(self._rows):
             if depth == 0:
-                yield ModelReportSection(
+                yield SectionDescription(
                     title=self._get_text_for_row(index),
                     description=self._pick_description(index, path),
                 )

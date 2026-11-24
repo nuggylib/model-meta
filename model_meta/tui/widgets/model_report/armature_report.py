@@ -1,26 +1,25 @@
 from textual.containers import VerticalGroup
 from textual.widgets import ProgressBar, Static
 
-from model_meta.tui.widgets.model_report.model_report_section import ModelReportSection
+from model_meta.core.spec import Armature
+from model_meta.tui.widgets.section_description import SectionDescription
 
 
 class ArmatureReport(VerticalGroup):
-    _spec: str
-    _model: str
+    _armature_data: Armature
 
-    def __init__():
+    def __init__(self, armature: Armature):
         super().__init__()
+        self._armature_data = armature
 
     def compose(self):
         with VerticalGroup():
-            ModelReportSection(
+            SectionDescription(
                 title="Armature",
                 description="",
             )
             Static(content="% Complete")
-            ProgressBar()
+            ProgressBar(total=self._get_total_value())
 
-    def _get_total_value():
-        """Get the value for the total to use in the progress bar"""
-        # TODO: Load in the spec file for the
-        return 0
+    def _get_total_value(self):
+        return len(vars(self._armature_data).items())
