@@ -21,7 +21,7 @@ class ArmatureReport(VerticalGroup):
         with VerticalGroup():
             yield SectionDescription(
                 label="Armature",
-                description="",
+                description="Armature health checks.",
             )
             yield Static(content="Passing Checks")
             with HorizontalGroup():

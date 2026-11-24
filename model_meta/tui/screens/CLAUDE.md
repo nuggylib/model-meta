@@ -131,7 +131,8 @@ in the app (analogous to a route in a web app).
   `core.blender_bridge` subscriptions in one `asyncio.TaskGroup`, each through
   `_follow(messages, check)`: `subscribe_armatures` with `_check_armature`,
   and `subscribe_meshes(partial(mesh_roles.plan, roles))` with
-  `_check_mesh_roles`. Each message sets `live`. Each `OpenFile` sets
+  `_check_mesh_roles`. Each message sets `bridge_connected` and
+  `blender_running`. Each `OpenFile` sets
   `wrong_file` unless its path is the model (`Path.samefile`, so a symlink or
   a case difference still matches; a never-saved `None` or a missing file is
   wrong). A connection's results are checked only once that connection's
@@ -149,18 +150,17 @@ in the app (analogous to a route in a web app).
   `busy` `None` armature list checks nothing. With the wrong file open,
   results are ignored and nothing is written.
   When either subscription raises `BridgeError` (unreachable or dropped), the
-  `TaskGroup` cancels the other, `live` and `wrong_file` reset (`results`
+  `TaskGroup` cancels the other, `bridge_connected` and `wrong_file` reset (`results`
   keeps the stored results), and the worker falls back to the **Manual Mode**
   check: `BlenderConnection.is_running` via `asyncio.to_thread`, which only
   asks whether Blender is running. The `is_refreshing` reactive is `True`
-  while connecting or checking. The muted `#connection-status` beside the heading reads
-  `Wrong File` in Live Mode on the wrong file, `Live Mode`, else from
-  `blender_running`: `Manual Mode` when running, `Inactive` when not, empty
-  before the first check. The muted `#connection-hint` below it always shows:
-  "Blender doesn't have <model name> open. Results are paused until it does."
-  on the wrong file, "Results update when you load a file, or save one, in
-  Blender." in Live Mode, "Press r to refresh.", or "Start Blender, then press
-  r to refresh." when `Inactive`. Every watcher is `NoMatches`-guarded.
+  while connecting or checking. Every watcher is `NoMatches`-guarded.
+  `#file-path` shows the model's path from its models directory's name
+  (`.../<dir>/...`), then `(Wrong file open)`, `(Connected)`, `(Bridge not
+  installed)` (running, no bridge) or `(Blender inactive)`, nothing before the
+  first check. The screen watches the app's `blender_status` and re-runs the
+  worker once Blender runs with a `bridge_version` and no bridge is connected,
+  so starting Blender reconnects without `r`.
 - `check_detail.py` — `CheckDetailScreen(source, path, headings)`, one
   model's results at a key path in `Results.to_dict()`. `source` is a
   `ResultsSource` (the model report): `model`, `results`,

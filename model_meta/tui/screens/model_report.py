@@ -9,8 +9,10 @@ from dataclasses import replace
 from functools import partial
 from pathlib import Path
 
+from rich.markup import escape
 from textual import work
 from textual.app import ComposeResult
+from textual.containers import HorizontalGroup, VerticalGroup
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.signal import Signal
@@ -31,12 +33,9 @@ from model_meta.core.spec import Armature, MeshRole, Modifiers, Spec
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
+from model_meta.tui.widgets.app_footer import BlenderStatus
 from model_meta.tui.widgets.model_report.armature_report import ArmatureReport
 from model_meta.tui.widgets.selectable_row import SelectableRow
-
-_WRONG_FILE = "Wrong File"
-_LIVE_HINT = "Results update when you load a file, or save one, in Blender."
-_INACTIVE_HINT = "Start Blender to continuously-evaluate the file."
 
 # Each root row's results file key, and the title its detail screen shows.
 _ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modifiers"}
@@ -50,12 +49,12 @@ class ModelReportScreen(Layout):
 
     is_refreshing: reactive[bool] = reactive(False)
     blender_running: reactive[bool | None] = reactive(None)
-    live: reactive[bool] = reactive(False)
+    bridge_connected: reactive[bool] = reactive(False)
     wrong_file: reactive[bool] = reactive(False)
     results: reactive[Results | None] = reactive(None)
 
     def __init__(self, model: Path, spec_path: Path, results_path: Path) -> None:
-        super().__init__(page_title=f'Model Report > "{model.name}"')
+        super().__init__(page_title=f"Model Report > {model.name}")
         self.model = model
         self.spec_path = spec_path
         self.results_path = results_path
@@ -66,6 +65,10 @@ class ModelReportScreen(Layout):
         self._rows: list[Row] = []
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
+        self.description = (
+            f"This is your model report for [b $primary]{self.model.name}[/]. Keep this page open while working."
+            " It will update each time you save or load a file in Blender."
+        )
 
     def compose_body(self) -> ComposeResult:
         try:
@@ -77,18 +80,31 @@ class ModelReportScreen(Layout):
         self._modifiers = spec.modifiers if spec else Modifiers()
         self._load_results()
         self._rows = self._items()
+        with VerticalGroup(classes="layout-heading-content"):
+            with HorizontalGroup():
+                yield Static(content=f"[b]{'Spec:'}[/b]", classes="field-label")
+                yield Static(content=f"[$primary]{escape(self.spec_path.name)}[/]")
+            with HorizontalGroup():
+                yield Static(content=f"[b]{'File Path:'}[/b]", classes="field-label")
+                yield Static(content=self._file_path_text(), id="file-path")
         yield ArmatureReport(
             armature_spec=self._armature, armature_result=self.results.armature
         )
-        # for index, (depth, _, path) in enumerate(self._rows):
-        #     if depth == 0:
-        #         yield SectionDescription(
-        #             label=self._get_text_for_row(index),
-        #             description=self._pick_description(index, path),
-        #         )
 
     def on_mount(self) -> None:
         self._refresh()
+        # init=False: the _refresh above already covers the status at mount.
+        self.watch(self.app, "blender_status", self._on_blender_status, init=False)
+
+    def _on_blender_status(self, status: BlenderStatus | None) -> None:
+        # Wait for bridge_version, not just running: Blender is up before its add-on listens.
+        if (
+            status
+            and status.running
+            and status.bridge_version
+            and not self.bridge_connected
+        ):
+            self._refresh()
 
     def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
         field = message.row.key
@@ -109,10 +125,6 @@ class ModelReportScreen(Layout):
         self, role: str, override: TextureMapOverride
     ) -> None:
         self._swap_override(role, override, [], "deleted")
-
-    def _pick_description(self, index: int, path: str) -> str:
-        desc = ""
-        return desc
 
     def _swap_override(
         self,
@@ -167,7 +179,7 @@ class ModelReportScreen(Layout):
                 )
         except* BridgeError:
             pass
-        self.live = False
+        self.bridge_connected = False
         self.wrong_file = False
         self.is_refreshing = True
         self.blender_running = await asyncio.to_thread(BlenderConnection.is_running)
@@ -178,7 +190,8 @@ class ModelReportScreen(Layout):
         on_model = False
         async with aclosing(messages):
             async for message in messages:
-                self.live = True
+                self.bridge_connected = True
+                self.blender_running = True
                 self.is_refreshing = False
                 if isinstance(message, OpenFile):
                     on_model = _is_model(message.path, self.model)
@@ -230,35 +243,39 @@ class ModelReportScreen(Layout):
         self.results = updated
         return True
 
-    def watch_live(self) -> None:
-        self._update_connection()
+    def _display_path(self) -> str:
+        for directory in self.app.settings.models_directories:
+            root = Path(directory).expanduser()
+            if self.model.is_relative_to(root):
+                return f".../{self.model.relative_to(root.parent)}"
+        return str(self.model)
+
+    def _file_path_text(self) -> str:
+        path = f"[$primary]{escape(self._display_path())}[/]"
+        if self.bridge_connected and self.wrong_file:
+            return f"{path} [$error](Wrong file open)[/]"
+        if self.bridge_connected:
+            return f"{path} [$success](Connected)[/]"
+        if self.blender_running and not self.bridge_connected:
+            return f"{path} [$warning](Bridge not found)[/]"
+        if self.blender_running is False:
+            return f"{path} [$text-muted](Blender inactive)[/]"
+        return path
+
+    def watch_bridge_connected(self) -> None:
+        self._update_file_path()
 
     def watch_blender_running(self) -> None:
-        self._update_connection()
+        self._update_file_path()
 
     def watch_wrong_file(self) -> None:
-        self._update_connection()
+        self._update_file_path()
 
-    def _update_connection(self) -> None:
+    def _update_file_path(self) -> None:
         try:
-            status = self.query_one("#connection-status", Static)
-            hint = self.query_one("#connection-hint", Static)
+            self.query_one("#file-path", Static).update(self._file_path_text())
         except NoMatches:
-            return
-        if self.live and self.wrong_file:
-            status.update(_WRONG_FILE)
-            hint.update(
-                f"Blender doesn't have {self.model.name} open. "
-                "Results are paused until it does."
-            )
-            return
-        if self.live:
-            hint.update(_LIVE_HINT)
-            return
-        running = self.blender_running
-        if running is None:
-            status.update("")
-        hint.update(_INACTIVE_HINT)
+            pass
 
     def _get_field_status(self, index: int) -> Status:
         data = None if self.results is None else self.results.to_dict()
