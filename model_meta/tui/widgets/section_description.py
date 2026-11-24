@@ -15,4 +15,5 @@ class SectionDescription(VerticalGroup):
         with VerticalGroup():
             with HorizontalGroup(classes="section-heading"):
                 yield Static(content=self._label, classes="h2")
-            yield Static(content=self._description, classes=("description"))
+            if len(self._description) > 0:
+                yield Static(content=self._description, classes=("description"))

@@ -31,7 +31,7 @@ from model_meta.core.spec import Armature, MeshRole, Modifiers, Spec
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
-from model_meta.tui.widgets.section_description import SectionDescription
+from model_meta.tui.widgets.model_report.armature_report import ArmatureReport
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 _WRONG_FILE = "Wrong File"
@@ -77,12 +77,15 @@ class ModelReportScreen(Layout):
         self._modifiers = spec.modifiers if spec else Modifiers()
         self._load_results()
         self._rows = self._items()
-        for index, (depth, _, path) in enumerate(self._rows):
-            if depth == 0:
-                yield SectionDescription(
-                    label=self._get_text_for_row(index),
-                    description=self._pick_description(index, path),
-                )
+        yield ArmatureReport(
+            armature_spec=self._armature, armature_result=self.results.armature
+        )
+        # for index, (depth, _, path) in enumerate(self._rows):
+        #     if depth == 0:
+        #         yield SectionDescription(
+        #             label=self._get_text_for_row(index),
+        #             description=self._pick_description(index, path),
+        #         )
 
     def on_mount(self) -> None:
         self._refresh()
