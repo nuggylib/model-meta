@@ -54,6 +54,11 @@
     margin-right: 1;
 }
 
+.fixes-panel {
+    background: $panel;
+    height: 12;  /* 10 rows + 2 border */
+}
+
 Header {
     background: $primary;
     color: #000000;
