@@ -54,9 +54,15 @@
     margin-right: 1;
 }
 
+.column-heading {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
 .fixes-panel {
     background: $panel;
-    height: 12;  /* 10 rows + 2 border */
+    padding: 1 2 1 2;
+    height: 12;
 }
 
 .progress-summary {

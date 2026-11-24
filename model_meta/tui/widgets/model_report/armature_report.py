@@ -1,7 +1,7 @@
-from textual.containers import HorizontalGroup, VerticalGroup
+from textual.containers import HorizontalGroup, VerticalGroup, VerticalScroll
 from textual.content import Content
 from textual.renderables.bar import Bar
-from textual.widgets import OptionList, ProgressBar, Static
+from textual.widgets import ProgressBar, Static
 
 from model_meta.core.results import ArmatureResult
 from model_meta.core.spec import Armature
@@ -34,9 +34,9 @@ class ArmatureReport(VerticalGroup):
                 label="Armature",
                 description="Armature health checks.",
             )
-            yield Static(content="Passing Checks")
             with HorizontalGroup(classes="columns"):
                 with VerticalGroup():
+                    yield Static(content="Passing Checks", classes="column-heading")
                     yield BlockProgressBar(
                         total=self._get_number_of_checks(), show_eta=False
                     )
@@ -51,8 +51,10 @@ class ArmatureReport(VerticalGroup):
                             ),
                         )
                 with VerticalGroup():
-                    yield Static(content="Recommended Fixes")
-                    yield OptionList(*self._collect_fixes(), classes="fixes-panel")
+                    yield Static(content="Recommended Fixes", classes="column-heading")
+                    with VerticalScroll(classes="fixes-panel"):
+                        for fix in self._collect_fixes():
+                            yield Static(fix)
 
     def on_mount(self) -> None:
         self.query_one(ProgressBar).update(
