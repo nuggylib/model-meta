@@ -5,6 +5,14 @@ spec, and builds the results `core.results` stores. Pure functions: no I/O, no
 Textual, no UI.
 
 ## Files
+- `armature.py` — the `armature` check. `evaluate(armature, scene)` takes the
+  spec's `Armature` and the bridge's `SceneArmature`s, and returns an
+  `ArmatureResult` for the one named `object_name`. With none (a blank
+  `object_name` included), `exists` is `False` and every required bone is
+  missing. Otherwise `missing_bones` lists the required bones it lacks, in
+  spec order, and `missing_parenting_rules` lists, per `parenting` key, the
+  required children (`parenting.match`) whose scene parent isn't the bone the
+  key resolved to. A missing child is only in `missing_bones`.
 - `mesh_roles.py` — the `mesh_roles` check.
   - `plan(roles, meshes)`: the `WeightTarget`s, then one textured
     `MeshTarget` per mesh a role with `texture_maps` matches (for textures and
