@@ -1,6 +1,5 @@
-from glob import escape
-
 from textual.containers import HorizontalGroup, VerticalGroup
+from textual.content import Content
 from textual.renderables.bar import Bar
 from textual.widgets import ProgressBar, Static
 
@@ -49,23 +48,35 @@ class ArmatureReport(VerticalGroup):
             progress=self._get_number_of_passing_checks()
         )
 
-    def _collect_fixes(self) -> list[str]:
+    # Bone names go in as template variables, which are inserted as plain text,
+    # because escape() misses uppercase tags like [L].
+    def _collect_fixes(self) -> list[str | Content]:
         if self._get_number_of_checks() == self._get_number_of_passing_checks():
             return ["All armature checks are passing!"]
-        armature_issues = []
+        armature_issues: list[str | Content] = []
         for missing_bone in self._armature_result.missing_bones:
             armature_issues.append(
-                f"Add bone [b $primary]{missing_bone}[/] to the armature."
+                Content.from_markup(
+                    "Add bone [b $primary]$bone[/] to the armature.",
+                    bone=missing_bone,
+                )
             )
         for (
             parenting_rule,
             unparented_bones,
         ) in self._armature_result.missing_parenting_rules.items():
-            bones = ", ".join(
-                f"[$primary]{escape(bone)}[/]" for bone in unparented_bones
+            bones = Content(", ").join(
+                Content.from_markup("[$primary]$bone[/]", bone=bone)
+                for bone in unparented_bones
             )
             armature_issues.append(
-                f"Set [b $primary]{escape(parenting_rule)}[/] as the parent bone for: {bones}"
+                Content.assemble(
+                    Content.from_markup(
+                        "Set [b $primary]$bone[/] as the parent bone for: ",
+                        bone=parenting_rule,
+                    ),
+                    bones,
+                )
             )
         return armature_issues
 
