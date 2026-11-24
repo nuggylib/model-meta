@@ -99,6 +99,9 @@ class ModelReportScreen(Layout):
         self.watch(self.app, "blender_status", self._on_blender_status, init=False)
 
     def _on_blender_status(self, status: BlenderStatus | None) -> None:
+        # The worker's own check lands while a closing Blender is still exiting.
+        if status and not self.bridge_connected and not self.is_refreshing:
+            self.blender_running = status.running
         # Wait for bridge_version, not just running: Blender is up before its add-on listens.
         if (
             status
