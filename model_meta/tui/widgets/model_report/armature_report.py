@@ -39,6 +39,19 @@ class ArmatureReport(VerticalGroup):
                     yield BlockProgressBar(
                         total=self._get_number_of_checks(), show_eta=False
                     )
+                    with VerticalGroup(classes="progress-summary"):
+                        with HorizontalGroup():
+                            yield Static(
+                                content=f"[b]{'Armature:'}[/b]", classes="field-label"
+                            )
+                            yield Static(
+                                content=Content.from_markup(
+                                    "[$primary]$name[/] [$success](FOUND)[/]"
+                                    if self._armature_result.exists
+                                    else "[$primary]$name[/] [$error](NOT FOUND)[/]",
+                                    name=self._armature_spec.object_name,
+                                )
+                            )
                 with VerticalGroup():
                     yield Static(content="Recommended Fixes")
                     yield OptionList(*self._collect_fixes(), classes="fixes-panel")

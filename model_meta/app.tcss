@@ -59,6 +59,10 @@
     height: 12;  /* 10 rows + 2 border */
 }
 
+.progress-summary {
+    margin-top: 1;
+}
+
 Header {
     background: $primary;
     color: #000000;
