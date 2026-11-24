@@ -80,7 +80,7 @@ class ModelReportScreen(Layout):
         for index, (depth, _, path) in enumerate(self._rows):
             if depth == 0:
                 yield SectionDescription(
-                    title=self._get_text_for_row(index),
+                    label=self._get_text_for_row(index),
                     description=self._pick_description(index, path),
                 )
 

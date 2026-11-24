@@ -167,7 +167,9 @@ class DashboardScreen(Layout):
                 )
                 return
         except (OSError, ValueError):
-            self.notify(f"{results_path.name} can't be read.", severity="error")
+            self.notify(
+                f"The results file for {model.name} can't be read.", severity="error"
+            )
             return
         try:
             spec_path = Spec.path_for(app.specs_dir, spec)

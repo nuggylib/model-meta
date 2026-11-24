@@ -15,11 +15,20 @@ class ArmatureReport(VerticalGroup):
     def compose(self):
         with VerticalGroup():
             SectionDescription(
-                title="Armature",
+                label="Armature",
                 description="",
             )
             Static(content="% Complete")
             ProgressBar(total=self._get_total_value())
+
+    def _get_number_of_checks(self):
+        check_count = 1  # always starts at 1; the "armature existence" check
+        check_count += len(self._armature_data.required_bones)
+        check_count += len(vars(self._armature_data.parenting).items())
+        return check_count
+
+    def _get_number_of_passing_checks(self):
+        return 0
 
     def _get_total_value(self):
         return len(vars(self._armature_data).items())
