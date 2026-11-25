@@ -65,6 +65,15 @@
     height: 12;
 }
 
+/* The header row plus 10 checks; the rest scroll beneath it. */
+.armature-checks {
+    max-height: 12;
+}
+
+.section-progress-bar {
+    margin-bottom: 1;
+}
+
 .nested-progress-items {
     padding-left: 2;
 }

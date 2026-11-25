@@ -12,7 +12,14 @@ def evaluate(armature: Armature, scene: Sequence[SceneArmature]) -> ArmatureResu
     name, required = armature.object_name, armature.required_bones
     found = next((a for a in scene if a.name == name), None)
     if found is None:
-        return ArmatureResult(name, False, list(required))
+        missing_rules: dict[str, list[str]] = {}
+        for key, patterns in armature.parenting.items():
+            children = [
+                child for _, child in parenting.pairs({key: patterns}, required)
+            ]
+            if children:
+                missing_rules[key] = list(dict.fromkeys(children))
+        return ArmatureResult(name, False, list(required), missing_rules)
     parents = {bone.name: bone.parent for bone in found.bones}
     rules: dict[str, dict[str, None]] = {}
     for key, patterns in armature.parenting.items():

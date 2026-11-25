@@ -8,8 +8,9 @@ Textual, no UI.
 - `armature.py` — the `armature` check. `evaluate(armature, scene)` takes the
   spec's `Armature` and the bridge's `SceneArmature`s, and returns an
   `ArmatureResult` for the one named `object_name`. With none (a blank
-  `object_name` included), `exists` is `False` and every required bone is
-  missing. Otherwise `missing_bones` lists the required bones it lacks, in
+  `object_name` included), `exists` is `False`, every required bone is
+  missing, and `missing_parenting_rules` lists every required child each
+  `parenting` key resolves to (`parenting.pairs`). Otherwise `missing_bones` lists the required bones it lacks, in
   spec order, and `missing_parenting_rules` lists, per `parenting` key, the
   required children (`parenting.match`) whose scene parent isn't the bone the
   key resolved to. A missing child is only in `missing_bones`.

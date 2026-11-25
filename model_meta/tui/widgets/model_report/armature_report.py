@@ -1,12 +1,17 @@
+from rich.text import Text
 from textual.containers import HorizontalGroup, VerticalGroup, VerticalScroll
 from textual.content import Content
 from textual.renderables.bar import Bar
-from textual.widgets import ProgressBar, Static
+from textual.widgets import DataTable, ProgressBar, Static
 
 from model_meta.core.results import ArmatureResult
 from model_meta.core.spec import Armature
-from model_meta.tui.widgets.labeled_field import LabeledField
+from model_meta.specs import parenting
 from model_meta.tui.widgets.section_description import SectionDescription
+
+# Theme variable names, not markup: DataTable renders cells with Rich, which
+# can't resolve `$success`.
+_RESULTS = {True: ("PASS", "success"), False: ("FAIL", "error")}
 
 
 class BlockBar(Bar):
@@ -36,49 +41,12 @@ class ArmatureReport(VerticalGroup):
             )
             with HorizontalGroup(classes="columns"):
                 with VerticalGroup():
-                    yield Static(content="Passing Checks", classes="column-heading")
                     yield BlockProgressBar(
-                        total=self._get_number_of_checks(), show_eta=False
+                        total=self._get_number_of_checks(),
+                        show_eta=False,
+                        classes="section-progress-bar",
                     )
-                    with VerticalGroup(classes="progress-summary"):
-                        yield LabeledField(
-                            label="Armature",
-                            val=Content.from_markup(
-                                "[$primary]$name[/] [$success](FOUND)[/]"
-                                if self._armature_result.exists
-                                else "[$primary]$name[/] [$error]NOT FOUND[/]",
-                                name=self._armature_spec.object_name,
-                            ),
-                        )
-                        missing_bones = self._armature_result.missing_bones
-                        yield LabeledField(
-                            label="Missing Bones",
-                            val=Content.from_markup(
-                                "[$error]$bones[/]"
-                                if missing_bones
-                                else "[] [$success](NONE)[/]",
-                                bones=f"[{', '.join(missing_bones)}]",
-                            ),
-                        )
-                        unparented = self._armature_result.missing_parenting_rules
-                        yield LabeledField(
-                            label="By Parenting Pattern",
-                            val="",
-                        )
-                        with VerticalGroup(classes="nested-progress-items"):
-                            for parent in self._armature_spec.parenting:
-                                bones = unparented.get(parent, [])
-                                yield LabeledField(
-                                    label=parent,
-                                    val=Content(", ").join(
-                                        Content.from_markup(
-                                            "[$warning]$bone[/]", bone=bone
-                                        )
-                                        for bone in bones
-                                    )
-                                    if bones
-                                    else Content.from_markup("[$success]PASS[/]"),
-                                )
+                    yield DataTable(fixed_columns=3, classes="armature-checks")
                 with VerticalGroup():
                     yield Static(content="Recommended Fixes", classes="column-heading")
                     with VerticalScroll(classes="fixes-panel"):
@@ -89,6 +57,59 @@ class ArmatureReport(VerticalGroup):
         self.query_one(ProgressBar).update(
             progress=self._get_number_of_passing_checks()
         )
+        table = self.query_one(DataTable)
+        table.add_columns("Check", "Expected", "Result")
+        table.add_row(
+            "Armature",
+            self._armature_spec.object_name,
+            self._result(self._armature_result.exists),
+        )
+        required_bone_rows = []
+        for bone in self._armature_spec.required_bones:
+            required_bone_rows.append(
+                (
+                    bone,
+                    "exists in armature",
+                    self._result(bone not in self._armature_result.missing_bones),
+                )
+            )
+        table.add_rows(required_bone_rows)
+        parent_pattern_rows = []
+        child_pattern_rows = []
+        for parent_pattern in self._armature_spec.parenting:
+            parent_pattern_rows.append(
+                (
+                    parent_pattern,
+                    "has expected children",
+                    self._result(
+                        parent_pattern
+                        not in self._armature_result.missing_parenting_rules
+                    ),
+                )
+            )
+            unparented = self._armature_result.missing_parenting_rules.get(
+                parent_pattern, []
+            )
+            for child in self._armature_spec.parenting[parent_pattern]:
+                children = {
+                    bone
+                    for _, bone in parenting.pairs(
+                        {parent_pattern: [child]}, self._armature_spec.required_bones
+                    )
+                }
+                child_pattern_rows.append(
+                    (
+                        child,
+                        f"child of {parent_pattern}",
+                        self._result(not children.intersection(unparented)),
+                    )
+                )
+        table.add_rows(parent_pattern_rows)
+        table.add_rows(child_pattern_rows)
+
+    def _result(self, passed: bool) -> Text:
+        label, color = _RESULTS[passed]
+        return Text(label, style=self.app.theme_variables[color])
 
     # Bone names go in as template variables, which are inserted as plain text,
     # because escape() misses uppercase tags like [L].

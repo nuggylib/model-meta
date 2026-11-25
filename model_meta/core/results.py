@@ -68,9 +68,9 @@ class FieldCheck:
 
 @dataclass(frozen=True)
 class ArmatureResult:
-    """Each missing bone blocks its `missing_parenting_rules` check: the add-on
-    can't report a parent for a bone that doesn't exist, so the bone is only in
-    `missing_bones`."""
+    """In an armature that exists, a missing bone is only in `missing_bones`:
+    the add-on can't report a parent for it. A missing armature fails every
+    parenting rule, so each child is in both."""
 
     object_name: str
     exists: bool

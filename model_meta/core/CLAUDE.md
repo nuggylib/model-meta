@@ -136,7 +136,8 @@ storage, and connections to the external apps Model Meta validates against.
   missing_parenting_rules)` is written as `{"object_name", "exists",
   "missing_bones", "missing_parenting_rules"}`, all four always.
   `missing_parenting_rules` maps a spec `parenting` key to the scene bones it
-  should parent that have another parent. `passed` is `exists` with both
+  should parent that have another parent, or, with no armature, every bone
+  it should parent. `passed` is `exists` with both
   lists empty.
   `MeshRoleResult(meshes, checks, modifiers)` is one role's result: the names
   `mesh_regex` matched, then a `FieldCheck(failures)` per set field, then
