@@ -34,14 +34,12 @@ class ChecksSection(VerticalGroup):
         self,
         title: str,
         description: str,
-        total_check_count: int,
         rows: list[ChecksRow],
         fixes: list[str | Content],
     ):
         super().__init__()
         self._title = title
         self._description = description
-        self._total_check_count = total_check_count
         self._rows = rows
         self._fixes = fixes
 
@@ -54,7 +52,7 @@ class ChecksSection(VerticalGroup):
             with HorizontalGroup(classes="columns"):
                 with VerticalGroup():
                     yield BlockProgressBar(
-                        total=self._total_check_count,
+                        total=len(self._rows),
                         show_eta=False,
                         classes="section-progress-bar",
                     )
@@ -66,6 +64,9 @@ class ChecksSection(VerticalGroup):
                             yield Static(fix)
 
     def on_mount(self) -> None:
+        self.query_one(BlockProgressBar).update(
+            progress=sum(row.passed for row in self._rows)
+        )
         table = self.query_one(DataTable)
         table.add_columns("Check", "Expected", "Result")
         table.add_rows(self._generate_rows_content())
