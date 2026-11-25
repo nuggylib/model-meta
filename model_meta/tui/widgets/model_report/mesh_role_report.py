@@ -3,7 +3,7 @@ from textual.content import Content
 
 from model_meta.core.results import MeshRolesResult
 from model_meta.core.spec import MeshRole
-from model_meta.tui.widgets.model_report.checks_section import TestRow, TestsSection
+from model_meta.tui.widgets.model_report.tests_section import TestRow, TestsSection
 
 
 class MeshRoleReport(VerticalGroup):
