@@ -65,7 +65,7 @@
     height: 12;
 }
 
-/* The header row plus 10 checks; the rest scroll beneath it. */
+/* The header row plus 11 checks; the rest scroll beneath it. */
 .armature-checks {
     max-height: 12;
 }

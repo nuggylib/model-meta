@@ -46,7 +46,7 @@ class ArmatureReport(VerticalGroup):
                         show_eta=False,
                         classes="section-progress-bar",
                     )
-                    yield DataTable(fixed_columns=3, classes="armature-checks")
+                    yield DataTable(classes="armature-checks")
                 with VerticalGroup():
                     yield Static(content="Recommended Fixes", classes="column-heading")
                     with VerticalScroll(classes="fixes-panel"):
