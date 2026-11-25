@@ -110,16 +110,8 @@ OptionList:focus > .option-list--option-highlighted {
     color: $accent
 }
 
-Button {
-    border: tall $boost 55%;
-}
-
 Button.-primary:focus {
     border: tall #FFFFFF;
-}
-
-Button.-primary {
-    background: $boost;
 }
 
 * {
