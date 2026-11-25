@@ -5,7 +5,7 @@ from textual.theme import Theme
 MCNUGGIES = Theme(
     name="mcnuggies",
     primary="#C003FF",
-    secondary="#704180",
+    secondary="#03DAFF",
     accent="#FFF903",
     warning="#FFBF00",
     error="#FF002C",
