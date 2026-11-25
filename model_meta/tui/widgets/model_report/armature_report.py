@@ -60,17 +60,19 @@ class ArmatureReport(VerticalGroup):
         table = self.query_one(DataTable)
         table.add_columns("Check", "Expected", "Result")
         table.add_row(
-            "Armature",
-            self._armature_spec.object_name,
-            self._result(self._armature_result.exists),
+            *self._row(
+                "Armature",
+                self._armature_spec.object_name,
+                self._armature_result.exists,
+            )
         )
         required_bone_rows = []
         for bone in self._armature_spec.required_bones:
             required_bone_rows.append(
-                (
+                self._row(
                     bone,
                     "exists in armature",
-                    self._result(bone not in self._armature_result.missing_bones),
+                    bone not in self._armature_result.missing_bones,
                 )
             )
         table.add_rows(required_bone_rows)
@@ -78,13 +80,10 @@ class ArmatureReport(VerticalGroup):
         child_pattern_rows = []
         for parent_pattern in self._armature_spec.parenting:
             parent_pattern_rows.append(
-                (
+                self._row(
                     parent_pattern,
                     "has expected children",
-                    self._result(
-                        parent_pattern
-                        not in self._armature_result.missing_parenting_rules
-                    ),
+                    parent_pattern not in self._armature_result.missing_parenting_rules,
                 )
             )
             unparented = self._armature_result.missing_parenting_rules.get(
@@ -98,18 +97,23 @@ class ArmatureReport(VerticalGroup):
                     )
                 }
                 child_pattern_rows.append(
-                    (
+                    self._row(
                         child,
                         f"child of {parent_pattern}",
-                        self._result(not children.intersection(unparented)),
+                        not children.intersection(unparented),
                     )
                 )
         table.add_rows(parent_pattern_rows)
         table.add_rows(child_pattern_rows)
 
-    def _result(self, passed: bool) -> Text:
+    def _row(self, check: str, expected: str, passed: bool) -> tuple[Text, ...]:
         label, color = _RESULTS[passed]
-        return Text(label, style=self.app.theme_variables[color])
+        theme = self.app.theme_variables
+        return (
+            Text(check, style=theme["primary"]),
+            Text(expected, style=theme["secondary"]),
+            Text(label, style=theme[color]),
+        )
 
     # Bone names go in as template variables, which are inserted as plain text,
     # because escape() misses uppercase tags like [L].
