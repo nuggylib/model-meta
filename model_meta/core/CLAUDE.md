@@ -139,19 +139,23 @@ storage, and connections to the external apps Model Meta validates against.
   should parent that have another parent, or, with no armature, every bone
   it should parent. `passed` is `exists` with both
   lists empty.
-  `MeshRoleResult(meshes, checks, modifiers)` is one role's result: the names
-  `mesh_regex` matched, then a `FieldCheck(failures)` per set field, then
-  that role's own `modifiers` (omitted while `None`), written as
+  `mesh_roles` is a `MeshRolesResult`, an alias for `dict[str,
+  MeshRoleResult]`. `MeshRoleResult` is one role's result: `meshes` (the
+  names `mesh_regex` matched), then one field per spec role field it checks:
+  `count`, `vtx_grp`, `weight`, `texture_maps` (a `TextureMapsCheck`) and
+  `material_slots`. Each one is `None` when the spec doesn't set that field.
+  Then come that role's own `modifiers` and `extra`. It's written as
   `{"meshes": [...], "<field>": {"passed", "failures"}, ..., "modifiers":
-  {...}}`. Every key but `meshes` and `modifiers` is a field's check.
+  {...}}`, leaving out the `None` ones. `checks` maps each set field's name
+  to its check, in spec order.
   `ModifiersResult(required, warn, fail)` is written as `{"required":
   {"skinned_meshes": <check>}, "warn": <check>, "fail": <check>}`.
   `FieldCheck.passed` is derived from `failures` being empty, so it can't
   disagree in memory, and `from_dict` rejects a file where it does.
   `FieldCheck.warning` marks a check whose failures are warnings (`warn`), and
-  is written as `"warning": true` only when set. `FieldCheck.duplicates` lists
-  `texture_maps`' same-shape mesh groups, written only when non-empty, and
-  doesn't affect `passed`. Failures are fact dicts,
+  is written as `"warning": true` only when set. `TextureMapsCheck(FieldCheck)`
+  adds `duplicates`, the role's same-shape mesh groups. It's written only when
+  non-empty and doesn't affect `passed`. Failures are fact dicts,
   stored as given. Every class's `from_dict(data, where=)` raises
   `ValueError` naming the dotted path, e.g. `mesh_roles.wheels.count.passed`.
   `checks.mesh_roles.evaluate` and `checks.modifiers.evaluate` build them.

@@ -20,11 +20,10 @@ _RESULTS_KEYS = (
 @dataclass(frozen=True)
 class FieldCheck:
     """One spec field's check: a dict of facts per failure. A `warning` check's failures
-    are warnings. `duplicates` groups same-shape meshes, for `texture_maps`."""
+    are warnings."""
 
     failures: list[dict[str, object]]
     warning: bool = False
-    duplicates: list[list[str]] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -37,7 +36,6 @@ class FieldCheck:
             raise ValueError(f"`{where}` is not an object.")
         passed, failures = data.get("passed"), data.get("failures")
         warning = data.get("warning", False)
-        duplicates = data.get("duplicates", [])
         if not isinstance(passed, bool):
             raise ValueError(f"`{where}.passed` is not a boolean.")
         if not isinstance(failures, list) or not all(
@@ -48,22 +46,33 @@ class FieldCheck:
             raise ValueError(f"`{where}.passed` disagrees with its failures.")
         if not isinstance(warning, bool):
             raise ValueError(f"`{where}.warning` is not a boolean.")
-        if not isinstance(duplicates, list) or not all(
-            isinstance(group, list) and all(isinstance(name, str) for name in group)
-            for group in duplicates
-        ):
-            raise ValueError(f"`{where}.duplicates` is not a list of name lists.")
-        return cls(failures, warning, duplicates)
+        return cls(failures, warning)
 
     def to_dict(self) -> dict:
         warning = {"warning": True} if self.warning else {}
+        return {"passed": self.passed, "failures": self.failures, **warning}
+
+
+@dataclass(frozen=True)
+class TextureMapsCheck(FieldCheck):
+    """`duplicates` groups same-shape meshes and doesn't affect `passed`."""
+
+    duplicates: list[list[str]] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: object, *, where: str) -> Self:
+        """Raises `ValueError` naming `where` for a malformed check."""
+        check = FieldCheck.from_dict(data, where=where)
+        duplicates = data.get("duplicates", [])
+        if not isinstance(duplicates, list) or not all(
+            _is_str_list(group) for group in duplicates
+        ):
+            raise ValueError(f"`{where}.duplicates` is not a list of name lists.")
+        return cls(check.failures, check.warning, duplicates)
+
+    def to_dict(self) -> dict:
         duplicates = {"duplicates": self.duplicates} if self.duplicates else {}
-        return {
-            "passed": self.passed,
-            "failures": self.failures,
-            **warning,
-            **duplicates,
-        }
+        return {**super().to_dict(), **duplicates}
 
 
 @dataclass(frozen=True)
@@ -148,42 +157,66 @@ class ModifiersResult:
 
 @dataclass(frozen=True)
 class MeshRoleResult:
-    """`meshes` are the names `mesh_regex` matched; `checks` holds only the role's set
-    fields. `modifiers` checks just those meshes, and is `None` until it has run."""
+    """`meshes` are the names `mesh_regex` matched. A `None` check's field isn't set in
+    the role's spec; `modifiers` is `None` until it has run."""
 
     meshes: list[str]
-    checks: dict[str, FieldCheck]
+    count: FieldCheck | None = None
+    vtx_grp: FieldCheck | None = None
+    weight: FieldCheck | None = None
+    texture_maps: TextureMapsCheck | None = None
+    material_slots: FieldCheck | None = None
     modifiers: ModifiersResult | None = None
+    extra: dict[str, object] = field(default_factory=dict)
+
+    @property
+    def checks(self) -> dict[str, FieldCheck]:
+        """The set fields' checks, in spec order."""
+        return {
+            key: check
+            for key in _ROLE_CHECKS
+            if (check := getattr(self, key)) is not None
+        }
 
     @classmethod
     def from_dict(cls, data: object, *, where: str) -> Self:
-        """Every key but `meshes` and `modifiers` is a field's check. Raises `ValueError`
-        naming `where`."""
+        """Raises `ValueError` naming `where`."""
         if not isinstance(data, dict):
             raise ValueError(f"`{where}` is not an object.")
         meshes = data.get("meshes")
-        if not isinstance(meshes, list) or not all(
-            isinstance(name, str) for name in meshes
-        ):
+        if not _is_str_list(meshes):
             raise ValueError(f"`{where}.meshes` is not a list of strings.")
         checks = {
-            field: FieldCheck.from_dict(check, where=f"{where}.{field}")
-            for field, check in data.items()
-            if field not in ("meshes", "modifiers")
+            key: check_type.from_dict(data[key], where=f"{where}.{key}")
+            for key, check_type in _ROLE_CHECKS.items()
+            if key in data
         }
         modifiers = None
         if "modifiers" in data:
             modifiers = ModifiersResult.from_dict(
                 data["modifiers"], where=f"{where}.modifiers"
             )
-        return cls(meshes, checks, modifiers)
+        extra = {key: value for key, value in data.items() if key not in _ROLE_KEYS}
+        return cls(meshes, **checks, modifiers=modifiers, extra=extra)
 
     def to_dict(self) -> dict:
-        checks = {field: check.to_dict() for field, check in self.checks.items()}
+        checks = {key: check.to_dict() for key, check in self.checks.items()}
         modifiers = (
             {} if self.modifiers is None else {"modifiers": self.modifiers.to_dict()}
         )
-        return {"meshes": self.meshes, **checks, **modifiers}
+        return {"meshes": self.meshes, **checks, **modifiers, **self.extra}
+
+
+_ROLE_CHECKS: dict[str, type[FieldCheck]] = {
+    "count": FieldCheck,
+    "vtx_grp": FieldCheck,
+    "weight": FieldCheck,
+    "texture_maps": TextureMapsCheck,
+    "material_slots": FieldCheck,
+}
+_ROLE_KEYS = ("meshes", *_ROLE_CHECKS, "modifiers")
+
+MeshRolesResult = dict[str, MeshRoleResult]
 
 
 @dataclass(frozen=True)
@@ -222,7 +255,7 @@ class Results(JsonDocument):
     model_file: str
     spec: str
     armature: ArmatureResult | None = None
-    mesh_roles: dict[str, MeshRoleResult] | None = None
+    mesh_roles: MeshRolesResult | None = None
     modifiers: ModifiersResult | None = None
     texture_map_overrides: dict[str, list[TextureMapOverride]] = field(
         default_factory=dict

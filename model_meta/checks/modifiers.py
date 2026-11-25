@@ -5,7 +5,12 @@ from dataclasses import replace
 
 from model_meta.checks.mesh_roles import NO_MESHES
 from model_meta.core.blender_bridge import MeshModifiers
-from model_meta.core.results import FieldCheck, MeshRoleResult, ModifiersResult
+from model_meta.core.results import (
+    FieldCheck,
+    MeshRoleResult,
+    MeshRolesResult,
+    ModifiersResult,
+)
 from model_meta.core.spec import Modifiers
 
 Facts = Callable[[list[str]], dict[str, object]]
@@ -15,7 +20,7 @@ def evaluate(
     mods: Modifiers,
     roles: Mapping[str, MeshRoleResult],
     report: Sequence[MeshModifiers],
-) -> tuple[ModifiersResult, dict[str, MeshRoleResult]]:
+) -> tuple[ModifiersResult, MeshRolesResult]:
     """The check over every role's meshes, and each role with its own meshes' check.
 
     Pass the `report` fetched for `mesh_roles.plan`'s modifier targets.

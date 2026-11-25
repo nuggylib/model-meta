@@ -51,7 +51,7 @@ Textual, no UI.
       never counts. A `texture_maps` failure also lists `expected`, the exact
       filename each missing map needs. With an add-on before 0.5.1 (`textures` `None`),
       `texture_maps` fails once with `OLD_ADDON`.
-    - `texture_maps` always sets `duplicates`: the report's same-shape
+    - `texture_maps` is a `TextureMapsCheck`, which always sets `duplicates`: the report's same-shape
       groups, reduced to the role's matched meshes, keeping groups of two or
       more. They are set whether the check passes or fails, and are empty
       when the add-on predates `get_duplicate_meshes`.
@@ -80,5 +80,6 @@ Textual, no UI.
     with no meshes passes.
 
 ## Conventions
-- A new field's check is one `_CHECKS` entry. A new root field's check is a
+- A new field's check is one `_CHECKS` entry, plus its `MeshRoleResult` field
+  and `_ROLE_CHECKS` entry in `core/results.py`. A new root field's check is a
   module here, with its result type in `core/results.py`.

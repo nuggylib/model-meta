@@ -15,7 +15,13 @@ from model_meta.core.blender_bridge import (
     SceneMesh,
     WeightTarget,
 )
-from model_meta.core.results import FieldCheck, MeshRoleResult, TextureMapOverride
+from model_meta.core.results import (
+    FieldCheck,
+    MeshRoleResult,
+    MeshRolesResult,
+    TextureMapOverride,
+    TextureMapsCheck,
+)
 from model_meta.core.spec import MeshRole
 from model_meta.specs import parenting
 
@@ -51,7 +57,7 @@ def evaluate(
     roles: Mapping[str, MeshRole],
     report: MeshReport,
     overrides: Mapping[str, Sequence[TextureMapOverride]] | None = None,
-) -> dict[str, MeshRoleResult]:
+) -> MeshRolesResult:
     """Pass a `report` fetched with `plan(roles, ...)`, so its items line up."""
     weight_targets, textured, _ = plan(roles, report.meshes)
     scene = _Scene(
@@ -119,12 +125,17 @@ def _role_result(
         if not is_set(role):
             continue
         if problem is not None:
-            checks[field] = FieldCheck([{"error": problem}])
+            checks[field] = _failed(field, problem)
         elif not matched and field != "count":
-            checks[field] = FieldCheck([{"error": NO_MESHES}])
+            checks[field] = _failed(field, NO_MESHES)
         else:
             checks[field] = check(role, matched, scene)
-    return MeshRoleResult([mesh.name for mesh in matched], checks)
+    return MeshRoleResult([mesh.name for mesh in matched], **checks)
+
+
+def _failed(field: str, error: str) -> FieldCheck:
+    check_type = TextureMapsCheck if field == "texture_maps" else FieldCheck
+    return check_type([{"error": error}])
 
 
 def _count(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
@@ -162,12 +173,12 @@ def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> FieldChe
 
 def _texture_maps(
     role: MeshRole, matched: list[SceneMesh], scene: _Scene
-) -> FieldCheck:
+) -> TextureMapsCheck:
     names = {mesh.name for mesh in matched}
     shared = [[n for n in group if n in names] for group in scene.duplicates]
     duplicates = [group for group in shared if len(group) > 1]
     if scene.textures is None:
-        return FieldCheck([{"error": OLD_ADDON}], duplicates=duplicates)
+        return TextureMapsCheck([{"error": OLD_ADDON}], duplicates=duplicates)
     failures = []
     for mesh in matched:
         result = scene.textures[mesh.name]
@@ -197,7 +208,7 @@ def _texture_maps(
                     **_unwrap(mesh.name, scene),
                 }
             )
-    return FieldCheck(failures, duplicates=duplicates)
+    return TextureMapsCheck(failures, duplicates=duplicates)
 
 
 def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:

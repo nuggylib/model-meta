@@ -16,7 +16,7 @@ class ArmatureReport(VerticalGroup):
     def compose(self):
         yield ChecksSection(
             title="Armature",
-            description="Armature health checks",
+            description="Armature health checks.",
             rows=self._generate_rows(),
             fixes=self._collect_fixes(),
         )
