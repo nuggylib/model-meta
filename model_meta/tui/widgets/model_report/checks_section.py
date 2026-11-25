@@ -68,7 +68,7 @@ class ChecksSection(VerticalGroup):
             progress=sum(row.passed for row in self._rows)
         )
         table = self.query_one(DataTable)
-        table.add_columns("Check", "Expected", "Result")
+        table.add_columns("Test", "Condition", "Result")
         table.add_rows(self._generate_rows_content())
 
     def _generate_rows_content(self):
