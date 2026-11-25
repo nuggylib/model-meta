@@ -46,10 +46,39 @@ class ArmatureReport(VerticalGroup):
                             val=Content.from_markup(
                                 "[$primary]$name[/] [$success](FOUND)[/]"
                                 if self._armature_result.exists
-                                else "[$primary]$name[/] [$error](NOT FOUND)[/]",
+                                else "[$primary]$name[/] [$error]NOT FOUND[/]",
                                 name=self._armature_spec.object_name,
                             ),
                         )
+                        missing_bones = self._armature_result.missing_bones
+                        yield LabeledField(
+                            label="Missing Bones",
+                            val=Content.from_markup(
+                                "[$error]$bones[/]"
+                                if missing_bones
+                                else "[] [$success](NONE)[/]",
+                                bones=f"[{', '.join(missing_bones)}]",
+                            ),
+                        )
+                        unparented = self._armature_result.missing_parenting_rules
+                        yield LabeledField(
+                            label="By Parenting Pattern",
+                            val="",
+                        )
+                        with VerticalGroup(classes="nested-progress-items"):
+                            for parent in self._armature_spec.parenting:
+                                bones = unparented.get(parent, [])
+                                yield LabeledField(
+                                    label=parent,
+                                    val=Content(", ").join(
+                                        Content.from_markup(
+                                            "[$warning]$bone[/]", bone=bone
+                                        )
+                                        for bone in bones
+                                    )
+                                    if bones
+                                    else Content.from_markup("[$success]PASS[/]"),
+                                )
                 with VerticalGroup():
                     yield Static(content="Recommended Fixes", classes="column-heading")
                     with VerticalScroll(classes="fixes-panel"):

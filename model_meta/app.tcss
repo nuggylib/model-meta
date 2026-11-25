@@ -65,8 +65,18 @@
     height: 12;
 }
 
+.nested-progress-items {
+    padding-left: 2;
+}
+
 .progress-summary {
     margin-top: 1;
+}
+
+
+.progress-summary > *,
+.nested-progress-items > * {
+    margin-bottom: 1;
 }
 
 Header {
