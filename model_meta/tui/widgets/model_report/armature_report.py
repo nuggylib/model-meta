@@ -25,8 +25,8 @@ class ArmatureReport(VerticalGroup):
         rows: list[TestRow] = []
         rows.append(
             TestRow(
-                "armature",
                 self._armature_spec.object_name,
+                "exists in blender scene",
                 self._armature_result.exists,
             )
         )

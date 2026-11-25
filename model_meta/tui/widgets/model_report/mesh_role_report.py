@@ -32,13 +32,20 @@ class MeshRoleReport(VerticalGroup):
         # TODO: Update the results file to track if all meshes in the group are UV unwrapped (does not need to be in spec - implied need when texture maps exist)
         # uv_unwrap_rows: list[ChecksRow] = []
         texture_map_rows: list[TestRow] = []
-        for role in self._mesh_roles_spec:
+        for role in self._mesh_roles_spec:  # remember: role is just the name for the mesh role and is not something in Blender
             result = self._mesh_roles_result[role]
-            role_rows.append(
+            vtx_grp_rows.append(
                 TestRow(
-                    role,
-                    "passes all checks",
-                    all(check.passed for check in result.checks.values()),
+                    f"{role} > vertex group",
+                    "vertices assigned",
+                    result.vtx_grp.passed,
+                )
+            )
+            count_rows.append(
+                TestRow(
+                    f"{role} > mesh count",
+                    f"expects {self._mesh_roles_spec[role].count | 0} meshes",
+                    result.count.passed,
                 )
             )
 
