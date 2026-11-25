@@ -17,7 +17,7 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from decimal import Decimal
 
-from model_meta.core.spec import MeshRole
+from model_meta.core.spec import MeshRoleSpec
 from model_meta.specs import bones, parenting, schema
 
 
@@ -105,7 +105,7 @@ def matches(pattern: str, required: Sequence[str]) -> list[str]:
     return [bone for bone in required if parenting.match(pattern, bone) is not None]
 
 
-def stale_roles(roles: Mapping[str, MeshRole], old: str, new: str) -> list[str]:
+def stale_roles(roles: Mapping[str, MeshRoleSpec], old: str, new: str) -> list[str]:
     """The roles whose `vtx_grp` matches `old` but not `new`."""
     return [
         name
@@ -117,7 +117,7 @@ def stale_roles(roles: Mapping[str, MeshRole], old: str, new: str) -> list[str]:
 
 
 def unmatched_roles(
-    roles: Mapping[str, MeshRole], gone: str, required: Sequence[str]
+    roles: Mapping[str, MeshRoleSpec], gone: str, required: Sequence[str]
 ) -> list[str]:
     """The roles whose `vtx_grp` matched the deleted `gone` but none of `required`."""
     return [

@@ -8,7 +8,7 @@ from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
 from model_meta.core.godot_connection import GodotConnection
-from model_meta.core.spec import MeshRole
+from model_meta.core.spec import MeshRoleSpec
 from model_meta.specs import schema
 from model_meta.specs import store as specs_store
 from model_meta.specs.store import ArmaturePatch
@@ -53,7 +53,7 @@ def _spec(tmp_path, bones=BONES):
 
 
 def _role(vtx_grp):
-    return MeshRole(vtx_grp=vtx_grp, mesh_regex="^m$", count=1, weight=1.0)
+    return MeshRoleSpec(vtx_grp=vtx_grp, mesh_regex="^m$", count=1, weight=1.0)
 
 
 def _set_role(path, name, role):

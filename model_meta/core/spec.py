@@ -22,7 +22,7 @@ _ROLE_KEYS = (
 
 
 @dataclass
-class MeshRole:
+class MeshRoleSpec:
     vtx_grp: str | None = None
     mesh_regex: str | None = None
     count: int | None = None
@@ -60,7 +60,7 @@ class MeshRole:
 
 
 @dataclass
-class Armature:
+class ArmatureSpec:
     object_name: str = ""
     required_bones: list[str] = field(default_factory=list)
     bone_name_inverses: dict[str, str] = field(default_factory=dict)
@@ -134,7 +134,7 @@ class RequiredModifiers:
 
 
 @dataclass
-class Modifiers:
+class ModifiersSpec:
     required: RequiredModifiers = field(default_factory=RequiredModifiers)
     allowed: list[str] = field(default_factory=list)
     warn: list[str] = field(default_factory=list)
@@ -167,9 +167,9 @@ class Modifiers:
 @dataclass
 class Spec(JsonDocument):
     model_type: str | None = None
-    armature: Armature = field(default_factory=Armature)
-    mesh_roles: dict[str, MeshRole] = field(default_factory=dict)
-    modifiers: Modifiers = field(default_factory=Modifiers)
+    armature: ArmatureSpec = field(default_factory=ArmatureSpec)
+    mesh_roles: dict[str, MeshRoleSpec] = field(default_factory=dict)
+    modifiers: ModifiersSpec = field(default_factory=ModifiersSpec)
     extra: dict[str, object] = field(default_factory=dict)
 
     @staticmethod
@@ -193,9 +193,11 @@ class Spec(JsonDocument):
         return cls(
             path=path,
             model_type=model_type,
-            armature=Armature.from_dict(data.get("armature", {})),
-            mesh_roles={name: MeshRole.from_dict(role) for name, role in roles.items()},
-            modifiers=Modifiers.from_dict(data.get("modifiers", {})),
+            armature=ArmatureSpec.from_dict(data.get("armature", {})),
+            mesh_roles={
+                name: MeshRoleSpec.from_dict(role) for name, role in roles.items()
+            },
+            modifiers=ModifiersSpec.from_dict(data.get("modifiers", {})),
             extra=_extra(data, _SPEC_KEYS),
         )
 

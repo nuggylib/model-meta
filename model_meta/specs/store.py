@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 
-from model_meta.core.spec import MeshRole, Modifiers, Spec
+from model_meta.core.spec import MeshRoleSpec, ModifiersSpec, Spec
 from model_meta.specs import naming, parenting, schema
 
 SPEC_GLOB = f"*{naming.SUFFIX}"
@@ -99,7 +99,7 @@ def delete_bone(path: Path, name: str) -> None:
     spec.save()
 
 
-def add_mesh_role(path: Path, name: str, role: MeshRole) -> None:
+def add_mesh_role(path: Path, name: str, role: MeshRoleSpec) -> None:
     """Raises `ValueError` if `name` is already a role, or like `Spec.load`, or
     `OSError` on write."""
     spec = Spec.load(path)
@@ -110,7 +110,7 @@ def add_mesh_role(path: Path, name: str, role: MeshRole) -> None:
 
 
 def update_mesh_role(
-    path: Path, name: str, new_name: str, edit: Callable[[MeshRole], MeshRole]
+    path: Path, name: str, new_name: str, edit: Callable[[MeshRoleSpec], MeshRoleSpec]
 ) -> None:
     """`edit` gets the role as just read, and the role keeps its position.
 
@@ -141,7 +141,9 @@ def delete_mesh_role(path: Path, name: str) -> None:
     spec.save()
 
 
-def update_modifiers(path: Path, edit: Callable[[Modifiers], Modifiers]) -> None:
+def update_modifiers(
+    path: Path, edit: Callable[[ModifiersSpec], ModifiersSpec]
+) -> None:
     """`edit` gets the modifiers as just read. Raises like `Spec.load`, or
     `OSError` on write."""
     spec = Spec.load(path)

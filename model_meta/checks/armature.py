@@ -4,11 +4,11 @@ from collections.abc import Sequence
 
 from model_meta.core.blender_bridge import SceneArmature
 from model_meta.core.results import ArmatureResult
-from model_meta.core.spec import Armature
+from model_meta.core.spec import ArmatureSpec
 from model_meta.specs import parenting
 
 
-def evaluate(armature: Armature, scene: Sequence[SceneArmature]) -> ArmatureResult:
+def evaluate(armature: ArmatureSpec, scene: Sequence[SceneArmature]) -> ArmatureResult:
     name, required = armature.object_name, armature.required_bones
     found = next((a for a in scene if a.name == name), None)
     if found is None:

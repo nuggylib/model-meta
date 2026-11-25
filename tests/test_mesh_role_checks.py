@@ -14,9 +14,9 @@ from model_meta.core.blender_bridge import (
     WeightTarget,
 )
 from model_meta.core.results import FieldCheck, MeshRoleResult, TextureMapOverride
-from model_meta.core.spec import MeshRole
+from model_meta.core.spec import MeshRoleSpec
 
-WHEELS = MeshRole(
+WHEELS = MeshRoleSpec(
     mesh_regex=r"wheel_hub\.(front|rear)\.[LR]",
     vtx_grp="wheel_hub.{1}.{2}",
     count=4,
@@ -24,7 +24,7 @@ WHEELS = MeshRole(
     texture_maps=["albedo", "orm"],
     material_slots=["rubber"],
 )
-BODY = MeshRole(
+BODY = MeshRoleSpec(
     mesh_regex="body",
     vtx_grp="body",
     count=1,
@@ -115,7 +115,7 @@ def test_plan_targets_every_matching_group_and_each_textured_and_matched_mesh():
 
 
 def test_plan_dedupes_targets_shared_by_two_roles():
-    hubs = MeshRole(
+    hubs = MeshRoleSpec(
         mesh_regex=r"wheel_hub\.front\.L",
         vtx_grp="wheel_hub.front.L",
         weight=1.0,
@@ -149,7 +149,7 @@ def test_a_matching_scene_passes_every_set_field():
 
 
 def test_unset_fields_are_left_out():
-    results = _evaluate({"wheels": MeshRole(mesh_regex=WHEELS.mesh_regex)})
+    results = _evaluate({"wheels": MeshRoleSpec(mesh_regex=WHEELS.mesh_regex)})
     assert results["wheels"] == MeshRoleResult(WHEEL_NAMES, {})
 
 

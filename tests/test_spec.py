@@ -2,7 +2,13 @@ import json
 
 import pytest
 
-from model_meta.core.spec import Armature, MeshRole, Modifiers, RequiredModifiers, Spec
+from model_meta.core.spec import (
+    ArmatureSpec,
+    MeshRoleSpec,
+    ModifiersSpec,
+    RequiredModifiers,
+    Spec,
+)
 
 _FULL = {
     "model_type": "vehicle",
@@ -51,7 +57,7 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
     spec = _spec(_FULL, tmp_path)
     assert spec.model_type == "vehicle"
     assert spec.armature.parenting == {"root": ["window_fl"]}
-    assert spec.mesh_roles["body"] == MeshRole(
+    assert spec.mesh_roles["body"] == MeshRoleSpec(
         vtx_grp="body",
         mesh_regex="^body",
         count=1,
@@ -59,10 +65,10 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
         texture_maps=["albedo"],
         material_slots=["paint", "glass"],
     )
-    assert spec.mesh_roles["window_fl"] == MeshRole(
+    assert spec.mesh_roles["window_fl"] == MeshRoleSpec(
         vtx_grp="window_fl", mesh_regex="^window_fl"
     )
-    assert spec.modifiers == Modifiers(
+    assert spec.modifiers == ModifiersSpec(
         required=RequiredModifiers(skinned_meshes=["ARMATURE"]),
         allowed=["TRIANGULATE", "WEIGHTED_NORMAL"],
         warn=["MIRROR"],
@@ -72,7 +78,7 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
 
 def test_an_empty_role_has_every_field_absent(tmp_path):
     spec = _spec(_with_role({}), tmp_path)
-    assert spec.mesh_roles["body"] == MeshRole()
+    assert spec.mesh_roles["body"] == MeshRoleSpec()
     assert spec.to_dict()["mesh_roles"]["body"] == {}
 
 
@@ -127,9 +133,9 @@ def test_unknown_keys_survive_at_every_level(tmp_path):
 
 def test_missing_keys_default_and_are_added_on_write(tmp_path):
     spec = _spec({"model_type": "vehicle"}, tmp_path)
-    assert spec.armature == Armature()
+    assert spec.armature == ArmatureSpec()
     assert spec.mesh_roles == {}
-    assert spec.modifiers == Modifiers()
+    assert spec.modifiers == ModifiersSpec()
     assert spec.to_dict() == {
         "model_type": "vehicle",
         "armature": {

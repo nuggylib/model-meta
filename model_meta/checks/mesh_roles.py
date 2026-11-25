@@ -22,7 +22,7 @@ from model_meta.core.results import (
     TextureMapOverride,
     TextureMapsCheck,
 )
-from model_meta.core.spec import MeshRole
+from model_meta.core.spec import MeshRoleSpec
 from model_meta.specs import parenting
 
 NO_MESHES = "no meshes matched"
@@ -30,7 +30,7 @@ OLD_ADDON = f"add-on before {'.'.join(map(str, TEXTURES_VERSION))}"
 
 
 def plan(
-    roles: Mapping[str, MeshRole], meshes: Sequence[SceneMesh]
+    roles: Mapping[str, MeshRoleSpec], meshes: Sequence[SceneMesh]
 ) -> tuple[list[WeightTarget], list[MeshTarget], list[MeshTarget]]:
     """The bridge targets `evaluate` needs, deduped: weights, one target per textured
     mesh, and one per matched mesh."""
@@ -54,7 +54,7 @@ def plan(
 
 
 def evaluate(
-    roles: Mapping[str, MeshRole],
+    roles: Mapping[str, MeshRoleSpec],
     report: MeshReport,
     overrides: Mapping[str, Sequence[TextureMapOverride]] | None = None,
 ) -> MeshRolesResult:
@@ -117,7 +117,7 @@ class _Scene:
 
 
 def _role_result(
-    role: MeshRole, meshes: Sequence[SceneMesh], scene: _Scene
+    role: MeshRoleSpec, meshes: Sequence[SceneMesh], scene: _Scene
 ) -> MeshRoleResult:
     matched, problem = _matched(role, meshes)
     checks = {}
@@ -138,19 +138,21 @@ def _failed(field: str, error: str) -> FieldCheck:
     return check_type([{"error": error}])
 
 
-def _count(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
+def _count(role: MeshRoleSpec, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
     if len(matched) == role.count:
         return FieldCheck([])
     return FieldCheck([{"expected": role.count, "matched": len(matched)}])
 
 
-def _vtx_grp(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
+def _vtx_grp(
+    role: MeshRoleSpec, matched: list[SceneMesh], _scene: _Scene
+) -> FieldCheck:
     return FieldCheck(
         [{"mesh": mesh.name} for mesh in matched if not _groups(role.vtx_grp, mesh)]
     )
 
 
-def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> FieldCheck:
+def _weight(role: MeshRoleSpec, matched: list[SceneMesh], scene: _Scene) -> FieldCheck:
     if role.vtx_grp is None:
         return FieldCheck([{"error": "vtx_grp not set"}])
     failures = []
@@ -172,7 +174,7 @@ def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> FieldChe
 
 
 def _texture_maps(
-    role: MeshRole, matched: list[SceneMesh], scene: _Scene
+    role: MeshRoleSpec, matched: list[SceneMesh], scene: _Scene
 ) -> TextureMapsCheck:
     names = {mesh.name for mesh in matched}
     shared = [[n for n in group if n in names] for group in scene.duplicates]
@@ -221,7 +223,7 @@ def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
 
 
 def _material_slots(
-    role: MeshRole, matched: list[SceneMesh], _scene: _Scene
+    role: MeshRoleSpec, matched: list[SceneMesh], _scene: _Scene
 ) -> FieldCheck:
     failures = []
     for mesh in matched:
@@ -242,7 +244,7 @@ _CHECKS = (
 
 
 def _matched(
-    role: MeshRole, meshes: Sequence[SceneMesh]
+    role: MeshRoleSpec, meshes: Sequence[SceneMesh]
 ) -> tuple[list[SceneMesh], str | None]:
     """The meshes `mesh_regex` fully matches, and why none can be, or `None`."""
     if role.mesh_regex is None:

@@ -2,13 +2,13 @@ from textual.containers import VerticalGroup
 from textual.content import Content
 
 from model_meta.core.results import ArmatureResult
-from model_meta.core.spec import Armature
+from model_meta.core.spec import ArmatureSpec
 from model_meta.specs import parenting
 from model_meta.tui.widgets.model_report.checks_section import ChecksRow, ChecksSection
 
 
 class ArmatureReport(VerticalGroup):
-    def __init__(self, armature_spec: Armature, armature_result: ArmatureResult):
+    def __init__(self, armature_spec: ArmatureSpec, armature_result: ArmatureResult):
         super().__init__()
         self._armature_spec = armature_spec
         self._armature_result = armature_result

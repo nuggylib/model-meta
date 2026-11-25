@@ -11,13 +11,13 @@ from model_meta.core.results import (
     MeshRolesResult,
     ModifiersResult,
 )
-from model_meta.core.spec import Modifiers
+from model_meta.core.spec import ModifiersSpec
 
 Facts = Callable[[list[str]], dict[str, object]]
 
 
 def evaluate(
-    mods: Modifiers,
+    mods: ModifiersSpec,
     roles: Mapping[str, MeshRoleResult],
     report: Sequence[MeshModifiers],
 ) -> tuple[ModifiersResult, MeshRolesResult]:
@@ -35,7 +35,7 @@ def evaluate(
 
 
 def _check(
-    mods: Modifiers,
+    mods: ModifiersSpec,
     meshes: list[str],
     stacks: dict[str, MeshModifiers],
     *,

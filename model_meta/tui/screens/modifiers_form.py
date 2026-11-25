@@ -14,7 +14,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, SelectionList, Static
 
-from model_meta.core.spec import Modifiers, Spec
+from model_meta.core.spec import ModifiersSpec, Spec
 from model_meta.specs import modifiers, schema, store
 from model_meta.tui.widgets.field_list import FieldList
 
@@ -176,7 +176,7 @@ class ModifiersFormScreen(Screen):
         checked = set(self.query_one("#modifier-choices", SelectionList).selected)
         moved: dict[str, list[str]] = {}
 
-        def edit(mods: Modifiers) -> Modifiers:
+        def edit(mods: ModifiersSpec) -> ModifiersSpec:
             moved.clear()
             moved.update(_moves(mods, field, checked))
             return modifiers.assign(mods, field, checked)
@@ -212,7 +212,7 @@ class ModifiersFormScreen(Screen):
         self.query_one("#modifiers-status", Static).update(text)
 
 
-def _field_lines(mods: Modifiers) -> tuple[list[str], list[tuple[str, int]]]:
+def _field_lines(mods: ModifiersSpec) -> tuple[list[str], list[tuple[str, int]]]:
     """Each list with its description beneath, then the extras as written."""
     names: list[str] = []
     lines: list[tuple[str, int]] = []
@@ -241,7 +241,7 @@ def _label(name: str, clashes: list[str]) -> str:
 
 
 def _moves(
-    mods: Modifiers, field: str, checked: Collection[str]
+    mods: ModifiersSpec, field: str, checked: Collection[str]
 ) -> dict[str, list[str]]:
     """The checked names each conflicting list loses, by list."""
     moved: dict[str, list[str]] = {}

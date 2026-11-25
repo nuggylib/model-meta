@@ -29,13 +29,14 @@ from model_meta.core.blender_bridge import (
 )
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import Results, TextureMapOverride
-from model_meta.core.spec import Armature, MeshRole, Modifiers, Spec
+from model_meta.core.spec import ArmatureSpec, MeshRoleSpec, ModifiersSpec, Spec
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.app_footer import BlenderStatus
 from model_meta.tui.widgets.labeled_field import LabeledField
 from model_meta.tui.widgets.model_report.armature_report import ArmatureReport
+from model_meta.tui.widgets.model_report.mesh_role_report import MeshRoleReport
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
 # Each root row's results file key, and the title its detail screen shows.
@@ -60,9 +61,9 @@ class ModelReportScreen(Layout):
         self.spec_path = spec_path
         self.results_path = results_path
         self.results_changed: Signal[Results | None] = Signal(self, "results_changed")
-        self._armature = Armature()
-        self._roles: dict[str, MeshRole] = {}
-        self._modifiers = Modifiers()
+        self._armature = ArmatureSpec()
+        self._roles: dict[str, MeshRoleSpec] = {}
+        self._modifiers = ModifiersSpec()
         self._rows: list[Row] = []
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
@@ -76,9 +77,9 @@ class ModelReportScreen(Layout):
             spec = Spec.load(self.spec_path)
         except (OSError, ValueError):
             spec = None
-        self._armature = spec.armature if spec else Armature()
+        self._armature = spec.armature if spec else ArmatureSpec()
         self._roles = dict(spec.mesh_roles) if spec else {}
-        self._modifiers = spec.modifiers if spec else Modifiers()
+        self._modifiers = spec.modifiers if spec else ModifiersSpec()
         self._load_results()
         self._rows = self._items()
         with VerticalGroup(classes="layout-heading-content"):
@@ -91,6 +92,9 @@ class ModelReportScreen(Layout):
             )
         yield ArmatureReport(
             armature_spec=self._armature, armature_result=self.results.armature
+        )
+        yield MeshRoleReport(
+            mesh_roles_spec=spec.mesh_roles, mesh_roles_result=
         )
 
     def on_mount(self) -> None:
