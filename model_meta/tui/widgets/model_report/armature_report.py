@@ -4,7 +4,7 @@ from textual.content import Content
 from model_meta.core.results import ArmatureResult
 from model_meta.core.spec import ArmatureSpec
 from model_meta.specs import parenting
-from model_meta.tui.widgets.model_report.checks_section import ChecksRow, ChecksSection
+from model_meta.tui.widgets.model_report.checks_section import TestRow, TestsSection
 
 
 class ArmatureReport(VerticalGroup):
@@ -14,17 +14,17 @@ class ArmatureReport(VerticalGroup):
         self._armature_result = armature_result
 
     def compose(self):
-        yield ChecksSection(
+        yield TestsSection(
             title="Armature",
             description="Armature health checks.",
             rows=self._generate_rows(),
             fixes=self._collect_fixes(),
         )
 
-    def _generate_rows(self) -> list[ChecksRow]:
-        rows: list[ChecksRow] = []
+    def _generate_rows(self) -> list[TestRow]:
+        rows: list[TestRow] = []
         rows.append(
-            ChecksRow(
+            TestRow(
                 "armature",
                 self._armature_spec.object_name,
                 self._armature_result.exists,
@@ -32,7 +32,7 @@ class ArmatureReport(VerticalGroup):
         )
         for bone in self._armature_spec.required_bones:
             rows.append(
-                ChecksRow(
+                TestRow(
                     bone,
                     "exists in armature",
                     bone not in self._armature_result.missing_bones,
@@ -40,7 +40,7 @@ class ArmatureReport(VerticalGroup):
             )
         for parent_pattern in self._armature_spec.parenting:
             rows.append(
-                ChecksRow(
+                TestRow(
                     parent_pattern,
                     "has expected children",
                     parent_pattern not in self._armature_result.missing_parenting_rules,
@@ -57,7 +57,7 @@ class ArmatureReport(VerticalGroup):
                     )
                 }
                 rows.append(
-                    ChecksRow(
+                    TestRow(
                         child,
                         f"child of {parent_pattern}",
                         not children.intersection(unparented),

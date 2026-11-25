@@ -23,18 +23,18 @@ class BlockProgressBar(ProgressBar):
     BAR_RENDERABLE = BlockBar
 
 
-class ChecksRow(NamedTuple):
+class TestRow(NamedTuple):
     check: str
     expected: str
     passed: bool
 
 
-class ChecksSection(VerticalGroup):
+class TestsSection(VerticalGroup):
     def __init__(
         self,
         title: str,
         description: str,
-        rows: list[ChecksRow],
+        rows: list[TestRow],
         fixes: list[str | Content],
     ):
         super().__init__()
