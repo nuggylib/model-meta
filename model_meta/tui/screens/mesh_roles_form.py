@@ -13,7 +13,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, SelectionList, Static
 
-from model_meta.core.spec import MeshRoleSpec, Spec
+from model_meta.core.spec import MeshRole, Spec
 from model_meta.specs import mesh_roles, store
 from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.mesh_role_form import MeshRoleFormScreen
@@ -271,9 +271,7 @@ class MeshRolesFormScreen(Screen):
             store.add_mesh_role(
                 self.path,
                 name,
-                MeshRoleSpec(
-                    vtx_grp=pattern, mesh_regex=regex, count=count, weight=weight
-                ),
+                MeshRole(vtx_grp=pattern, mesh_regex=regex, count=count, weight=weight),
             )
         except (OSError, ValueError) as error:
             self._status(f"Could not write the spec: {_reason(error)}")

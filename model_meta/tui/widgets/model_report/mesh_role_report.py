@@ -2,14 +2,14 @@ from textual.containers import VerticalGroup
 from textual.content import Content
 
 from model_meta.core.results import MeshRolesResult
-from model_meta.core.spec import MeshRoleSpec
+from model_meta.core.spec import MeshRole
 from model_meta.tui.widgets.model_report.checks_section import ChecksRow, ChecksSection
 
 
 class MeshRoleReport(VerticalGroup):
     def __init__(
         self,
-        mesh_roles_spec: dict[str, MeshRoleSpec],
+        mesh_roles_spec: dict[str, MeshRole],
         mesh_roles_result: MeshRolesResult,
     ):
         super().__init__()

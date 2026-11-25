@@ -8,7 +8,7 @@ from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
 from model_meta.core.godot_connection import GodotConnection
-from model_meta.core.spec import MeshRoleSpec
+from model_meta.core.spec import MeshRole
 from model_meta.specs import store as specs_store
 from model_meta.specs.store import ArmaturePatch
 from model_meta.tui.screens.armature_form import ArmatureFormScreen
@@ -816,8 +816,8 @@ def _arms(tmp_path):
         ),
     )
     role = {"mesh_regex": "^m$", "count": 1, "weight": 1.0}
-    specs_store.add_mesh_role(path, "arm", MeshRoleSpec(vtx_grp="arm.{1}", **role))
-    specs_store.add_mesh_role(path, "base", MeshRoleSpec(vtx_grp="root", **role))
+    specs_store.add_mesh_role(path, "arm", MeshRole(vtx_grp="arm.{1}", **role))
+    specs_store.add_mesh_role(path, "base", MeshRole(vtx_grp="root", **role))
     return path
 
 

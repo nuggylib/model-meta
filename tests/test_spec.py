@@ -4,7 +4,7 @@ import pytest
 
 from model_meta.core.spec import (
     ArmatureSpec,
-    MeshRoleSpec,
+    MeshRole,
     ModifiersSpec,
     RequiredModifiers,
     Spec,
@@ -57,7 +57,7 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
     spec = _spec(_FULL, tmp_path)
     assert spec.model_type == "vehicle"
     assert spec.armature.parenting == {"root": ["window_fl"]}
-    assert spec.mesh_roles["body"] == MeshRoleSpec(
+    assert spec.mesh_roles["body"] == MeshRole(
         vtx_grp="body",
         mesh_regex="^body",
         count=1,
@@ -65,7 +65,7 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
         texture_maps=["albedo"],
         material_slots=["paint", "glass"],
     )
-    assert spec.mesh_roles["window_fl"] == MeshRoleSpec(
+    assert spec.mesh_roles["window_fl"] == MeshRole(
         vtx_grp="window_fl", mesh_regex="^window_fl"
     )
     assert spec.modifiers == ModifiersSpec(
@@ -78,7 +78,7 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
 
 def test_an_empty_role_has_every_field_absent(tmp_path):
     spec = _spec(_with_role({}), tmp_path)
-    assert spec.mesh_roles["body"] == MeshRoleSpec()
+    assert spec.mesh_roles["body"] == MeshRole()
     assert spec.to_dict()["mesh_roles"]["body"] == {}
 
 

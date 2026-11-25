@@ -16,7 +16,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, SelectionList, Static
 
-from model_meta.core.spec import MeshRoleSpec, Spec
+from model_meta.core.spec import MeshRole, Spec
 from model_meta.specs import mesh_roles, schema, store
 from model_meta.tui.widgets.field_list import FieldList
 
@@ -487,7 +487,7 @@ class MeshRoleFormScreen(Screen[str]):
 
 
 def _field_lines(
-    role: MeshRoleSpec, required: Sequence[str]
+    role: MeshRole, required: Sequence[str]
 ) -> tuple[list[str], list[tuple[str, int]]]:
     """`key: value` per field, any description beneath; required fields first."""
     slots = ["material_slots"] if role.material_slots else []
@@ -502,25 +502,21 @@ def _field_lines(
     return keys, lines
 
 
-def _mesh_regex_lines(
-    role: MeshRoleSpec, required: Sequence[str]
-) -> list[tuple[str, int]]:
+def _mesh_regex_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
     lines = [(f"mesh_regex: {role.mesh_regex or 'not set'}", 0)]
     if not role.mesh_regex:
         lines.append(("required: the meshes in this role", 1))
     return lines
 
 
-def _vtx_grp_lines(
-    role: MeshRoleSpec, required: Sequence[str]
-) -> list[tuple[str, int]]:
+def _vtx_grp_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
     lines = [(f"vtx_grp: {role.vtx_grp or 'not set'}", 0)]
     if role.vtx_grp:
         lines.append((_matches(role.vtx_grp, required), 1))
     return lines
 
 
-def _count_lines(role: MeshRoleSpec, required: Sequence[str]) -> list[tuple[str, int]]:
+def _count_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
     count = role.count
     lines = [(f"count: {'not set' if count is None else count}", 0)]
     if count is None:
@@ -528,7 +524,7 @@ def _count_lines(role: MeshRoleSpec, required: Sequence[str]) -> list[tuple[str,
     return lines
 
 
-def _weight_lines(role: MeshRoleSpec, required: Sequence[str]) -> list[tuple[str, int]]:
+def _weight_lines(role: MeshRole, required: Sequence[str]) -> list[tuple[str, int]]:
     if role.weight is None:
         return [
             ("weight: not set", 0),
@@ -538,14 +534,14 @@ def _weight_lines(role: MeshRoleSpec, required: Sequence[str]) -> list[tuple[str
 
 
 def _texture_maps_lines(
-    role: MeshRoleSpec, required: Sequence[str]
+    role: MeshRole, required: Sequence[str]
 ) -> list[tuple[str, int]]:
     maps = role.texture_maps
     return [(f"texture_maps: {', '.join(maps) if maps else 'none'}", 0)]
 
 
 def _material_slots_lines(
-    role: MeshRoleSpec, required: Sequence[str]
+    role: MeshRole, required: Sequence[str]
 ) -> list[tuple[str, int]]:
     slots_text = mesh_roles.format_material_slots(role.material_slots)
     return [(f"material_slots: {slots_text}", 0)]

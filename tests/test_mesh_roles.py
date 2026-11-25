@@ -2,7 +2,7 @@
 
 import pytest
 
-from model_meta.core.spec import MeshRoleSpec
+from model_meta.core.spec import MeshRole
 from model_meta.specs import bones, mesh_roles, schema
 
 REQUIRED = [
@@ -280,9 +280,9 @@ def test_infer_vtx_grp_names_the_bones_it_would_also_match():
 # --- stale_roles -----------------------------------------------------------
 
 ROLES = {
-    "body": MeshRoleSpec(vtx_grp="body"),
-    "arm": MeshRoleSpec(vtx_grp="arm.{1}"),
-    "window_fl": MeshRoleSpec(),
+    "body": MeshRole(vtx_grp="body"),
+    "arm": MeshRole(vtx_grp="arm.{1}"),
+    "window_fl": MeshRole(),
 }
 
 

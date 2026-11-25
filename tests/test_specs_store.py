@@ -10,7 +10,7 @@ from dataclasses import replace
 
 import pytest
 
-from model_meta.core.spec import MeshRoleSpec
+from model_meta.core.spec import MeshRole
 from model_meta.specs import naming, schema, store
 from model_meta.specs.store import ArmaturePatch
 
@@ -424,9 +424,7 @@ def test_update_armature_refuses_a_malformed_spec_and_writes_nothing(tmp_path):
 
 
 def _role(vtx_grp, mesh_regex, count=1, weight=1.0):
-    return MeshRoleSpec(
-        vtx_grp=vtx_grp, mesh_regex=mesh_regex, count=count, weight=weight
-    )
+    return MeshRole(vtx_grp=vtx_grp, mesh_regex=mesh_regex, count=count, weight=weight)
 
 
 def test_add_mesh_role_writes_the_role(tmp_path):
@@ -523,7 +521,7 @@ def test_update_mesh_role_passes_the_role_as_just_read(tmp_path):
 
     store.update_mesh_role(path, "wheel", "wheel", edit)
 
-    assert seen == [MeshRoleSpec(vtx_grp="wheel.{1}", weight=1.0)]
+    assert seen == [MeshRole(vtx_grp="wheel.{1}", weight=1.0)]
 
 
 def test_update_mesh_role_replaces_the_vtx_grp_in_place(tmp_path):

@@ -29,7 +29,12 @@ from model_meta.core.blender_bridge import (
 )
 from model_meta.core.blender_connection import BlenderConnection
 from model_meta.core.results import Results, TextureMapOverride
-from model_meta.core.spec import ArmatureSpec, MeshRoleSpec, ModifiersSpec, Spec
+from model_meta.core.spec import (
+    ArmatureSpec,
+    MeshRolesSpec,
+    ModifiersSpec,
+    Spec,
+)
 from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
@@ -61,9 +66,9 @@ class ModelReportScreen(Layout):
         self.spec_path = spec_path
         self.results_path = results_path
         self.results_changed: Signal[Results | None] = Signal(self, "results_changed")
-        self._armature = ArmatureSpec()
-        self._roles: dict[str, MeshRoleSpec] = {}
-        self._modifiers = ModifiersSpec()
+        self._armature_spec = ArmatureSpec()
+        self._mesh_roles_spec: MeshRolesSpec
+        self._modifiers_spec = ModifiersSpec()
         self._rows: list[Row] = []
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
@@ -77,9 +82,9 @@ class ModelReportScreen(Layout):
             spec = Spec.load(self.spec_path)
         except (OSError, ValueError):
             spec = None
-        self._armature = spec.armature if spec else ArmatureSpec()
-        self._roles = dict(spec.mesh_roles) if spec else {}
-        self._modifiers = spec.modifiers if spec else ModifiersSpec()
+        self._armature_spec = spec.armature if spec else ArmatureSpec()
+        self._mesh_roles_spec = spec.mesh_roles if spec else {}
+        self._modifiers_spec = spec.modifiers if spec else ModifiersSpec()
         self._load_results()
         self._rows = self._items()
         with VerticalGroup(classes="layout-heading-content"):
@@ -91,10 +96,10 @@ class ModelReportScreen(Layout):
                 label="File Path", val=self._file_path_text(), val_id="file-path"
             )
         yield ArmatureReport(
-            armature_spec=self._armature, armature_result=self.results.armature
+            armature_spec=self._armature_spec, armature_result=self.results.armature
         )
         yield MeshRoleReport(
-            mesh_roles_spec=spec.mesh_roles, mesh_roles_result=
+            mesh_roles_spec=spec.mesh_roles, mesh_roles_result=self.results.mesh_roles
         )
 
     def on_mount(self) -> None:
@@ -120,7 +125,7 @@ class ModelReportScreen(Layout):
         self.app.push_screen(CheckDetailScreen(self, (field,), (_ROOTS[field],)))
 
     def texture_maps(self, role: str) -> list[str]:
-        return self._roles[role].texture_maps or []
+        return self._mesh_roles_spec[role].texture_maps or []
 
     def add_texture_map_override(self, role: str, override: TextureMapOverride) -> None:
         self._change_overrides(role, lambda overrides: [*overrides, override], "saved")
@@ -182,7 +187,9 @@ class ModelReportScreen(Layout):
                 )
                 group.create_task(
                     self._follow(
-                        subscribe_meshes(partial(mesh_roles.plan, self._roles)),
+                        subscribe_meshes(
+                            partial(mesh_roles.plan, self._mesh_roles_spec)
+                        ),
                         self._check_mesh_roles,
                     )
                 )
@@ -211,17 +218,21 @@ class ModelReportScreen(Layout):
     def _check_armature(self, message: Armatures) -> None:
         # busy (`None`): keep the last result
         if message.armatures is not None:
-            self._save(armature=armature.evaluate(self._armature, message.armatures))
+            self._save(
+                armature=armature.evaluate(self._armature_spec, message.armatures)
+            )
 
     def _check_mesh_roles(self, report: MeshReport) -> None:
         self._report = report
         overrides = {} if self.results is None else self.results.texture_map_overrides
-        roles = mesh_roles.evaluate(self._roles, report, overrides)
+        roles = mesh_roles.evaluate(self._mesh_roles_spec, report, overrides)
         # An add-on before 0.4.0: keep the stored modifier results.
         if report.modifiers is None:
             self._save(mesh_roles=roles)
             return
-        checked, roles = modifiers.evaluate(self._modifiers, roles, report.modifiers)
+        checked, roles = modifiers.evaluate(
+            self._modifiers_spec, roles, report.modifiers
+        )
         self._save(mesh_roles=roles, modifiers=checked)
 
     def watch_results(self) -> None:
@@ -315,7 +326,7 @@ class ModelReportScreen(Layout):
         return [
             (0, f"{_ROOTS['armature']}", ("armature",)),
             (0, f"{_ROOTS['mesh_roles']}", ("mesh_roles",)),
-            *((1, name, ("mesh_roles", name)) for name in self._roles),
+            *((1, name, ("mesh_roles", name)) for name in self._mesh_roles_spec),
             (0, _ROOTS["modifiers"], ("modifiers",)),
             (1, "Required:", ("modifiers", "required")),
             (2, "Skinned Meshes", ("modifiers", "required", "skinned_meshes")),

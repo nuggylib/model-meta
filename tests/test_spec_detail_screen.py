@@ -16,7 +16,7 @@ from model_meta.app import ModelMetaApp
 from model_meta.config import store as config_store
 from model_meta.config.settings import Settings
 from model_meta.core.godot_connection import GodotConnection
-from model_meta.core.spec import MeshRoleSpec
+from model_meta.core.spec import MeshRole
 from model_meta.specs import schema
 from model_meta.specs import store as specs_store
 from model_meta.specs.store import ArmaturePatch
@@ -28,7 +28,7 @@ from model_meta.tui.screens.spec_detail import SpecDetailScreen
 from model_meta.tui.screens.specs import SpecsScreen
 from model_meta.tui.widgets.selectable_row import SelectableRow
 
-_BODY_ROLE = MeshRoleSpec(vtx_grp="body", mesh_regex="^m$", count=1, weight=1.0)
+_BODY_ROLE = MeshRole(vtx_grp="body", mesh_regex="^m$", count=1, weight=1.0)
 
 
 def _text(widget):
