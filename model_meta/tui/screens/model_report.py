@@ -47,9 +47,6 @@ from model_meta.tui.widgets.selectable_row import SelectableRow
 # Each root row's results file key, and the title its detail screen shows.
 _ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modifiers"}
 
-# depth, text, and the row's key path in the results file (`None`: never checked).
-Row = tuple[int, str, tuple[str, ...] | None]
-
 
 class ModelReportScreen(Layout):
     """Pushed as an instance, like `SpecDetailScreen`: it is per model and spec."""
@@ -69,7 +66,6 @@ class ModelReportScreen(Layout):
         self._armature_spec = ArmatureSpec()
         self._mesh_roles_spec: MeshRolesSpec
         self._modifiers_spec = ModifiersSpec()
-        self._rows: list[Row] = []
         # The model's last scene report, re-checked when an override is saved.
         self._report: MeshReport | None = None
         self.description = (
