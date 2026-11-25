@@ -9,9 +9,6 @@ from model_meta.tui.widgets.model_report.checks_section import ChecksRow, Checks
 
 
 class ArmatureReport(VerticalGroup):
-    _armature_spec: Armature
-    _armature_result: ArmatureResult
-
     def __init__(self, armature_spec: Armature, armature_result: ArmatureResult):
         super().__init__()
         self._armature_spec = armature_spec
