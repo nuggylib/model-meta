@@ -86,7 +86,6 @@ class ModelReportScreen(Layout):
         self._mesh_roles_spec = spec.mesh_roles if spec else {}
         self._modifiers_spec = spec.modifiers if spec else ModifiersSpec()
         self._load_results()
-        self._rows = self._items()
         with VerticalGroup(classes="layout-heading-content"):
             yield LabeledField(
                 label="Spec",
@@ -321,18 +320,6 @@ class ModelReportScreen(Layout):
                 return
             if self._rows[child][0] == depth + 1:
                 yield child
-
-    def _items(self) -> list[Row]:
-        return [
-            (0, f"{_ROOTS['armature']}", ("armature",)),
-            (0, f"{_ROOTS['mesh_roles']}", ("mesh_roles",)),
-            *((1, name, ("mesh_roles", name)) for name in self._mesh_roles_spec),
-            (0, _ROOTS["modifiers"], ("modifiers",)),
-            (1, "Required:", ("modifiers", "required")),
-            (2, "Skinned Meshes", ("modifiers", "required", "skinned_meshes")),
-            (1, "Warnings", ("modifiers", "warn")),
-            (1, "Blocked", ("modifiers", "fail")),
-        ]
 
 
 def _is_model(open_file: str | None, model: Path) -> bool:
