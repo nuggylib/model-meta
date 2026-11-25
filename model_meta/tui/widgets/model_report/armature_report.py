@@ -75,8 +75,6 @@ class ArmatureReport(VerticalGroup):
     # Bone names go in as template variables, which are inserted as plain text,
     # because escape() misses uppercase tags like [L].
     def _collect_fixes(self) -> list[str | Content]:
-        if self._get_number_of_checks() == self._get_number_of_passing_checks():
-            return ["All armature checks are passing!"]
         armature_issues: list[str | Content] = []
         for missing_bone in self._armature_result.missing_bones:
             armature_issues.append(
@@ -102,11 +100,7 @@ class ArmatureReport(VerticalGroup):
                     bones,
                 )
             )
-        width = len(str(len(armature_issues)))
-        return [
-            Content.assemble(f"{n:>{width}}). ", issue)
-            for n, issue in enumerate(armature_issues, start=1)
-        ]
+        return armature_issues
 
     def _get_number_of_checks(self):
         check_count = 1  # always starts at 1; the "armature existence" check

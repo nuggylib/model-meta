@@ -62,7 +62,7 @@ class ChecksSection(VerticalGroup):
                 with VerticalGroup():
                     yield Static(content="Recommended Fixes", classes="column-heading")
                     with VerticalScroll(classes="fixes-panel"):
-                        for fix in self._fixes:
+                        for fix in self._generate_fixes_content():
                             yield Static(fix)
 
     def on_mount(self) -> None:
@@ -84,3 +84,8 @@ class ChecksSection(VerticalGroup):
             Text(expected, style=theme["secondary"]),
             Text(label, style=theme[color]),
         )
+
+    def _generate_fixes_content(self):
+        if len(self._fixes) == 0:
+            return ["All checks are passing!"]
+        return [Content.assemble("- ", fix) for fix in self._fixes]
