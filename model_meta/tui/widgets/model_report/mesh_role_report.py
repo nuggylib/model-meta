@@ -36,16 +36,30 @@ class MeshRoleReport(VerticalGroup):
             result = self._mesh_roles_result[role]
             vtx_grp_rows.append(
                 TestRow(
-                    f"{role} > vertex group",
+                    f"vertex group > {role}",
                     "vertices assigned",
                     result.vtx_grp.passed,
                 )
             )
             count_rows.append(
                 TestRow(
-                    f"{role} > mesh count",
+                    f"mesh count > {role}",
                     f"expects {self._mesh_roles_spec[role].count | 0} meshes",
                     result.count.passed,
+                )
+            )
+            weight_rows.append(
+                TestRow(
+                    f"weight > {role}",
+                    "vertices at correct weight",
+                    result.weight.passed,
+                )
+            )
+            texture_map_rows.append(
+                TestRow(
+                    f"maps > {role}",
+                    "meshes have all maps",
+                    result.texture_maps.passed,
                 )
             )
 
