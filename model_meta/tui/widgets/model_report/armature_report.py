@@ -1,27 +1,11 @@
-from rich.text import Text
-from textual.containers import HorizontalGroup, VerticalGroup, VerticalScroll
+from textual.containers import VerticalGroup
 from textual.content import Content
-from textual.renderables.bar import Bar
-from textual.widgets import DataTable, ProgressBar, Static
+from textual.widgets import ProgressBar
 
 from model_meta.core.results import ArmatureResult
 from model_meta.core.spec import Armature
 from model_meta.specs import parenting
-from model_meta.tui.widgets.section_description import SectionDescription
-
-# Theme variable names, not markup: DataTable renders cells with Rich, which
-# can't resolve `$success`.
-_RESULTS = {True: ("PASS", "success"), False: ("FAIL", "error")}
-
-
-class BlockBar(Bar):
-    HALF_BAR_LEFT = "▐"
-    BAR = "█"
-    HALF_BAR_RIGHT = "▌"
-
-
-class BlockProgressBar(ProgressBar):
-    BAR_RENDERABLE = BlockBar
+from model_meta.tui.widgets.model_report.checks_section import ChecksRow, ChecksSection
 
 
 class ArmatureReport(VerticalGroup):
@@ -34,53 +18,39 @@ class ArmatureReport(VerticalGroup):
         self._armature_result = armature_result
 
     def compose(self):
-        with VerticalGroup():
-            yield SectionDescription(
-                label="Armature",
-                description="Armature health checks.",
-            )
-            with HorizontalGroup(classes="columns"):
-                with VerticalGroup():
-                    yield BlockProgressBar(
-                        total=self._get_number_of_checks(),
-                        show_eta=False,
-                        classes="section-progress-bar",
-                    )
-                    yield DataTable(classes="armature-checks")
-                with VerticalGroup():
-                    yield Static(content="Recommended Fixes", classes="column-heading")
-                    with VerticalScroll(classes="fixes-panel"):
-                        for fix in self._collect_fixes():
-                            yield Static(fix)
+        yield ChecksSection(
+            title="Armature",
+            description="Armature health checks",
+            total_check_count=self._get_number_of_checks(),
+            rows=self._generate_rows(),
+            fixes=self._collect_fixes(),
+        )
 
     def on_mount(self) -> None:
         self.query_one(ProgressBar).update(
             progress=self._get_number_of_passing_checks()
         )
-        table = self.query_one(DataTable)
-        table.add_columns("Check", "Expected", "Result")
-        table.add_row(
-            *self._row(
-                "Armature",
+
+    def _generate_rows(self) -> list[ChecksRow]:
+        rows: list[ChecksRow] = []
+        rows.append(
+            ChecksRow(
+                "armature",
                 self._armature_spec.object_name,
                 self._armature_result.exists,
             )
         )
-        required_bone_rows = []
         for bone in self._armature_spec.required_bones:
-            required_bone_rows.append(
-                self._row(
+            rows.append(
+                ChecksRow(
                     bone,
                     "exists in armature",
                     bone not in self._armature_result.missing_bones,
                 )
             )
-        table.add_rows(required_bone_rows)
-        parent_pattern_rows = []
-        child_pattern_rows = []
         for parent_pattern in self._armature_spec.parenting:
-            parent_pattern_rows.append(
-                self._row(
+            rows.append(
+                ChecksRow(
                     parent_pattern,
                     "has expected children",
                     parent_pattern not in self._armature_result.missing_parenting_rules,
@@ -96,24 +66,14 @@ class ArmatureReport(VerticalGroup):
                         {parent_pattern: [child]}, self._armature_spec.required_bones
                     )
                 }
-                child_pattern_rows.append(
-                    self._row(
+                rows.append(
+                    ChecksRow(
                         child,
                         f"child of {parent_pattern}",
                         not children.intersection(unparented),
                     )
                 )
-        table.add_rows(parent_pattern_rows)
-        table.add_rows(child_pattern_rows)
-
-    def _row(self, check: str, expected: str, passed: bool) -> tuple[Text, ...]:
-        label, color = _RESULTS[passed]
-        theme = self.app.theme_variables
-        return (
-            Text(check, style=theme["primary"]),
-            Text(expected, style=theme["secondary"]),
-            Text(label, style=theme[color]),
-        )
+        return rows
 
     # Bone names go in as template variables, which are inserted as plain text,
     # because escape() misses uppercase tags like [L].
