@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import replace
 from functools import partial
@@ -40,9 +40,6 @@ from model_meta.tui.widgets.app_footer import BlenderStatus
 from model_meta.tui.widgets.labeled_field import LabeledField
 from model_meta.tui.widgets.model_report.armature_report import ArmatureReport
 from model_meta.tui.widgets.model_report.mesh_role_report import MeshRoleReport
-
-# Each root row's results file key, and the title its detail screen shows.
-_ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modifiers"}
 
 
 class ModelReportScreen(Layout):
@@ -87,12 +84,16 @@ class ModelReportScreen(Layout):
             yield LabeledField(
                 label="File Path", val=self._file_path_text(), val_id="file-path"
             )
-        yield ArmatureReport(
-            armature_spec=self._armature_spec, armature_result=self.results.armature
-        )
-        yield MeshRoleReport(
-            mesh_roles_spec=spec.mesh_roles, mesh_roles_result=self.results.mesh_roles
-        )
+        results = self.results
+        if results is not None and results.armature is not None:
+            yield ArmatureReport(
+                armature_spec=self._armature_spec, armature_result=results.armature
+            )
+        if results is not None and results.mesh_roles is not None:
+            yield MeshRoleReport(
+                mesh_roles_spec=self._mesh_roles_spec,
+                mesh_roles_result=results.mesh_roles,
+            )
 
     def on_mount(self) -> None:
         self._refresh()
@@ -284,17 +285,6 @@ class ModelReportScreen(Layout):
             self.query_one("#file-path", Static).update(self._file_path_text())
         except NoMatches:
             pass
-
-    def _get_text_for_row(self, index: int) -> str:
-        return self._rows[index][1]
-
-    def _children(self, index: int) -> Iterator[int]:
-        depth = self._rows[index][0]
-        for child in range(index + 1, len(self._rows)):
-            if self._rows[child][0] <= depth:
-                return
-            if self._rows[child][0] == depth + 1:
-                yield child
 
 
 def _is_model(open_file: str | None, model: Path) -> bool:

@@ -26,8 +26,8 @@ Textual, no UI.
     `stems_of(overrides)`, mapping `(mesh, map)` to the override name its
     file must start with. When two overrides name the same mesh and map, the
     first wins. `texture_file(stems, mesh, map)` is the filename the check
-    looks for. The check detail screen calls both, so its fix list names
-    the same files.
+    looks for. A fix list should call both, so it names the same files the
+    check does.
   - A role's meshes are the scene meshes whose whole name matches
     `mesh_regex` (`re.fullmatch`).
   - Each set field becomes a `FieldCheck` holding one dict of facts per

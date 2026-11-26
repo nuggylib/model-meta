@@ -18,9 +18,7 @@ in the screen that owns it.
 - `selectable_row.py` — `SelectableRow(Static, can_focus=True)`, one row a
   screen lists for the user to pick: a spec
   on the Specs screen (`key` is its `SpecEntry`, `label` its `model_type`,
-  `marker` the unreadable / mismatched note), a root check on the model
-  dashboard (`key` is its results file key, `label` its icon and text), a
-  mesh role on the check detail screen (`key` is the role name). `enter` posts
+  `marker` the unreadable / mismatched note). `enter` posts
   `SelectableRow.Selected`, whose `row` (also `control`) carries `key`. It
   carries a key rather than a screen name because what a selection does is
   the screen's call. `render` builds a Rich `Text`: `▸ <label>` as plain text,
@@ -73,8 +71,7 @@ in the screen that owns it.
   line: a bold `.field-label` `Static` (the `label` is escaped, the colon
   added) and a `Static` of `val`, which is markup or `Content` the caller
   styles. `val_id` sets the value's id, so a screen can `update` it later
-  (`#file-path`). Display-only. Used on the model report heading and the
-  armature report.
+  (`#file-path`). Display-only. Used on the model report heading.
 
 - `app_footer.py` — `AppFooter(Footer)`, the footer `Layout` composes: the
   bindings, then a `BlenderStatusLabel` that `watch`es the app's

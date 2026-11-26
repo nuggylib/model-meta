@@ -6,22 +6,11 @@ The Textual UI layer: everything the user sees and interacts with.
 - `screens/` — full-page views (`Screen` subclasses). The app navigates by
   pushing/popping screens on the stack.
 - `widgets/` — reusable widgets screens are assembled from (`SectionCard`, the
-  focusable dashboard section; `SelectableRow`, the focusable row a screen
-  lists models, specs or a model's root checks in; `FixPanel`, the "how to fix
+  focusable dashboard section; `SelectableRow`, the focusable row the Specs
+  screen lists specs in; `FixPanel`, the "how to fix
   issues" block; `FieldSummary`, the per-root-field box on the spec detail
   screen; `FieldList`, the selectable read-only field on the armature,
   mesh-roles, mesh-role and modifiers forms).
-- `status.py` — check status from a results file's JSON. A `Status` is `True`
-  (pass), `WARNING`, `False` (fail) or `None` (pending). The icons are
-  `PENDING`, `PASS`, `WARN` (⚠️, written as escapes) and `FAIL`, via
-  `icon(status)`, used by the check detail screen. `is_check` matches a `{passed, failures}` object with an
-  optional `warning` and `duplicates`. `is_armature` matches an
-  `ArmatureResult`'s four keys. `status_of(value)` returns a bool, an armature
-  result's pass (`exists` with no missing bones or parenting), a check's `passed`
-  (`WARNING` for a failing `warning` check), a container's most severe, else
-  `None`. `most_severe` ranks fail, then warning, then pending, then pass.
-  `lookup(data, path)` is the value at a key path, `None` when missing. Shared
-  by the model report and the check detail screen.
 - `theme.py` — `MCNUGGIES`, the app's Textual `Theme`, registered and set in
   `ModelMetaApp.on_mount`. Only `primary` (`#C003FF`, the studio color) is set.
   The other colors are listed commented out until each is picked against the
