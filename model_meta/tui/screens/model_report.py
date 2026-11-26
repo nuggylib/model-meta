@@ -35,13 +35,11 @@ from model_meta.core.spec import (
     ModifiersSpec,
     Spec,
 )
-from model_meta.tui.screens.check_detail import CheckDetailScreen
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.app_footer import BlenderStatus
 from model_meta.tui.widgets.labeled_field import LabeledField
 from model_meta.tui.widgets.model_report.armature_report import ArmatureReport
 from model_meta.tui.widgets.model_report.mesh_role_report import MeshRoleReport
-from model_meta.tui.widgets.selectable_row import SelectableRow
 
 # Each root row's results file key, and the title its detail screen shows.
 _ROOTS = {"armature": "Armature", "mesh_roles": "Mesh Roles", "modifiers": "Modifiers"}
@@ -113,10 +111,6 @@ class ModelReportScreen(Layout):
             and not self.bridge_connected
         ):
             self._refresh()
-
-    def on_selectable_row_selected(self, message: SelectableRow.Selected) -> None:
-        field = message.row.key
-        self.app.push_screen(CheckDetailScreen(self, (field,), (_ROOTS[field],)))
 
     def texture_maps(self, role: str) -> list[str]:
         return self._mesh_roles_spec[role].texture_maps or []
