@@ -12,7 +12,6 @@ from pathlib import Path
 from rich.markup import escape
 from textual import work
 from textual.app import ComposeResult
-from textual.containers import VerticalGroup
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.signal import Signal
@@ -66,6 +65,15 @@ class ModelReportScreen(Layout):
             " It will update each time you save or load a file in Blender."
         )
 
+    def compose_heading(self) -> ComposeResult:
+        yield LabeledField(
+            label="Spec",
+            val=f"[$primary]{escape(self.spec_path.name)}[/]",
+        )
+        yield LabeledField(
+            label="File Path", val=self._file_path_text(), val_id="file-path"
+        )
+
     def compose_body(self) -> ComposeResult:
         try:
             spec = Spec.load(self.spec_path)
@@ -75,14 +83,6 @@ class ModelReportScreen(Layout):
         self._mesh_roles_spec = spec.mesh_roles if spec else {}
         self._modifiers_spec = spec.modifiers if spec else ModifiersSpec()
         self._load_results()
-        with VerticalGroup(classes="layout-heading-content"):
-            yield LabeledField(
-                label="Spec",
-                val=f"[$primary]{escape(self.spec_path.name)}[/]",
-            )
-            yield LabeledField(
-                label="File Path", val=self._file_path_text(), val_id="file-path"
-            )
         yield Reports(self._armature_spec, self._mesh_roles_spec).data_bind(
             ModelReportScreen.results
         )

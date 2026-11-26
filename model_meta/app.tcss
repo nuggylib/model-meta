@@ -1,8 +1,19 @@
 /* Application-level styles for Model Meta. */
 
 .body {
-    margin: 1;
+    margin: 0 1 1 1;
     padding: 0 1 0 0;
+}
+
+.layout-heading-content {
+    margin: 1 1 0 1;
+    padding: 0 1 0 0;
+    border-bottom: solid $panel;
+}
+
+/* Keeps its top margin as the gap under the Header. */
+.layout-heading-content:empty {
+    border-bottom: none;
 }
 
 .layout-heading-content > * {

@@ -86,9 +86,10 @@ in the app (analogous to a route in a web app).
   `Layout` page for one model (its `.blend` path) against its spec, pushed by
   the dashboard's Models section once the model's results file names a valid
   spec. Not in `SCREENS`. Titled `Model Report > <model name>`, with a
-  description saying it updates on each Blender save or load. The heading
-  shows `Spec` (the spec file's name) and `File Path` (`#file-path`) as
-  `LabeledField`s, then `Reports` (`widgets/model_report/`), which holds an
+  description saying it updates on each Blender save or load. Its
+  `compose_heading` shows `Spec` (the spec file's name) and `File Path`
+  (`#file-path`) as `LabeledField`s, so they stay put while the body scrolls.
+  The body is `Reports` (`widgets/model_report/`), which holds an
   `ArmatureReport` and a `MeshRoleReport`, each given its part of the spec and
   of `results`. A report isn't shown while its result is `None` (an unreadable
   results file, or a check never run). The spec is read inline in
