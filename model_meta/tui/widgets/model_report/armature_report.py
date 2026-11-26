@@ -26,8 +26,11 @@ class ArmatureReport(VerticalGroup):
         )
 
     def _generate_rows(self) -> list[TestRow]:
-        rows: list[TestRow] = []
-        rows.append(
+        armature_rows: list[TestRow] = []
+        bone_existence_rows: list[TestRow] = []
+        expected_children_rows: list[TestRow] = []
+        expected_parents_rows: list[TestRow] = []
+        armature_rows.append(
             TestRow(
                 self._armature_spec.object_name,
                 "exists in blender scene",
@@ -35,7 +38,7 @@ class ArmatureReport(VerticalGroup):
             )
         )
         for bone in self._armature_spec.required_bones:
-            rows.append(
+            bone_existence_rows.append(
                 TestRow(
                     bone,
                     "exists in armature",
@@ -43,7 +46,7 @@ class ArmatureReport(VerticalGroup):
                 )
             )
         for parent_pattern in self._armature_spec.parenting:
-            rows.append(
+            expected_children_rows.append(
                 TestRow(
                     parent_pattern,
                     "has expected children",
@@ -63,14 +66,19 @@ class ArmatureReport(VerticalGroup):
                         {parent_pattern: [child]}, self._armature_spec.required_bones
                     )
                 }
-                rows.append(
+                expected_parents_rows.append(
                     TestRow(
                         child,
                         f"child of {parent_pattern}",
                         TestResult.of(not children.intersection(unparented)),
                     )
                 )
-        return rows
+        return [
+            *armature_rows,
+            *bone_existence_rows,
+            *expected_children_rows,
+            *expected_parents_rows,
+        ]
 
     # Bone names go in as template variables, which are inserted as plain text,
     # because escape() misses uppercase tags like [L].
