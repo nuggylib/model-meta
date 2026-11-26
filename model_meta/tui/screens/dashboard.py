@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -9,7 +10,7 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.content import Content
 from textual.css.query import NoMatches
-from textual.widgets import Collapsible, Link, OptionList, Static
+from textual.widgets import Collapsible, Link, OptionList, Static, TabbedContent
 
 from model_meta.core.app_connection import PathState
 from model_meta.core.results import Results
@@ -20,6 +21,7 @@ from model_meta.specs.store import SpecState
 from model_meta.tui.screens.link_spec_modal import LinkSpecModal
 from model_meta.tui.screens.model_report import ModelReportScreen
 from model_meta.tui.templates.layout import Layout
+from model_meta.tui.widgets.labeled_field import LabeledField
 from model_meta.tui.widgets.option_list_container import (
     ListEntry,
     ListOption,
@@ -33,6 +35,10 @@ if TYPE_CHECKING:
     from model_meta.config.settings import Settings
 
 
+def _count_linked(results_dir: Path, models: Sequence[Path]) -> int:
+    return sum(Results.path_for(results_dir, model).is_file() for model in models)
+
+
 class DashboardScreen(Layout):
     def __init__(self):
         super().__init__(page_title="Dashboard")
@@ -41,6 +47,8 @@ class DashboardScreen(Layout):
             " to use when preparing an asset for export into Godot. It's especially useful for games with assets"
             " that use repeating parts."
         )
+        # (total, linked) per models-directory tab index.
+        self._model_counts: dict[int, tuple[int, int]] = {}
 
     def compose_heading(self):
         with Collapsible(collapsed=True, title="ACTIVE DEVELOPMENT NOTICE (click me)"):
@@ -133,33 +141,60 @@ class DashboardScreen(Layout):
             tabs,
             highlight_last=True,
             delimiter="/",
+            details=(
+                LabeledField("Total Models", Content("—"), val_id="total-models"),
+                LabeledField("Linked Models", Content("—"), val_id="linked-models"),
+            ),
         )
         container.id = "models-list"
         return container
 
     @work(exclusive=True, group="models-scan")
     async def _scan_models(self) -> None:
-        settings = cast("ModelMetaApp", self.app).settings
+        app = cast("ModelMetaApp", self.app)
+        settings = app.settings
         if settings is None:
             return
+        self._model_counts = {}
         for idx, directory in enumerate(settings.models_directories):
             path = Path(directory).expanduser()
             if not path.is_dir():
                 continue
             try:
                 found = await asyncio.to_thread(discovery.find_blend_files, path)
+                linked = await asyncio.to_thread(_count_linked, app.results_dir, found)
             except OSError:
                 continue
             entries = [
                 ListOption(discovery.relative_label(model, path), str(model))
                 for model in found
             ]
+            self._model_counts[idx] = (len(found), linked)
             try:
                 self.query_one("#models-list", OptionListContainer).set_entries(
                     idx, entries
                 )
+                self._show_model_counts()
             except NoMatches:
                 return  # recomposed away before the scan returned
+
+    @on(TabbedContent.TabActivated, "#models-list TabbedContent")
+    def _on_models_tab_activated(self) -> None:
+        try:
+            self._show_model_counts()
+        except NoMatches:
+            return
+
+    def _show_model_counts(self) -> None:
+        """Raises `NoMatches` once unmounted."""
+        idx = self.query_one("#models-list", OptionListContainer).active_index
+        total, linked = (
+            (str(count) for count in self._model_counts[idx])
+            if idx in self._model_counts
+            else ("—", "—")
+        )
+        self.query_one("#total-models", Static).update(total)
+        self.query_one("#linked-models", Static).update(linked)
 
     @on(OptionList.OptionSelected, "#models-list OptionList")
     def _on_model_selected(self, event: OptionList.OptionSelected) -> None:

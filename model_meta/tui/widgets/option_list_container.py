@@ -7,6 +7,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalGroup
 from textual.content import Content
+from textual.widget import Widget
 from textual.widgets import OptionList, TabbedContent, TabPane
 from textual.widgets.option_list import Option
 
@@ -55,6 +56,7 @@ class OptionListContainer(VerticalGroup):
     _description: str
     _tabs: Sequence[ListTab]
     _delimiter: str | None
+    _details: Sequence[Widget]
 
     def __init__(
         self,
@@ -63,6 +65,7 @@ class OptionListContainer(VerticalGroup):
         tabs: Sequence[ListTab],
         highlight_last: bool = False,
         delimiter: str | None = None,
+        details: Sequence[Widget] = (),
     ):
         """Raises `ValueError` when `highlight_last` is set without a `delimiter`."""
         super().__init__()
@@ -72,10 +75,14 @@ class OptionListContainer(VerticalGroup):
         self._description = description
         self._tabs = tuple(tabs) or (ListTab(ADD_TAB_LABEL, ()),)
         self._delimiter = delimiter if highlight_last else None
+        self._details = tuple(details)
 
     def compose(self) -> ComposeResult:
         with VerticalGroup(classes=("options-list-container")):
             yield SectionDescription(label=self._label, description=self._description)
+            if self._details:
+                with VerticalGroup():
+                    yield from self._details
             with TabbedContent():
                 for idx, tab in enumerate(self._tabs):
                     # Content, not str: a directory name like `cars[wip]` isn't markup.
@@ -92,6 +99,11 @@ class OptionListContainer(VerticalGroup):
         options = self.query_one(f"#tab-{idx} OptionList", OptionList)
         options.clear_options()
         options.add_options(self._with_separators(entries))
+
+    @property
+    def active_index(self) -> int:
+        """Raises `NoMatches` once unmounted."""
+        return int(self.query_one(TabbedContent).active.removeprefix("tab-"))
 
     def _with_separators(self, entries: Sequence[ListEntry]) -> list[Option | None]:
         built: list[Option | None] = []
