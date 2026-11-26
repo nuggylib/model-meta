@@ -58,7 +58,7 @@ class MeshRoleReport(VerticalGroup):
             texture_map_rows.append(
                 TestRow(
                     f"maps > {role}",
-                    "meshes have all maps",
+                    "meshes have all textures",
                     result.texture_maps.passed,
                 )
             )
