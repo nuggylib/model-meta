@@ -128,9 +128,11 @@ class TestsSection(VerticalGroup):
                             yield Static(fix)
 
     def on_mount(self) -> None:
-        self.query_one(BlockProgressBar).update(
-            progress=len(self._rows) - self._count(TestResult.FAIL)
-        )
+        failures = self._count(TestResult.FAIL)
+        bar = self.query_one(BlockProgressBar)
+        bar.update(progress=len(self._rows) - failures)
+        bar.set_class(not failures, "-passed")
+        bar.set_class(bool(self._count(TestResult.WARN)), "-warned")
         table = self.query_one(DataTable)
         table.add_columns("Test", "Condition", "Result")
         table.add_rows(self._generate_rows_content())

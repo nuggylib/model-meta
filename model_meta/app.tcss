@@ -143,6 +143,25 @@ ProgressBar Bar {
     width: 1fr;
 }
 
+/* The unfilled part is drawn in the background color. */
+ProgressBar Bar > .bar--bar {
+    color: $secondary;
+    background: $secondary 30%;
+}
+
+/* Warnings still count toward 100%, so the bar only turns green without them. */
+ProgressBar.-warned Bar > .bar--complete {
+    color: $secondary;
+}
+
+ProgressBar #percentage {
+    color: $accent;
+}
+
+ProgressBar.-passed #percentage {
+    color: $success;
+}
+
 /* The rail is painted on every row and only its color changes, keeping the text
    from shifting sideways as focus moves, as on the dashboard's cards. */
 SelectableRow {
