@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, cast
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Vertical
+from textual.content import Content
 from textual.css.query import NoMatches
-from textual.widgets import OptionList, Static
+from textual.widgets import Collapsible, Link, OptionList, Static
 
 from model_meta.core.app_connection import PathState
 from model_meta.core.results import Results
@@ -40,6 +41,29 @@ class DashboardScreen(Layout):
             " to use when preparing an asset for export into Godot. It's especially useful for games with assets"
             " that use repeating parts."
         )
+
+    def compose_heading(self):
+        with Collapsible(collapsed=True, title="ACTIVE DEVELOPMENT NOTICE"):
+            yield Static(
+                Content.from_markup(
+                    "[$secondary]model-meta is undergoing active development and is subject to change. This tool is being developed"
+                    " in parallel with an internal independent game project and is being developed with opinions that are necessary"
+                    " and useful for our needs. We hope the choices we've made are generic enough for most 3D modelers to adopt"
+                    " to their own flow, but we're aware that we're only one shop. We truly appreciate our users and understand"
+                    " that everyone has different needs. If you find there is a shortcoming of some kind within model-meta, please"
+                    " open an issue or propose a change. We are open to collaboration![/]"
+                )
+            )
+            yield Link(
+                text="Report a bug",
+                url="https://github.com/nuggylib/model-meta/issues/new?labels=bug",
+                tooltip="Click to report a bug",
+            )
+            yield Link(
+                text="Request a feature",
+                url="https://github.com/nuggylib/model-meta/issues/new?labels=enhancement",
+                tooltip="Click to report a bug",
+            )
 
     def compose_body(self) -> ComposeResult:
         settings = cast("ModelMetaApp", self.app).settings
