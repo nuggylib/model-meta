@@ -76,6 +76,28 @@ class TextureMapsCheck(FieldCheck):
 
 
 @dataclass(frozen=True)
+class UvUnwrapCheck(FieldCheck):
+    """`warnings` holds a dict of facts per mesh still on a default UV map, and doesn't
+    affect `passed`."""
+
+    warnings: list[dict[str, object]] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: object, *, where: str) -> Self:
+        """Raises `ValueError` naming `where` for a malformed check."""
+        check = FieldCheck.from_dict(data, where=where)
+        warnings = data.get("warnings", [])
+        if not isinstance(warnings, list) or not all(
+            isinstance(warning, dict) for warning in warnings
+        ):
+            raise ValueError(f"`{where}.warnings` is not a list of objects.")
+        return cls(check.failures, check.warning, warnings)
+
+    def to_dict(self) -> dict:
+        return {**super().to_dict(), "warnings": self.warnings}
+
+
+@dataclass(frozen=True)
 class ArmatureResult:
     """In an armature that exists, a missing bone is only in `missing_bones`:
     the add-on can't report a parent for it. A missing armature fails every
@@ -158,13 +180,15 @@ class ModifiersResult:
 @dataclass(frozen=True)
 class MeshRoleResult:
     """`meshes` are the names `mesh_regex` matched. A `None` check's field isn't set in
-    the role's spec; `modifiers` is `None` until it has run."""
+    the role's spec, and `uv_unwrap` is `None` when `texture_maps` isn't; `modifiers`
+    is `None` until it has run."""
 
     meshes: list[str]
     count: FieldCheck | None = None
     vtx_grp: FieldCheck | None = None
     weight: FieldCheck | None = None
     texture_maps: TextureMapsCheck | None = None
+    uv_unwrap: UvUnwrapCheck | None = None
     material_slots: FieldCheck | None = None
     modifiers: ModifiersResult | None = None
     extra: dict[str, object] = field(default_factory=dict)
@@ -212,6 +236,7 @@ _ROLE_CHECKS: dict[str, type[FieldCheck]] = {
     "vtx_grp": FieldCheck,
     "weight": FieldCheck,
     "texture_maps": TextureMapsCheck,
+    "uv_unwrap": UvUnwrapCheck,
     "material_slots": FieldCheck,
 }
 _ROLE_KEYS = ("meshes", *_ROLE_CHECKS, "modifiers")

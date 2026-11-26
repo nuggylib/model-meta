@@ -55,12 +55,14 @@ Textual, no UI.
       groups, reduced to the role's matched meshes, keeping groups of two or
       more. They are set whether the check passes or fails, and are empty
       when the add-on predates `get_duplicate_meshes`.
-    - A `texture_maps` failure with `missing` also gets
-      `"has_default_uv_map": True` when the bridge reports one for that mesh
-      (a `False` is left out as noise), or its `uv_error`. It is a hint,
-      not a check: the add-on's match can't tell a deliberate layout from a
-      forgotten unwrap. Neither key is added when the report's `uvs` is
-      `None` (an add-on before 0.2.0).
+    - `uv_unwrap` runs whenever `texture_maps` does (it isn't a spec field:
+      baked maps need unwrapped UVs). A mesh with no UV map fails with
+      `{"mesh", "error": "no uv map"}` (`NO_UV_MAP`), and one the bridge
+      reports an `error` for fails with it. A mesh still on a default UV map
+      is a `{"mesh"}` in `warnings`: the add-on's match can't tell a
+      deliberate layout from a forgotten unwrap, so it warns rather than
+      fails. Any other mesh passes. With an add-on before 0.2.0 (`uvs`
+      `None`), it fails once with `OLD_UVS_ADDON`.
   - When nothing matched, every field but `count` fails with
     `"no meshes matched"` (`NO_MESHES`). A missing or non-compiling
     `mesh_regex` fails every set field with that reason.

@@ -99,6 +99,7 @@ class MeshUvs:
     """With `error` set (`"no mesh"` / `"in edit mode"`), the rest is empty."""
 
     mesh: str
+    has_uv_map: bool
     has_default_uv_map: bool
     error: str | None = None
 
@@ -510,12 +511,14 @@ def _texture_image(item: dict) -> TextureImage | None:
 
 def _mesh_uvs(item: dict) -> MeshUvs | None:
     mesh, error = item.get("mesh"), item.get("error")
-    default = item.get("has_default_uv_map")
+    maps, default = item.get("uv_maps"), item.get("has_default_uv_map")
     if not isinstance(mesh, str):
         return None
     if "error" in item:
-        return MeshUvs(mesh, False, error) if isinstance(error, str) else None
-    return MeshUvs(mesh, default) if isinstance(default, bool) else None
+        return MeshUvs(mesh, False, False, error) if isinstance(error, str) else None
+    if not isinstance(maps, list) or not isinstance(default, bool):
+        return None
+    return MeshUvs(mesh, bool(maps), default)
 
 
 def _mesh_modifiers(item: dict) -> MeshModifiers | None:

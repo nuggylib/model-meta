@@ -36,7 +36,6 @@ from model_meta.core.spec import (
     Spec,
 )
 from model_meta.tui.screens.check_detail import CheckDetailScreen
-from model_meta.tui.status import Status, lookup, most_severe, status_of
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.app_footer import BlenderStatus
 from model_meta.tui.widgets.labeled_field import LabeledField
@@ -292,22 +291,8 @@ class ModelReportScreen(Layout):
         except NoMatches:
             pass
 
-    def _get_field_status(self, index: int) -> Status:
-        data = None if self.results is None else self.results.to_dict()
-        return self._status(index, data)
-
     def _get_text_for_row(self, index: int) -> str:
         return self._rows[index][1]
-
-    def _status(self, index: int, data: dict | None) -> Status:
-        """A row with rows beneath it shows the most severe of theirs."""
-        path = self._rows[index][2]
-        if data is None or path is None or (value := lookup(data, path)) is None:
-            return None
-        children = list(self._children(index))
-        if children:
-            return most_severe(self._status(child, data) for child in children)
-        return status_of(value)
 
     def _children(self, index: int) -> Iterator[int]:
         depth = self._rows[index][0]

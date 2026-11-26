@@ -69,8 +69,10 @@ storage, and connections to the external apps Model Meta validates against.
     An older add-on skips the request and leaves its list `None`. A missing or
     unparseable version counts as older. `MeshTextures` lists every
     `TextureImage(name, filepath)` the mesh's Image Texture nodes hold
-    (`filepath` `None` when the image has no file). `MeshUvs` keeps only
-    `has_default_uv_map`; the add-on's face count and UV maps are dropped.
+    (`filepath` `None` when the image has no file). `MeshUvs` keeps
+    `has_uv_map` (the add-on's `uv_maps` is non-empty) and
+    `has_default_uv_map`. The face count and the maps themselves are dropped,
+    and a reply missing either key is skipped like any malformed item.
     `MeshModifiers` lists each Blender modifier type in stack order, repeats
     included. `duplicates` is one sorted name list per same-shape group.
     Only one request is in flight at a time. A newer revision restarts the
@@ -142,8 +144,10 @@ storage, and connections to the external apps Model Meta validates against.
   `mesh_roles` is a `MeshRolesResult`, an alias for `dict[str,
   MeshRoleResult]`. `MeshRoleResult` is one role's result: `meshes` (the
   names `mesh_regex` matched), then one field per spec role field it checks:
-  `count`, `vtx_grp`, `weight`, `texture_maps` (a `TextureMapsCheck`) and
-  `material_slots`. Each one is `None` when the spec doesn't set that field.
+  `count`, `vtx_grp`, `weight`, `texture_maps` (a `TextureMapsCheck`),
+  `uv_unwrap` (a `UvUnwrapCheck`) and `material_slots`. Each one is `None`
+  when the spec doesn't set that field. `uv_unwrap` isn't a spec field: it is
+  set exactly when `texture_maps` is, since baked maps need unwrapped UVs.
   Then come that role's own `modifiers` and `extra`. It's written as
   `{"meshes": [...], "<field>": {"passed", "failures"}, ..., "modifiers":
   {...}}`, leaving out the `None` ones. `checks` maps each set field's name
@@ -155,7 +159,9 @@ storage, and connections to the external apps Model Meta validates against.
   `FieldCheck.warning` marks a check whose failures are warnings (`warn`), and
   is written as `"warning": true` only when set. `TextureMapsCheck(FieldCheck)`
   adds `duplicates`, the role's same-shape mesh groups. It's written only when
-  non-empty and doesn't affect `passed`. Failures are fact dicts,
+  non-empty and doesn't affect `passed`. `UvUnwrapCheck(FieldCheck)` adds
+  `warnings`, one fact dict per mesh still on a default UV map. It's always
+  written and doesn't affect `passed`. Failures are fact dicts,
   stored as given. Every class's `from_dict(data, where=)` raises
   `ValueError` naming the dotted path, e.g. `mesh_roles.wheels.count.passed`.
   `checks.mesh_roles.evaluate` and `checks.modifiers.evaluate` build them.

@@ -7,6 +7,7 @@ from pathlib import PurePath
 
 from model_meta.core.blender_bridge import (
     TEXTURES_VERSION,
+    UVS_VERSION,
     MeshReport,
     MeshTarget,
     MeshTextures,
@@ -21,12 +22,15 @@ from model_meta.core.results import (
     MeshRolesResult,
     TextureMapOverride,
     TextureMapsCheck,
+    UvUnwrapCheck,
 )
 from model_meta.core.spec import MeshRole
 from model_meta.specs import parenting
 
 NO_MESHES = "no meshes matched"
 OLD_ADDON = f"add-on before {'.'.join(map(str, TEXTURES_VERSION))}"
+OLD_UVS_ADDON = f"add-on before {'.'.join(map(str, UVS_VERSION))}"
+NO_UV_MAP = "no uv map"
 
 
 def plan(
@@ -134,7 +138,7 @@ def _role_result(
 
 
 def _failed(field: str, error: str) -> FieldCheck:
-    check_type = TextureMapsCheck if field == "texture_maps" else FieldCheck
+    check_type = _CHECK_TYPES.get(field, FieldCheck)
     return check_type([{"error": error}])
 
 
@@ -205,19 +209,27 @@ def _texture_maps(
                     "mesh": mesh.name,
                     "missing": missing,
                     "expected": [expected[name] for name in missing],
-                    **_unwrap(mesh.name, scene),
                 }
             )
     return TextureMapsCheck(failures, duplicates=duplicates)
 
 
-def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
+def _uv_unwrap(
+    _role: MeshRole, matched: list[SceneMesh], scene: _Scene
+) -> UvUnwrapCheck:
     if scene.uvs is None:
-        return {}
-    result = scene.uvs[mesh]
-    if result.error is not None:
-        return {"uv_error": result.error}
-    return {"has_default_uv_map": True} if result.has_default_uv_map else {}
+        return UvUnwrapCheck([{"error": OLD_UVS_ADDON}])
+    failures = []
+    warnings = []
+    for mesh in matched:
+        result = scene.uvs[mesh.name]
+        if result.error is not None:
+            failures.append({"mesh": mesh.name, "error": result.error})
+        elif not result.has_uv_map:
+            failures.append({"mesh": mesh.name, "error": NO_UV_MAP})
+        elif result.has_default_uv_map:
+            warnings.append({"mesh": mesh.name})
+    return UvUnwrapCheck(failures, warnings=warnings)
 
 
 def _material_slots(
@@ -237,8 +249,10 @@ _CHECKS = (
     ("vtx_grp", lambda role: role.vtx_grp is not None, _vtx_grp),
     ("weight", lambda role: role.weight is not None, _weight),
     ("texture_maps", lambda role: bool(role.texture_maps), _texture_maps),
+    ("uv_unwrap", lambda role: bool(role.texture_maps), _uv_unwrap),
     ("material_slots", lambda role: bool(role.material_slots), _material_slots),
 )
+_CHECK_TYPES = {"texture_maps": TextureMapsCheck, "uv_unwrap": UvUnwrapCheck}
 
 
 def _matched(
