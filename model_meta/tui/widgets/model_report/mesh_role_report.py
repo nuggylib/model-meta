@@ -58,7 +58,7 @@ class MeshRoleReport(VerticalGroup):
                 weight_rows.append(
                     TestRow(
                         f"weight > {role}",
-                        "vertices at correct weight",
+                        "correct weight(s)",
                         TestResult.of(result.weight.passed),
                     )
                 )
@@ -66,7 +66,7 @@ class MeshRoleReport(VerticalGroup):
                 texture_map_rows.append(
                     TestRow(
                         f"maps > {role}",
-                        "meshes have all textures",
+                        "has all textures",
                         TestResult.of(result.texture_maps.passed),
                     )
                 )
@@ -82,7 +82,7 @@ class MeshRoleReport(VerticalGroup):
                     else:
                         uv_result = TestResult.PASS
                     uv_unwrap_rows.append(
-                        TestRow(f"UV > {role} > {mesh}", "has a UV map", uv_result)
+                        TestRow(f"UV > {mesh}", "has a UV map", uv_result)
                     )
 
         return [
