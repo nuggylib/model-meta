@@ -7,6 +7,10 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalGroup
 from textual.content import Content
+from textual.css.styles import RulesMap
+from textual.strip import Strip
+from textual.style import Style
+from textual.visual import RenderOptions, Visual
 from textual.widget import Widget
 from textual.widgets import OptionList, TabbedContent, TabPane
 from textual.widgets.option_list import Option
@@ -26,6 +30,43 @@ class _Options(OptionList):
         Binding("k", "cursor_up", "Move", show=False),
     ]
 
+    def watch_highlighted(self, old: int | None, new: int | None) -> None:
+        super().watch_highlighted(new)
+        for idx, focused in ((old, False), (new, True)):
+            # `old` can outlive a `clear_options`.
+            if idx is None or idx >= self.option_count:
+                continue
+            prompt = self.get_option_at_index(idx).prompt
+            if isinstance(prompt, _SplitRow):
+                self.replace_option_prompt_at_index(idx, prompt.focused(focused))
+
+
+class _SplitRow(Visual):
+    def __init__(self, left: Content, detail: str, focused: bool = False):
+        self._left = left
+        self._detail = detail
+        self._right = Content.styled(
+            f"({detail})", "$secondary" if focused else "$accent"
+        )
+
+    def focused(self, focused: bool) -> "_SplitRow":
+        return _SplitRow(self._left, self._detail, focused)
+
+    def render_strips(
+        self, width: int, height: int | None, style: Style, options: RenderOptions
+    ) -> list[Strip]:
+        room = max(width - self._right.cell_length - 2, 0)
+        row = Content.assemble(
+            self._left.truncate(room, ellipsis=True, pad=True), " ", self._right, " "
+        )
+        return row.render_strips(width, height, style, options)
+
+    def get_optimal_width(self, rules: RulesMap, container_width: int) -> int:
+        return self._left.cell_length + 2 + self._right.cell_length
+
+    def get_height(self, rules: RulesMap, width: int) -> int:
+        return 1
+
 
 @dataclass(frozen=True)
 class ListOption:
@@ -33,6 +74,8 @@ class ListOption:
     label: str
     # The value that the options corresponds to
     value: str
+    # Shown against the row's right edge in $accent
+    detail: str | None = None
 
 
 # None is excluded as an option since the component adds them automatically between rows; callers
@@ -111,7 +154,10 @@ class OptionListContainer(VerticalGroup):
             # Add a separator before every entry EXCEPT the first one (idx = 0 fails the check)
             if idx:
                 built.append(None)
-            built.append(Option(self._prompt(entry.label), id=entry.value))
+            prompt = self._prompt(entry.label)
+            if entry.detail is not None:
+                prompt = _SplitRow(prompt, entry.detail)
+            built.append(Option(prompt, id=entry.value))
         return built
 
     def _prompt(self, label: str) -> Content:

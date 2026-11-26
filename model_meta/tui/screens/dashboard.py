@@ -35,8 +35,15 @@ if TYPE_CHECKING:
     from model_meta.config.settings import Settings
 
 
-def _count_linked(results_dir: Path, models: Sequence[Path]) -> int:
-    return sum(Results.path_for(results_dir, model).is_file() for model in models)
+def _linked_specs(results_dir: Path, models: Sequence[Path]) -> dict[Path, str]:
+    """Models without a readable results file are left out."""
+    specs: dict[Path, str] = {}
+    for model in models:
+        try:
+            specs[model] = Results.load(Results.path_for(results_dir, model)).spec
+        except (OSError, ValueError):
+            continue
+    return specs
 
 
 class DashboardScreen(Layout):
@@ -162,14 +169,16 @@ class DashboardScreen(Layout):
                 continue
             try:
                 found = await asyncio.to_thread(discovery.find_blend_files, path)
-                linked = await asyncio.to_thread(_count_linked, app.results_dir, found)
+                specs = await asyncio.to_thread(_linked_specs, app.results_dir, found)
             except OSError:
                 continue
             entries = [
-                ListOption(discovery.relative_label(model, path), str(model))
+                ListOption(
+                    discovery.relative_label(model, path), str(model), specs.get(model)
+                )
                 for model in found
             ]
-            self._model_counts[idx] = (len(found), linked)
+            self._model_counts[idx] = (len(found), len(specs))
             try:
                 self.query_one("#models-list", OptionListContainer).set_entries(
                     idx, entries
