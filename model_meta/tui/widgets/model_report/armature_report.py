@@ -4,7 +4,11 @@ from textual.content import Content
 from model_meta.core.results import ArmatureResult
 from model_meta.core.spec import ArmatureSpec
 from model_meta.specs import parenting
-from model_meta.tui.widgets.model_report.tests_section import TestRow, TestsSection
+from model_meta.tui.widgets.model_report.tests_section import (
+    TestResult,
+    TestRow,
+    TestsSection,
+)
 
 
 class ArmatureReport(VerticalGroup):
@@ -27,7 +31,7 @@ class ArmatureReport(VerticalGroup):
             TestRow(
                 self._armature_spec.object_name,
                 "exists in blender scene",
-                self._armature_result.exists,
+                TestResult.of(self._armature_result.exists),
             )
         )
         for bone in self._armature_spec.required_bones:
@@ -35,7 +39,7 @@ class ArmatureReport(VerticalGroup):
                 TestRow(
                     bone,
                     "exists in armature",
-                    bone not in self._armature_result.missing_bones,
+                    TestResult.of(bone not in self._armature_result.missing_bones),
                 )
             )
         for parent_pattern in self._armature_spec.parenting:
@@ -43,7 +47,10 @@ class ArmatureReport(VerticalGroup):
                 TestRow(
                     parent_pattern,
                     "has expected children",
-                    parent_pattern not in self._armature_result.missing_parenting_rules,
+                    TestResult.of(
+                        parent_pattern
+                        not in self._armature_result.missing_parenting_rules
+                    ),
                 )
             )
             unparented = self._armature_result.missing_parenting_rules.get(
@@ -60,7 +67,7 @@ class ArmatureReport(VerticalGroup):
                     TestRow(
                         child,
                         f"child of {parent_pattern}",
-                        not children.intersection(unparented),
+                        TestResult.of(not children.intersection(unparented)),
                     )
                 )
         return rows

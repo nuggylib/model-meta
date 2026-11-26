@@ -88,15 +88,15 @@ in the app (analogous to a route in a web app).
   spec. Not in `SCREENS`. Titled `Model Report > <model name>`, with a
   description saying it updates on each Blender save or load. The heading
   shows `Spec` (the spec file's name) and `File Path` (`#file-path`) as
-  `LabeledField`s, then an `ArmatureReport` and a `MeshRoleReport`
-  (`widgets/model_report/`), each given its part of the spec and of
-  `results`. A report isn't shown while its result is `None` (an unreadable
+  `LabeledField`s, then `Reports` (`widgets/model_report/`), which holds an
+  `ArmatureReport` and a `MeshRoleReport`, each given its part of the spec and
+  of `results`. A report isn't shown while its result is `None` (an unreadable
   results file, or a check never run). The spec is read inline in
   `compose_body`; one `Spec.load` rejects gives an empty spec.
   **Results:** the loaded file is the `results` reactive, read in
-  `compose_body`. `watch_results` publishes it on `results_changed`, a
-  Textual `Signal`. The reports are built at compose, so they show the
-  results as they were then.
+  `compose_body`. `Reports.results` is `data_bind`-ed to it and recomposes on
+  each change, so a check's first save shows its report without reopening.
+  `watch_results` also publishes it on `results_changed`, a Textual `Signal`.
   **Overrides:** nothing on the page calls these yet. `texture_maps(role)` gives a role's spec `texture_maps`.
   `add_texture_map_override(role, override)` appends one.
   `replace_texture_map_override(role, old, new)` swaps the first one equal

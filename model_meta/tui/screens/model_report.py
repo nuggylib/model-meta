@@ -38,8 +38,7 @@ from model_meta.core.spec import (
 from model_meta.tui.templates.layout import Layout
 from model_meta.tui.widgets.app_footer import BlenderStatus
 from model_meta.tui.widgets.labeled_field import LabeledField
-from model_meta.tui.widgets.model_report.armature_report import ArmatureReport
-from model_meta.tui.widgets.model_report.mesh_role_report import MeshRoleReport
+from model_meta.tui.widgets.model_report.reports import Reports
 
 
 class ModelReportScreen(Layout):
@@ -84,16 +83,9 @@ class ModelReportScreen(Layout):
             yield LabeledField(
                 label="File Path", val=self._file_path_text(), val_id="file-path"
             )
-        results = self.results
-        if results is not None and results.armature is not None:
-            yield ArmatureReport(
-                armature_spec=self._armature_spec, armature_result=results.armature
-            )
-        if results is not None and results.mesh_roles is not None:
-            yield MeshRoleReport(
-                mesh_roles_spec=self._mesh_roles_spec,
-                mesh_roles_result=results.mesh_roles,
-            )
+        yield Reports(self._armature_spec, self._mesh_roles_spec).data_bind(
+            ModelReportScreen.results
+        )
 
     def on_mount(self) -> None:
         self._refresh()
