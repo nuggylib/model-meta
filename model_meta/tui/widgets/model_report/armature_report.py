@@ -87,17 +87,16 @@ class ArmatureReport(VerticalGroup):
             parenting_rule,
             unparented_bones,
         ) in self._armature_result.missing_parenting_rules.items():
-            bones = Content(", ").join(
-                Content.from_markup("[$primary]$bone[/]", bone=bone)
-                for bone in unparented_bones
-            )
             armature_fixes.append(
                 Content.assemble(
                     Content.from_markup(
-                        "Set [b $primary]$bone[/] as the parent bone for: ",
+                        "Set [b $primary]$bone[/] as the parent bone for:",
                         bone=parenting_rule,
                     ),
-                    bones,
+                    *(
+                        Content.from_markup("\n    - [$primary]$bone[/]", bone=bone)
+                        for bone in unparented_bones
+                    ),
                 )
             )
         return armature_fixes
