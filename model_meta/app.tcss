@@ -88,6 +88,10 @@
     margin-bottom: 1;
 }
 
+Reports > * {
+    margin-bottom: 1;
+}
+
 Header {
     background: $primary;
     color: #000000;
