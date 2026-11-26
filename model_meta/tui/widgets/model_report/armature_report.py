@@ -75,9 +75,9 @@ class ArmatureReport(VerticalGroup):
     # Bone names go in as template variables, which are inserted as plain text,
     # because escape() misses uppercase tags like [L].
     def _collect_fixes(self) -> list[str | Content]:
-        armature_issues: list[str | Content] = []
+        armature_fixes: list[str | Content] = []
         for missing_bone in self._armature_result.missing_bones:
-            armature_issues.append(
+            armature_fixes.append(
                 Content.from_markup(
                     "Add bone [b $primary]$bone[/] to the armature.",
                     bone=missing_bone,
@@ -91,7 +91,7 @@ class ArmatureReport(VerticalGroup):
                 Content.from_markup("[$primary]$bone[/]", bone=bone)
                 for bone in unparented_bones
             )
-            armature_issues.append(
+            armature_fixes.append(
                 Content.assemble(
                     Content.from_markup(
                         "Set [b $primary]$bone[/] as the parent bone for: ",
@@ -100,4 +100,4 @@ class ArmatureReport(VerticalGroup):
                     bones,
                 )
             )
-        return armature_issues
+        return armature_fixes

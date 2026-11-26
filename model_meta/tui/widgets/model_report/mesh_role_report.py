@@ -94,6 +94,24 @@ class MeshRoleReport(VerticalGroup):
         ]
 
     def _collect_fixes(self) -> list[str | Content]:
-        mesh_role_issues: list[str | Content] = []
-        # TODO: Implement fix generation logic
-        return mesh_role_issues
+        vtx_grp_issues: list[str | Content] = []
+        count_issues: list[str | Content] = []
+        weight_issues: list[str | Content] = []
+        texture_map_issues: list[str | Content] = []
+        uv_unwrap_issues: list[str | Content] = []
+        # for role in self._mesh_roles_spec:
+        #     result = self._mesh_roles_result[role]
+        # if not result.vtx_grp.passed:
+        #     vtx_grp_issues.append(
+        #         Content.from_markup(
+        #             "Add bone [b $primary]$bone[/] to the armature.",
+        #             bone=missing_bone,
+        #         )
+        #     )
+        return [
+            *vtx_grp_issues,
+            *count_issues,
+            *weight_issues,
+            *texture_map_issues,
+            *uv_unwrap_issues,
+        ]
