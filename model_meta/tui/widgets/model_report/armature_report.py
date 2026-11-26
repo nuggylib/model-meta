@@ -87,16 +87,30 @@ class ArmatureReport(VerticalGroup):
             parenting_rule,
             unparented_bones,
         ) in self._armature_result.missing_parenting_rules.items():
-            armature_fixes.append(
-                Content.assemble(
+            for parent, child in self._parent_pairs(parenting_rule, unparented_bones):
+                armature_fixes.append(
                     Content.from_markup(
-                        "Set [b $primary]$bone[/] as the parent bone for:",
-                        bone=parenting_rule,
-                    ),
-                    *(
-                        Content.from_markup("\n    - [$primary]$bone[/]", bone=bone)
-                        for bone in unparented_bones
-                    ),
+                        "Set [b $primary]$parent[/] as parent for [$primary]$child[/]",
+                        parent=parent,
+                        child=child,
+                    )
                 )
-            )
         return armature_fixes
+
+    def _parent_pairs(
+        self, parenting_rule: str, unparented_bones: list[str]
+    ) -> list[tuple[str, str]]:
+        """Bones the spec no longer resolves pair with the rule itself, so a stale
+        results file still shows every unparented bone."""
+        pairs = [
+            (parent, child)
+            for parent, child in parenting.pairs(
+                {parenting_rule: self._armature_spec.parenting.get(parenting_rule, [])},
+                self._armature_spec.required_bones,
+            )
+            if child in unparented_bones
+        ]
+        resolved = {child for _, child in pairs}
+        return pairs + [
+            (parenting_rule, bone) for bone in unparented_bones if bone not in resolved
+        ]
