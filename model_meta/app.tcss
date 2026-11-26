@@ -125,6 +125,26 @@ OptionList:focus > .option-list--option-highlighted {
     color: $accent
 }
 
+Collapsible {
+    background: $background;
+}
+
+/* Textual's default is 1 0 0 3; a lone padding-right would zero the other sides. */
+Collapsible Contents {
+    padding: 1 1 0 3;
+}
+
+Collapsible Contents > * {
+    margin-bottom: 1;
+}
+
+CollapsibleTitle,
+CollapsibleTitle:hover,
+CollapsibleTitle:focus {
+    background: transparent;
+    color: $accent;
+}
+
 Button.-primary:focus {
     border: tall #FFFFFF;
 }

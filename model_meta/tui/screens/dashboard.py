@@ -43,7 +43,7 @@ class DashboardScreen(Layout):
         )
 
     def compose_heading(self):
-        with Collapsible(collapsed=True, title="ACTIVE DEVELOPMENT NOTICE"):
+        with Collapsible(collapsed=True, title="ACTIVE DEVELOPMENT NOTICE (click me)"):
             yield Static(
                 Content.from_markup(
                     "[$secondary]model-meta is undergoing active development and is subject to change. This tool is being developed"
@@ -62,7 +62,7 @@ class DashboardScreen(Layout):
             yield Link(
                 text="Request a feature",
                 url="https://github.com/nuggylib/model-meta/issues/new?labels=enhancement",
-                tooltip="Click to report a bug",
+                tooltip="Click to request a feature",
             )
 
     def compose_body(self) -> ComposeResult:
