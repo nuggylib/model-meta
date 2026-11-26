@@ -38,9 +38,7 @@ class DashboardScreen(Layout):
         self.description = (
             "Welcome to model-meta! This is a tool intended to serve as an in-depth checklist for 3D modelers"
             " to use when preparing an asset for export into Godot. It's especially useful for games with assets"
-            " that use repeating parts. When using a properly-configured spec file, model-meta helps ensure that: "
-            " (1) All meshes are present, (2) All meshes are parented to the correct bone(s), (3) All meshes have"
-            " the correct weights assigned to them, (4) All meshes are properly UV unwrapped, (5) TODO"
+            " that use repeating parts."
         )
 
     def compose_body(self) -> ComposeResult:
