@@ -1,23 +1,17 @@
-"""The confirm modal — one Yes/No question before a destructive write."""
-
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalGroup
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Static
+from textual.widget import Widget
+from textual.widgets import Button, Static
 
 
 class ConfirmModal(ModalScreen[bool]):
-    """Ask `question`; return `True` for Yes, `False` for No or `escape`.
-
-    **No** has focus on open, so a stray Enter cancels. `left`/`right` move
-    between the buttons. Writes nothing. Composes its own `Footer` and shadows
-    `q`, like `NewSpecModal`.
-    """
-
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
         Binding("left", "app.focus_previous", show=False),
@@ -25,41 +19,24 @@ class ConfirmModal(ModalScreen[bool]):
         Binding("q", "noop", show=False),
     ]
 
-    DEFAULT_CSS = """
-    ConfirmModal {
-        align: center middle;
-    }
-    ConfirmModal > Vertical {
-        width: 80%;
-        max-width: 50;
-        height: auto;
-        padding: 1 2;
-        border: round $accent;
-        background: $surface;
-    }
-    ConfirmModal #confirm-question {
-        height: auto;
-    }
-    ConfirmModal #confirm-buttons {
-        height: auto;
-        align-horizontal: right;
-    }
-    ConfirmModal #confirm-buttons Button {
-        margin: 1 0 0 1;
-    }
-    """
-
-    def __init__(self, question: str) -> None:
+    def __init__(
+        self,
+        question: str,
+        details: Sequence[Widget] = (),
+    ) -> None:
         super().__init__()
         self.question = question
+        self._details = details
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(self.question, id="confirm-question", markup=False)
+            if self._details:
+                with VerticalGroup():
+                    yield from self._details
             with Horizontal(id="confirm-buttons"):
                 yield Button("No", id="confirm-no")
-                yield Button("Yes", id="confirm-yes", variant="error")
-        yield Footer()
+                yield Button("Yes", id="confirm-yes", variant="default")
 
     def on_mount(self) -> None:
         self.query_one("#confirm-no", Button).focus()
