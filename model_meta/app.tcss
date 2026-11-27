@@ -59,6 +59,24 @@
     padding-right: 1;
 }
 
+/* Fills the rest of the body and centers its children, a line apart. Children
+   shrink to their content, or the centering wouldn't show; the max-width makes
+   long text wrap instead of running off screen. */
+.centered {
+    height: 1fr;
+    align: center middle;
+}
+
+.centered > * {
+    width: auto;
+    max-width: 100%;
+    margin-bottom: 1;
+}
+
+.centered > *:last-child {
+    margin-bottom: 0;
+}
+
 .field-label {
     width: auto;
     margin-right: 1;

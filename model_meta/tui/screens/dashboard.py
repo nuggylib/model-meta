@@ -19,6 +19,7 @@ from model_meta.core.spec import Spec
 from model_meta.models import discovery
 from model_meta.specs import store as specs_store
 from model_meta.specs.store import SpecState
+from model_meta.tui.screens.confirm_modal import ConfirmModal
 from model_meta.tui.screens.link_spec_modal import LinkSpecModal
 from model_meta.tui.screens.model_report import ModelReportScreen
 from model_meta.tui.templates.layout import Layout
@@ -38,14 +39,36 @@ if TYPE_CHECKING:
 
 
 def _linked_specs(results_dir: Path, models: Sequence[Path]) -> dict[Path, str]:
-    """Models without a readable results file are left out."""
     specs: dict[Path, str] = {}
     for model in models:
         try:
-            specs[model] = Results.load(Results.path_for(results_dir, model)).spec
+            spec = Results.load(Results.path_for(results_dir, model)).spec
         except (OSError, ValueError):
             continue
+        if spec is not None:
+            specs[model] = spec
     return specs
+
+
+_RELINK_REVERSIBLE = (
+    "This operation is reversible for this model. You can re-link your model file to"
+    " the same spec and the results will be regenerated exactly the same."
+)
+_KEPT_OVERRIDES = (
+    "Model-specific settings aren't cleared, so this model keeps its texture map"
+    " overrides with any spec you link next. Review them below:"
+)
+
+
+def _clear_link_details(results: Results) -> Static:
+    lines = [_RELINK_REVERSIBLE]
+    if results.texture_map_overrides:
+        lines.extend(["", _KEPT_OVERRIDES, "", "• texture_map_overrides"])
+        lines.extend(
+            f"  • {role}: {', '.join(override.name for override in overrides)}"
+            for role, overrides in results.texture_map_overrides.items()
+        )
+    return Static(Content.from_markup("[$accent]$text[/]", text="\n".join(lines)))
 
 
 class DashboardScreen(Layout):
@@ -237,7 +260,37 @@ class DashboardScreen(Layout):
         return super().check_action(action, parameters)
 
     def action_clear_link(self) -> None:
-        pass
+        model = self._focused_model()
+        if model is not None:
+            self._confirm_clear_link(model)
+
+    @work(exclusive=True, group="clear-link")
+    async def _confirm_clear_link(self, model: Path) -> None:
+        app = cast("ModelMetaApp", self.app)
+        results_path = Results.path_for(app.results_dir, model)
+        try:
+            results = Results.load(results_path)
+        except (OSError, ValueError):
+            self.notify(
+                f"The results file for {model.name} can't be read.", severity="error"
+            )
+            return
+        question = Content.from_markup(
+            "[b]Clear spec for [$primary]$model[/]?[/b]", model=model.name
+        )
+        confirmed = await app.push_screen_wait(
+            ConfirmModal(question, details=(_clear_link_details(results),))
+        )
+        if not confirmed:
+            return
+        try:
+            Results.load(results_path).unlinked().save()
+        except (OSError, ValueError) as error:
+            self.notify(
+                f"Couldn't clear {results_path.name}: {error}", severity="error"
+            )
+            return
+        self._scan_models()
 
     def _focused_model(self) -> Path | None:
         focused = self.focused
@@ -255,7 +308,16 @@ class DashboardScreen(Layout):
         results_path = Results.path_for(app.results_dir, model)
         try:
             spec = Results.load(results_path).spec
+            exists = True
         except FileNotFoundError:
+            spec = None
+            exists = False
+        except (OSError, ValueError):
+            self.notify(
+                f"The results file for {model.name} can't be read.", severity="error"
+            )
+            return
+        if spec is None:
             entries = await asyncio.to_thread(specs_store.list_specs, app.specs_dir)
             names = [
                 entry.model_type for entry in entries if entry.state is SpecState.OK
@@ -264,17 +326,19 @@ class DashboardScreen(Layout):
             if spec is None:
                 return
             try:
-                Results(model_file=str(model), spec=spec, path=results_path).create()
-            except OSError as error:
+                if exists:
+                    results = Results.load(results_path)
+                    results.spec = spec
+                    results.save()
+                else:
+                    Results(
+                        model_file=str(model), spec=spec, path=results_path
+                    ).create()
+            except (OSError, ValueError) as error:
                 self.notify(
                     f"Couldn't save {results_path.name}: {error}", severity="error"
                 )
                 return
-        except (OSError, ValueError):
-            self.notify(
-                f"The results file for {model.name} can't be read.", severity="error"
-            )
-            return
         try:
             spec_path = Spec.path_for(app.specs_dir, spec)
         except ValueError:

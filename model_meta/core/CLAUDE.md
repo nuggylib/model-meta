@@ -120,8 +120,9 @@ storage, and connections to the external apps Model Meta validates against.
     `modifiers` are always written.
 
 - `results.py` — `Results(JsonDocument)`, one model's results file:
-  `model_file` (the model's absolute path) and `spec` (the spec's
-  `model_type`), both required strings, then one check result per spec root
+  `model_file` (the model's absolute path, a required string) and `spec` (the
+  spec's `model_type`, or `None` when the model isn't linked, omitted on
+  write), then one check result per spec root
   field, written in this order: `armature` (an `ArmatureResult`),
   `mesh_roles` (role name → `MeshRoleResult`) and `modifiers` (a
   `ModifiersResult`). A `None` check was never run and is omitted on write. A
@@ -133,7 +134,9 @@ storage, and connections to the external apps Model Meta validates against.
   those meshes' listed maps expect `<name>_<map>.png` instead of
   `<mesh>_<map>.png`. It defaults to `{}`, is omitted while empty, and the
   mesh check never replaces it. Shape checks only: `name` must be a non-empty
-  string.
+  string. Overrides belong to the model, not the spec, so `unlinked()` keeps
+  only `model_file` and `texture_map_overrides`. It drops `spec`, every check
+  and `extra`.
   `ArmatureResult(object_name, exists, missing_bones,
   missing_parenting_rules)` is written as `{"object_name", "exists",
   "missing_bones", "missing_parenting_rules"}`, all four always.

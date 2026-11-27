@@ -5,13 +5,15 @@ from collections.abc import Sequence
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalGroup
-from textual.screen import ModalScreen
+from textual.containers import HorizontalGroup, VerticalGroup
+from textual.content import Content
 from textual.widget import Widget
 from textual.widgets import Button, Static
 
+from model_meta.tui.templates.layout import Layout
 
-class ConfirmModal(ModalScreen[bool]):
+
+class ConfirmModal(Layout):
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
         Binding("left", "app.focus_previous", show=False),
@@ -21,20 +23,18 @@ class ConfirmModal(ModalScreen[bool]):
 
     def __init__(
         self,
-        question: str,
+        question: str | Content,
         details: Sequence[Widget] = (),
     ) -> None:
-        super().__init__()
+        super().__init__(page_title="Confirm")
         self.question = question
         self._details = details
 
-    def compose(self) -> ComposeResult:
-        with Vertical():
+    def compose_body(self) -> ComposeResult:
+        with VerticalGroup(classes="centered"):
             yield Static(self.question, id="confirm-question", markup=False)
-            if self._details:
-                with VerticalGroup():
-                    yield from self._details
-            with Horizontal(id="confirm-buttons"):
+            yield from self._details
+            with HorizontalGroup(id="confirm-buttons"):
                 yield Button("No", id="confirm-no")
                 yield Button("Yes", id="confirm-yes", variant="default")
 

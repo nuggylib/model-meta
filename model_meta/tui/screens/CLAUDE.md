@@ -46,8 +46,17 @@ in the app (analogous to a route in a web app).
   **`x` (Clear link):** `check_action` shows it only while a linked
   `#models-list` row (one in `_linked_models`, filled by `_scan_models`) is
   highlighted in a focused `OptionList` (`_focused_model`);
-  `OptionHighlighted` refreshes the bindings. `action_clear_link` does nothing
-  yet.
+  `OptionHighlighted` refreshes the bindings. `action_clear_link` runs a
+  `@work(exclusive=True, group="clear-link")` worker that loads the model's
+  results file (an unreadable one is an error notice) and `push_screen_wait`s a
+  `ConfirmModal` asking `Clear spec for <model>?`. Its details are one `$accent`
+  "reversible" note. When the file has `texture_map_overrides`, the note goes on
+  to say they're kept, since they belong to the model rather than the spec, and
+  lists them by role. Yes reloads the file, saves `unlinked()` and rescans the
+  models. A failed load or save is an error notice. A results file with no
+  `spec` counts as unlinked: `_linked_specs` leaves it out, and `_open_model`
+  asks for a spec (`LinkSpecModal`) and saves it on the reloaded file, so the
+  overrides stay.
 - `specs.py` — `SpecsScreen` (`specs` in `SCREENS`), the Specs page: the
   validation specs in `specs/`, one focusable `SelectableRow` each, keyed by
   its `SpecEntry`. A `VerticalScroll` of rows (`can_focus=False`, so the rows
@@ -179,10 +188,12 @@ in the app (analogous to a route in a web app).
   the chosen name, or `None` on `escape`. The caller loads and filters
   `specs`, so the modal does no I/O. With no specs it shows `#no-specs` and
   only `escape` works. Writes nothing. Own `Footer`, `q` shadowed.
-- `confirm_modal.py` — `ConfirmModal(question)`, a generic
-  `ModalScreen[bool]`: the question (`markup=False`), **No** (focused) and
-  **Yes** buttons, `left`/`right` between them. Yes → `True`; No or `escape`
-  → `False`. Writes nothing. Own `Footer`, `q` shadowed.
+- `confirm_modal.py` — `ConfirmModal(question, details=())`, a full `Layout`
+  page titled `Confirm` that returns a bool: the question (a `str` renders with
+  `markup=False`; pass `Content` to style it), the `details` widgets, then
+  **No** (focused) and **Yes** buttons, `left`/`right` between them, all in one
+  `.centered` group. Yes → `True`; No or `escape` → `False`. Writes nothing.
+  `q` shadowed.
 - `armature_form.py` — `ArmatureFormScreen(path)`, a full `Screen` the user
   stays on to name the armature and add bone after bone. **Read-only until
   selected:** each field (`#armature-name-view`, `#bone-list`,

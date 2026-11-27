@@ -274,11 +274,8 @@ class TextureMapOverride:
 
 @dataclass
 class Results(JsonDocument):
-    """A `None` check was never run and is omitted on write. `texture_map_overrides`
-    is the user's, by role name, and is omitted while empty."""
-
     model_file: str
-    spec: str
+    spec: str | None
     armature: ArmatureResult | None = None
     mesh_roles: MeshRolesResult | None = None
     modifiers: ModifiersResult | None = None
@@ -294,13 +291,21 @@ class Results(JsonDocument):
         digest = hashlib.sha1(str(model_file).encode("utf-8")).hexdigest()[:8]
         return results_dir / f"{model_file.stem}-{digest}.json"
 
+    def unlinked(self) -> Self:
+        return type(self)(
+            model_file=self.model_file,
+            spec=None,
+            texture_map_overrides=self.texture_map_overrides,
+            path=self.path,
+        )
+
     @classmethod
     def from_dict(cls, data: dict, *, path: Path) -> Self:
         model_file = data.get("model_file")
         if not isinstance(model_file, str):
             raise ValueError("`model_file` is not a string.")
         spec = data.get("spec")
-        if not isinstance(spec, str):
+        if "spec" in data and not isinstance(spec, str):
             raise ValueError("`spec` is not a string.")
         armature = None
         if "armature" in data:
@@ -331,6 +336,7 @@ class Results(JsonDocument):
 
     def to_dict(self) -> dict:
         known = {
+            "spec": self.spec,
             "armature": None if self.armature is None else self.armature.to_dict(),
             "mesh_roles": None
             if self.mesh_roles is None
@@ -342,11 +348,10 @@ class Results(JsonDocument):
             }
             or None,
         }
-        checks = {key: value for key, value in known.items() if value is not None}
+        present = {key: value for key, value in known.items() if value is not None}
         return {
             "model_file": self.model_file,
-            "spec": self.spec,
-            **checks,
+            **present,
             **self.extra,
         }
 
