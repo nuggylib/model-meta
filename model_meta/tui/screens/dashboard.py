@@ -209,8 +209,12 @@ class DashboardScreen(Layout):
             if idx in self._model_counts
             else ("—", "—")
         )
-        self.query_one("#total-models", Static).update(total)
-        self.query_one("#linked-models", Static).update(linked)
+        self.query_one("#total-models", Static).update(
+            Content.from_markup("[$secondary]$total[/]", total=total)
+        )
+        self.query_one("#linked-models", Static).update(
+            Content.from_markup("[$secondary]$linked[/]", linked=linked)
+        )
 
     @on(OptionList.OptionSelected, "#models-list OptionList")
     def _on_model_selected(self, event: OptionList.OptionSelected) -> None:
