@@ -8,7 +8,7 @@
 .layout-heading-content {
     margin: 1 1 0 1;
     padding: 0 1 0 0;
-    border-bottom: solid $panel;
+    border-bottom: solid $secondary;
 }
 
 /* Keeps its top margin as the gap under the Header. */

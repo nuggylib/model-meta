@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import NamedTuple, TypeAlias
 
 from textual import events
 from textual.app import ComposeResult
@@ -91,10 +91,14 @@ class ListTab:
     entries: Sequence[ListEntry]
 
 
-class OptionListContainer(VerticalGroup):
-    # TODO: Update this later
-    # CSS_PATH = "option_list.tcss"
+class OptionsListContainerConfig(NamedTuple):
+    label: str
+    description: str
+    highlight_last: bool
+    delimiter: str | None
 
+
+class OptionListContainer(VerticalGroup):
     _label: str
     _description: str
     _tabs: Sequence[ListTab]
@@ -103,14 +107,12 @@ class OptionListContainer(VerticalGroup):
 
     def __init__(
         self,
-        label: str,
-        description: str,
         tabs: Sequence[ListTab],
-        highlight_last: bool = False,
-        delimiter: str | None = None,
         details: Sequence[Widget] = (),
+        config: OptionsListContainerConfig = None,
     ):
         """Raises `ValueError` when `highlight_last` is set without a `delimiter`."""
+        label, description, highlight_last, delimiter = config
         super().__init__()
         if highlight_last and not delimiter:
             raise ValueError("highlight_last requires a delimiter")

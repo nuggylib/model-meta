@@ -27,6 +27,7 @@ from model_meta.tui.widgets.option_list_container import (
     ListOption,
     ListTab,
     OptionListContainer,
+    OptionsListContainerConfig,
 )
 from model_meta.tui.widgets.section_card import SectionCard
 
@@ -131,26 +132,32 @@ class DashboardScreen(Layout):
             for idx, dir in enumerate(directories)
         ]
         return OptionListContainer(
-            "Specs",
-            "The list of specifications ('specs') that you've created for your model files. You can either create a"
-            " spec manually, or select a model file that is not yet associated with a spec; you will be prompted to "
-            " create one any time you attempt to evaluate a model file that has not been linked to a spec.",
             tabs,
+            config=OptionsListContainerConfig(
+                label="Specs",
+                description="The list of specifications ('specs') that you've created for your model files. You can either create a"
+                " spec manually, or select a model file that is not yet associated with a spec; you will be prompted to "
+                " create one any time you attempt to evaluate a model file that has not been linked to a spec.",
+                highlight_last=False,
+                delimiter=None,
+            ),
         )
 
     def _models_section(self, settings: Settings) -> OptionListContainer:
         tabs = [ListTab(Path(dir).name, ()) for dir in settings.models_directories]
         container = OptionListContainer(
-            "Model Directories",
-            "Your model directories, separated by tab. Each tab contains the full list of .blend files that were"
-            " detected. To evaluate a model file, select one from the list. If a model does not have an associated"
-            " spec file, yet, you will be prompted to create one.",
             tabs,
-            highlight_last=True,
-            delimiter="/",
             details=(
                 LabeledField("Total Models", Content("—"), val_id="total-models"),
                 LabeledField("Linked Models", Content("—"), val_id="linked-models"),
+            ),
+            config=OptionsListContainerConfig(
+                label="Model Directories",
+                description="Your model directories, separated by tab. Each tab contains the full list of .blend files that were"
+                " detected. To evaluate a model file, select one from the list. If a model does not have an associated"
+                " spec file, yet, you will be prompted to create one.",
+                highlight_last=True,
+                delimiter="/",
             ),
         )
         container.id = "models-list"
