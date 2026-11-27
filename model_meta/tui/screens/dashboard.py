@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 from textual import on, work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
 from textual.content import Content
 from textual.css.query import NoMatches
@@ -48,6 +49,8 @@ def _linked_specs(results_dir: Path, models: Sequence[Path]) -> dict[Path, str]:
 
 
 class DashboardScreen(Layout):
+    BINDINGS = [Binding("x", "clear_link", "Clear link")]
+
     def __init__(self):
         super().__init__(page_title="Dashboard")
         self.description = (
@@ -57,6 +60,7 @@ class DashboardScreen(Layout):
         )
         # (total, linked) per models-directory tab index.
         self._model_counts: dict[int, tuple[int, int]] = {}
+        self._linked_models: set[Path] = set()
 
     def compose_heading(self):
         with Collapsible(collapsed=True, title="ACTIVE DEVELOPMENT NOTICE (click me)"):
@@ -170,6 +174,7 @@ class DashboardScreen(Layout):
         if settings is None:
             return
         self._model_counts = {}
+        self._linked_models = set()
         for idx, directory in enumerate(settings.models_directories):
             path = Path(directory).expanduser()
             if not path.is_dir():
@@ -186,6 +191,7 @@ class DashboardScreen(Layout):
                 for model in found
             ]
             self._model_counts[idx] = (len(found), len(specs))
+            self._linked_models.update(specs)
             try:
                 self.query_one("#models-list", OptionListContainer).set_entries(
                     idx, entries
@@ -220,6 +226,27 @@ class DashboardScreen(Layout):
     def _on_model_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_id is not None:
             self._open_model(Path(event.option_id))
+
+    @on(OptionList.OptionHighlighted, "#models-list OptionList")
+    def _on_model_highlighted(self) -> None:
+        self.refresh_bindings()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        if action == "clear_link":
+            return self._focused_model() in self._linked_models
+        return super().check_action(action, parameters)
+
+    def action_clear_link(self) -> None:
+        pass
+
+    def _focused_model(self) -> Path | None:
+        focused = self.focused
+        if not isinstance(focused, OptionList) or focused.highlighted is None:
+            return None
+        if focused not in self.query("#models-list OptionList"):
+            return None
+        option_id = focused.get_option_at_index(focused.highlighted).id
+        return Path(option_id) if option_id is not None else None
 
     @work(exclusive=True, group="open-model")
     async def _open_model(self, model: Path) -> None:

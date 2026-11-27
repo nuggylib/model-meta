@@ -43,6 +43,11 @@ in the app (analogous to a route in a web app).
   after saving. With no valid config Specs is the only card, so the navigation
   keys act on it alone and the footer still advertises `enter Open`. Future
   work adds live validation results from a Blender-polling worker.
+  **`x` (Clear link):** `check_action` shows it only while a linked
+  `#models-list` row (one in `_linked_models`, filled by `_scan_models`) is
+  highlighted in a focused `OptionList` (`_focused_model`);
+  `OptionHighlighted` refreshes the bindings. `action_clear_link` does nothing
+  yet.
 - `specs.py` — `SpecsScreen` (`specs` in `SCREENS`), the Specs page: the
   validation specs in `specs/`, one focusable `SelectableRow` each, keyed by
   its `SpecEntry`. A `VerticalScroll` of rows (`can_focus=False`, so the rows
