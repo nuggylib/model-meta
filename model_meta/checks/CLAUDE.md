@@ -5,6 +5,15 @@ spec, and builds the results `core.results` stores. Pure functions: no I/O, no
 Textual, no UI.
 
 ## Files
+- `armature.py` — the `armature` check. `evaluate(armature, scene)` takes the
+  spec's `Armature` and the bridge's `SceneArmature`s, and returns an
+  `ArmatureResult` for the one named `object_name`. With none (a blank
+  `object_name` included), `exists` is `False`, every required bone is
+  missing, and `missing_parenting_rules` lists every required child each
+  `parenting` key resolves to (`parenting.pairs`). Otherwise `missing_bones` lists the required bones it lacks, in
+  spec order, and `missing_parenting_rules` lists, per `parenting` key, the
+  required children (`parenting.match`) whose scene parent isn't the bone the
+  key resolved to. A missing child is only in `missing_bones`.
 - `mesh_roles.py` — the `mesh_roles` check.
   - `plan(roles, meshes)`: the `WeightTarget`s, then one textured
     `MeshTarget` per mesh a role with `texture_maps` matches (for textures and
@@ -17,8 +26,8 @@ Textual, no UI.
     `stems_of(overrides)`, mapping `(mesh, map)` to the override name its
     file must start with. When two overrides name the same mesh and map, the
     first wins. `texture_file(stems, mesh, map)` is the filename the check
-    looks for. The check detail screen calls both, so its fix list names
-    the same files.
+    looks for. A fix list should call both, so it names the same files the
+    check does.
   - A role's meshes are the scene meshes whose whole name matches
     `mesh_regex` (`re.fullmatch`).
   - Each set field becomes a `FieldCheck` holding one dict of facts per
@@ -42,16 +51,18 @@ Textual, no UI.
       never counts. A `texture_maps` failure also lists `expected`, the exact
       filename each missing map needs. With an add-on before 0.5.1 (`textures` `None`),
       `texture_maps` fails once with `OLD_ADDON`.
-    - `texture_maps` always sets `duplicates`: the report's same-shape
+    - `texture_maps` is a `TextureMapsCheck`, which always sets `duplicates`: the report's same-shape
       groups, reduced to the role's matched meshes, keeping groups of two or
       more. They are set whether the check passes or fails, and are empty
       when the add-on predates `get_duplicate_meshes`.
-    - A `texture_maps` failure with `missing` also gets
-      `"has_default_uv_map": True` when the bridge reports one for that mesh
-      (a `False` is left out as noise), or its `uv_error`. It is a hint,
-      not a check: the add-on's match can't tell a deliberate layout from a
-      forgotten unwrap. Neither key is added when the report's `uvs` is
-      `None` (an add-on before 0.2.0).
+    - `uv_unwrap` runs whenever `texture_maps` does (it isn't a spec field:
+      baked maps need unwrapped UVs). A mesh with no UV map fails with
+      `{"mesh", "error": "no uv map"}` (`NO_UV_MAP`), and one the bridge
+      reports an `error` for fails with it. A mesh still on a default UV map
+      is a `{"mesh"}` in `warnings`: the add-on's match can't tell a
+      deliberate layout from a forgotten unwrap, so it warns rather than
+      fails. Any other mesh passes. With an add-on before 0.2.0 (`uvs`
+      `None`), it fails once with `OLD_UVS_ADDON`.
   - When nothing matched, every field but `count` fails with
     `"no meshes matched"` (`NO_MESHES`). A missing or non-compiling
     `mesh_regex` fails every set field with that reason.
@@ -71,5 +82,6 @@ Textual, no UI.
     with no meshes passes.
 
 ## Conventions
-- A new field's check is one `_CHECKS` entry. A new root field's check is a
+- A new field's check is one `_CHECKS` entry, plus its `MeshRoleResult` field
+  and `_ROLE_CHECKS` entry in `core/results.py`. A new root field's check is a
   module here, with its result type in `core/results.py`.

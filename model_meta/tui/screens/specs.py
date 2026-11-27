@@ -73,7 +73,7 @@ def plural_specs(count: int) -> str:
 class SpecsScreen(Screen):
     """Detail view for the validation specs in `specs/`.
 
-    Navigation mirrors the Models screen: rows are focusable (`SelectableRow`), `↑`/`↓`
+    Rows are focusable (`SelectableRow`), `↑`/`↓`
     and `j`/`k` step through them, `enter` selects one. The rows are the only
     focus stops — the title and summary lines are plain `Static`s.
 
@@ -118,8 +118,7 @@ class SpecsScreen(Screen):
     async def _new_spec(self) -> None:
         """Open the modal and reload if it wrote something.
 
-        `exclusive` means a fast double `n` cannot stack two modals — the same
-        guard `app._open_setup` relies on.
+        `exclusive` means a fast double `n` cannot stack two modals.
         """
         path = await self.app.push_screen_wait(NewSpecModal())
         if path is None:

@@ -48,9 +48,11 @@ storage, and connections to the external apps Model Meta validates against.
   message or a closed socket raises `BridgeError`. Pure asyncio streams, so it
   runs on the event loop with no thread.
   - `subscribe_armatures(port, timeout)` yields `OpenFile(path)` (`None` for a
-    never-saved file), then each pushed `Armatures(names)` (pushed on subscribe
-    and after a save/load that changes the list), with `names` `None` for
-    `busy`. It ignores the version.
+    never-saved file), then each pushed `Armatures(armatures)` (pushed on
+    subscribe and after a save/load that changes the list), with `armatures`
+    `None` for `busy`. Each `SceneArmature(name, bones)` lists every
+    `SceneBone(name, parent)`, `parent` `None` for a root bone. It ignores the
+    version.
   - `subscribe_meshes(plan, port, timeout)` yields `OpenFile`, then one
     `MeshReport(meshes, weights, textures, uvs, modifiers, duplicates)` per
     pushed `meshes_revision` (on subscribe and after every save/load). A
@@ -67,8 +69,10 @@ storage, and connections to the external apps Model Meta validates against.
     An older add-on skips the request and leaves its list `None`. A missing or
     unparseable version counts as older. `MeshTextures` lists every
     `TextureImage(name, filepath)` the mesh's Image Texture nodes hold
-    (`filepath` `None` when the image has no file). `MeshUvs` keeps only
-    `has_default_uv_map`; the add-on's face count and UV maps are dropped.
+    (`filepath` `None` when the image has no file). `MeshUvs` keeps
+    `has_uv_map` (the add-on's `uv_maps` is non-empty) and
+    `has_default_uv_map`. The face count and the maps themselves are dropped,
+    and a reply missing either key is skipped like any malformed item.
     `MeshModifiers` lists each Blender modifier type in stack order, repeats
     included. `duplicates` is one sorted name list per same-shape group.
     Only one request is in flight at a time. A newer revision restarts the
@@ -116,9 +120,10 @@ storage, and connections to the external apps Model Meta validates against.
     `modifiers` are always written.
 
 - `results.py` — `Results(JsonDocument)`, one model's results file:
-  `model_file` (the model's absolute path) and `spec` (the spec's
-  `model_type`), both required strings, then one check result per spec root
-  field, written in this order: `armature` (`True` passed, `False` failed),
+  `model_file` (the model's absolute path, a required string) and `spec` (the
+  spec's `model_type`, or `None` when the model isn't linked, omitted on
+  write), then one check result per spec root
+  field, written in this order: `armature` (an `ArmatureResult`),
   `mesh_roles` (role name → `MeshRoleResult`) and `modifiers` (a
   `ModifiersResult`). A `None` check was never run and is omitted on write. A
   present one must be well formed (a `null` is rejected). It is the source of
@@ -129,20 +134,37 @@ storage, and connections to the external apps Model Meta validates against.
   those meshes' listed maps expect `<name>_<map>.png` instead of
   `<mesh>_<map>.png`. It defaults to `{}`, is omitted while empty, and the
   mesh check never replaces it. Shape checks only: `name` must be a non-empty
-  string.
-  `MeshRoleResult(meshes, checks, modifiers)` is one role's result: the names
-  `mesh_regex` matched, then a `FieldCheck(failures)` per set field, then
-  that role's own `modifiers` (omitted while `None`), written as
+  string. Overrides belong to the model, not the spec, so `unlinked()` keeps
+  only `model_file` and `texture_map_overrides`. It drops `spec`, every check
+  and `extra`.
+  `ArmatureResult(object_name, exists, missing_bones,
+  missing_parenting_rules)` is written as `{"object_name", "exists",
+  "missing_bones", "missing_parenting_rules"}`, all four always.
+  `missing_parenting_rules` maps a spec `parenting` key to the scene bones it
+  should parent that have another parent, or, with no armature, every bone
+  it should parent. `passed` is `exists` with both
+  lists empty.
+  `mesh_roles` is a `MeshRolesResult`, an alias for `dict[str,
+  MeshRoleResult]`. `MeshRoleResult` is one role's result: `meshes` (the
+  names `mesh_regex` matched), then one field per spec role field it checks:
+  `count`, `vtx_grp`, `weight`, `texture_maps` (a `TextureMapsCheck`),
+  `uv_unwrap` (a `UvUnwrapCheck`) and `material_slots`. Each one is `None`
+  when the spec doesn't set that field. `uv_unwrap` isn't a spec field: it is
+  set exactly when `texture_maps` is, since baked maps need unwrapped UVs.
+  Then come that role's own `modifiers` and `extra`. It's written as
   `{"meshes": [...], "<field>": {"passed", "failures"}, ..., "modifiers":
-  {...}}`. Every key but `meshes` and `modifiers` is a field's check.
+  {...}}`, leaving out the `None` ones. `checks` maps each set field's name
+  to its check, in spec order.
   `ModifiersResult(required, warn, fail)` is written as `{"required":
   {"skinned_meshes": <check>}, "warn": <check>, "fail": <check>}`.
   `FieldCheck.passed` is derived from `failures` being empty, so it can't
   disagree in memory, and `from_dict` rejects a file where it does.
   `FieldCheck.warning` marks a check whose failures are warnings (`warn`), and
-  is written as `"warning": true` only when set. `FieldCheck.duplicates` lists
-  `texture_maps`' same-shape mesh groups, written only when non-empty, and
-  doesn't affect `passed`. Failures are fact dicts,
+  is written as `"warning": true` only when set. `TextureMapsCheck(FieldCheck)`
+  adds `duplicates`, the role's same-shape mesh groups. It's written only when
+  non-empty and doesn't affect `passed`. `UvUnwrapCheck(FieldCheck)` adds
+  `warnings`, one fact dict per mesh still on a default UV map. It's always
+  written and doesn't affect `passed`. Failures are fact dicts,
   stored as given. Every class's `from_dict(data, where=)` raises
   `ValueError` naming the dotted path, e.g. `mesh_roles.wheels.count.passed`.
   `checks.mesh_roles.evaluate` and `checks.modifiers.evaluate` build them.

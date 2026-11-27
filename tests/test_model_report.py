@@ -27,9 +27,9 @@ from model_meta.core.results import (
     TextureMapOverride,
 )
 from model_meta.specs import schema
-from model_meta.tui.screens import model_dashboard
+from model_meta.tui.screens import model_report
 from model_meta.tui.screens.check_detail import CheckDetailScreen
-from model_meta.tui.screens.model_dashboard import ModelDashboardScreen
+from model_meta.tui.screens.model_report import ModelReportScreen
 
 _DROP = object()
 
@@ -85,7 +85,7 @@ def _fake_subscription(monkeypatch, name, wrap, *, reachable=True):
             yield message if isinstance(message, OpenFile) else wrap(message, *args)
         raise BridgeError("The Blender add-on closed the connection.")
 
-    monkeypatch.setattr(model_dashboard, name, subscribe)
+    monkeypatch.setattr(model_report, name, subscribe)
     return pushes
 
 
@@ -173,7 +173,7 @@ def _screen(tmp_path, armature=None, passed=None, roles=None, **saved):
         **saved,
         path=results_path,
     ).create()
-    return ModelDashboardScreen(model, path, results_path)
+    return ModelReportScreen(model, path, results_path)
 
 
 def _on_model(tmp_path):

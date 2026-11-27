@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from textual import work
@@ -12,13 +13,15 @@ from textual.reactive import reactive
 from model_meta import __version__
 from model_meta.config import legacy_dir, paths, store
 from model_meta.config.settings import Settings
+from model_meta.core.blender_bridge import BridgeError, fetch_version
+from model_meta.core.blender_connection import BlenderConnection
 from model_meta.diagnostics import run_headless_check
-from model_meta.tui.screens.blender_detail import BlenderDetailScreen
 from model_meta.tui.screens.dashboard import DashboardScreen
 from model_meta.tui.screens.godot_detail import GodotDetailScreen
-from model_meta.tui.screens.models import ModelsScreen
 from model_meta.tui.screens.setup_wizard import SetupWizard
 from model_meta.tui.screens.specs import SpecsScreen
+from model_meta.tui.theme import MCNUGGIES
+from model_meta.tui.widgets.app_footer import BlenderStatus
 
 
 def _resource_path(name: str) -> Path:
@@ -35,29 +38,20 @@ def _resource_path(name: str) -> Path:
     return Path(__file__).parent / name
 
 
+async def _bridge_version(running: bool) -> str | None:
+    if not running:
+        return None
+    try:
+        return await fetch_version()
+    except BridgeError:
+        return None
+
+
 class ModelMetaApp(App):
-    """The Model Meta TUI.
-
-    This is the spine the product hangs off of: future work adds reactive
-    validation state driven by a Blender-polling worker, plus category detail
-    screens pushed on top of the dashboard.
-
-    Boot routing keys off the config file: a *valid* config goes straight to the
-    dashboard, an *absent* one runs the first-time setup wizard, and a *corrupt*
-    one boots the dashboard with a non-blocking recovery notice (never
-    auto-overwritten). `config_path` is injectable so tests — and the future
-    `model-meta setup` entry — can point at a throwaway file instead of the
-    real `platformdirs` location.
-
-    `force_setup` (the `--setup` flag) opens the wizard on top of whatever the
-    config state routes to, rather than bypassing that routing: with no config
-    it *is* the first run (cancel exits), and with a config it edits over the
-    dashboard (cancel returns there) — so the same "no valid config + cancel"
-    input never strands a config-less dashboard.
-    """
+    """The Model Meta TUI."""
 
     # Header text; Textual otherwise falls back to the class name.
-    TITLE = "model-meta"
+    TITLE = f"model-meta (v{__version__})"
     CSS_PATH = _resource_path("app.tcss")
     BINDINGS = [("q", "quit", "Quit")]
     # The dashboard is the hub; the rest are the per-section detail screens its
@@ -65,9 +59,7 @@ class ModelMetaApp(App):
     # with arguments — screens read app-level state instead.
     SCREENS = {
         "dashboard": DashboardScreen,
-        "blender-detail": BlenderDetailScreen,
         "specs": SpecsScreen,
-        "models": ModelsScreen,
         "godot-detail": GodotDetailScreen,
     }
 
@@ -78,6 +70,9 @@ class ModelMetaApp(App):
     # Always *reassign* (never mutate) — `Settings` is frozen, and only a fresh
     # assignment fires the reactive.
     settings: reactive[Settings | None] = reactive(None)
+    # `None` until the first probe finishes.
+    blender_status: reactive[BlenderStatus | None] = reactive(None)
+    BLENDER_POLL_SECONDS = 5.0
 
     def __init__(
         self, config_path: Path | None = None, force_setup: bool = False
@@ -102,9 +97,14 @@ class ModelMetaApp(App):
         return paths.results_dir(self._config_path)
 
     def on_mount(self) -> None:
-        self.theme = "textual-dark"
+        self.register_theme(MCNUGGIES)
+        self.theme = MCNUGGIES.name
+        self._blender_poll = self.set_interval(
+            self.BLENDER_POLL_SECONDS, self._check_blender_running
+        )
         state, settings = store.load(self._config_path)
         self.settings = settings  # None when absent/corrupt
+        self.watch(self, "settings", self._detect_blender)
         if state == store.ABSENT:
             # No config: run first-time setup (cancel exits, no partial config).
             # `--setup` makes no difference here — there is nothing to edit.
@@ -114,7 +114,7 @@ class ModelMetaApp(App):
         self.push_screen("dashboard")
         if state == store.CORRUPT:
             self.notify(
-                "Config unreadable — press 's' to re-run setup.",
+                "Config unreadable — run `model-meta --setup` to redo setup.",
                 severity="warning",
                 timeout=10,
             )
@@ -136,17 +136,10 @@ class ModelMetaApp(App):
             self.settings = settings  # reassign (frozen) so the dashboard picks it up
         self.push_screen("dashboard")
 
-    def action_open_setup(self) -> None:
-        """Bound to the dashboard's `s` key (`app.open_setup`)."""
-        self._open_setup()
-
     @work(exclusive=True, group="setup")
     async def _open_setup(self) -> None:
         """Re-run setup over the dashboard. Pre-populates from a valid config
-        (edit mode); a cancel keeps the prior config untouched.
-
-        `exclusive` (shared with `_first_run`) guards against a fast double
-        activation stacking two wizard screens."""
+        (edit mode); a cancel keeps the prior config untouched."""
         state, settings = store.load(self._config_path)
         existing = settings if state == store.VALID else None
         result = await self.push_screen_wait(SetupWizard(existing=existing))
@@ -172,6 +165,50 @@ class ModelMetaApp(App):
             )
             return False
         return True
+
+    def _find_blender(self, settings: Settings | None) -> BlenderConnection | None:
+        """The configured executable overrides the standard install locations."""
+        if settings is not None and settings.blender_executable:
+            return settings.blender
+        return next(iter(BlenderConnection.candidates()), None)
+
+    @work(exclusive=True, group="blender-detect")
+    async def _detect_blender(self, settings: Settings | None) -> None:
+        blender = self._find_blender(settings)
+        probe = await asyncio.to_thread(blender.probe) if blender else None
+        if probe is None or not probe.ok:
+            self.blender_status = BlenderStatus(version=None)
+            return
+        running = await asyncio.to_thread(BlenderConnection.is_running)
+        self.blender_status = BlenderStatus(
+            probe.version, running, await _bridge_version(running)
+        )
+
+    def _check_blender_running(self) -> None:
+        status = self.blender_status
+        if status is None or status.version is None:
+            return
+        # Skip, not `exclusive`: cancelling the in-flight check on each tick would
+        # starve it whenever `ps` outlasts the interval.
+        if any(w.group == "blender-running" and w.is_running for w in self.workers):
+            return
+        self._update_blender_running(status)
+
+    @work(group="blender-running")
+    async def _update_blender_running(self, status: BlenderStatus) -> None:
+        running = await asyncio.to_thread(BlenderConnection.is_running)
+        bridge_version = await _bridge_version(running)
+        if self.blender_status is status:  # a re-probe that landed meanwhile wins
+            self.blender_status = replace(
+                status, running=running, bridge_version=bridge_version
+            )
+
+    def on_app_blur(self) -> None:
+        self._blender_poll.pause()
+
+    def on_app_focus(self) -> None:
+        self._blender_poll.resume()
+        self._check_blender_running()
 
 
 def main(argv: list[str] | None = None) -> None:

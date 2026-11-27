@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Collection, Sequence
 from dataclasses import replace
 
-from model_meta.core.spec import Modifiers
+from model_meta.core.spec import ModifiersSpec
 from model_meta.specs import schema
 
 # `skinned_meshes` stands for `required.skinned_meshes`.
@@ -19,7 +19,7 @@ _CONFLICTS = {
 }
 
 
-def get(mods: Modifiers, name: str) -> list[str]:
+def get(mods: ModifiersSpec, name: str) -> list[str]:
     return {
         "skinned_meshes": mods.required.skinned_meshes,
         "allowed": mods.allowed,
@@ -28,13 +28,13 @@ def get(mods: Modifiers, name: str) -> list[str]:
     }[name]
 
 
-def choices(mods: Modifiers) -> list[str]:
+def choices(mods: ModifiersSpec) -> list[str]:
     """`MODIFIERS`, then the unknown names of every list in `LISTS` order."""
     found = [modifier for key in LISTS for modifier in get(mods, key)]
     return list(dict.fromkeys([*schema.MODIFIERS, *found]))
 
 
-def conflicts(mods: Modifiers, name: str) -> dict[str, list[str]]:
+def conflicts(mods: ModifiersSpec, name: str) -> dict[str, list[str]]:
     """Each modifier in a list that conflicts with list `name`, and those lists."""
     found: dict[str, list[str]] = {}
     for other in _CONFLICTS[name]:
@@ -43,7 +43,7 @@ def conflicts(mods: Modifiers, name: str) -> dict[str, list[str]]:
     return found
 
 
-def assign(mods: Modifiers, name: str, checked: Collection[str]) -> Modifiers:
+def assign(mods: ModifiersSpec, name: str, checked: Collection[str]) -> ModifiersSpec:
     """List `name` set to `checked`, which leaves every list it conflicts with."""
     lists = {key: get(mods, key) for key in LISTS}
     lists[name] = [modifier for modifier in choices(mods) if modifier in checked]

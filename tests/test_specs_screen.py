@@ -46,7 +46,6 @@ async def _open_specs(pilot, app):
     test's own thread races the new `Header`'s mount.
     """
     await pilot.pause()
-    await pilot.press("down")  # Blender → Specs
     await pilot.press("enter")
     assert await _wait_for(pilot, lambda: isinstance(app.screen, SpecsScreen))
 
@@ -277,12 +276,11 @@ async def test_specs_screen_footer_advertises_the_new_spec_key(tmp_path, monkeyp
         ]
         assert ("n", "New spec") in shown
         assert ("escape", "Back") in shown
-        assert ("s", "Setup") not in shown
         assert ("q", "Quit") in shown
         # The movement keys are bound but not advertised: the `VerticalScroll`
         # ancestor's own hidden scroll bindings shadow the screen's shown `Move`
-        # entry. Same on `ModelsScreen` — a scroller page trades the footer hint
-        # for the scrolling, and the keys themselves still move focus (below).
+        # entry. A scroller page trades the footer hint for the scrolling, and
+        # the keys themselves still move focus (below).
         assert "Move" not in [description for _key, description in shown]
         assert {"down", "j", "up", "k"} <= set(app.screen.active_bindings)
 

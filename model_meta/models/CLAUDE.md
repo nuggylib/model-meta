@@ -10,6 +10,10 @@ directories. This category only *locates* models — reading what is inside one
   a bounded, permission-tolerant, symlink-guarded walk returning sorted absolute
   paths. `DEFAULT_MAX_DEPTH` is exported so the UI can tell the user where the
   scan stopped looking instead of hard-coding a number that would drift.
+  `relative_label(model, root)` is a found model's path relative to its
+  directory, always `/`-separated so the dashboard's `"/"` highlight delimiter
+  holds on Windows (just its name when a symlinked root puts it outside). The
+  dashboard's Model Directories tabs label their rows with it.
 
 ## Conventions
 - **Mirrors `GodotConnection.find_projects` (`core/godot_connection.py`).** Same shape and same guarantees — bounded by
@@ -20,7 +24,7 @@ directories. This category only *locates* models — reading what is inside one
 - **One deliberate divergence: the root's listing is unguarded.** An unreadable
   `directory` *raises* instead of returning `[]`, because the caller has to tell
   "I could not read this" from "there is nothing here" — different problems with
-  different fixes, and the Models screen renders them as different states.
+  different fixes.
   Descendant failures are still swallowed. A *missing* directory is the caller's
   to check cheaply with `is_dir()` before scanning.
 - **`.blend1` is not a model.** Blender writes `foo.blend1`, then `foo.blend2`,

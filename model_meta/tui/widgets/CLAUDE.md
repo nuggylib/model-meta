@@ -16,12 +16,9 @@ in the screen that owns it.
   cannot become a stop of its own and break the "arrow keys step through
   sections" contract.
 - `selectable_row.py` — `SelectableRow(Static, can_focus=True)`, one row a
-  screen lists for the user to pick: a model on the Models screen (`key` is
-  its `Path`, `label` its path relative to the configured directory), a spec
+  screen lists for the user to pick: a spec
   on the Specs screen (`key` is its `SpecEntry`, `label` its `model_type`,
-  `marker` the unreadable / mismatched note), a root check on the model
-  dashboard (`key` is its results file key, `label` its icon and text), a
-  mesh role on the check detail screen (`key` is the role name). `enter` posts
+  `marker` the unreadable / mismatched note). `enter` posts
   `SelectableRow.Selected`, whose `row` (also `control`) carries `key`. It
   carries a key rather than a screen name because what a selection does is
   the screen's call. `render` builds a Rich `Text`: `▸ <label>` as plain text,
@@ -70,6 +67,28 @@ in the screen that owns it.
   alone) adds `.field-list-marked` to those rows. Assigning `lines` clears it,
   so set it after them. On: `#parenting-list`, `#role-list` and
   `#role-fields`.
+- `labeled_field.py` — `LabeledField(HorizontalGroup)`, one `Label: value`
+  line: a bold `.field-label` `Static` (the `label` is escaped, the colon
+  added) and a `Static` of `val`, which is markup or `Content` the caller
+  styles. `val_id` sets the value's id, so a screen can `update` it later
+  (`#file-path`). Display-only. Used on the model report heading.
+
+- `app_footer.py` — `AppFooter(Footer)`, the footer `Layout` composes: the
+  bindings, then a `BlenderStatusLabel` that `watch`es the app's
+  `blender_status`. `Footer` recomposes on every bindings change, so the label
+  is rebuilt each time and must read app state on mount, never hold its own.
+  `blender_label(status)` renders `○ Blender` (probing), `✗ Blender` (not
+  detected), or a dot plus `Blender <version>`: `$success` running,
+  `grey` not running, the version always `grey`. While running it's followed
+  by a `grey` `(bridge v<version>)` or, with no `bridge_version`, an `$error`
+  `(bridge not found)`; not running shows no bridge part. Not `$text-muted`: that's
+  `auto 60%`, a fade that doesn't stand out against the footer.
+  `BlenderStatus(version, running, bridge_version)` is the app's state;
+  `version` `None` means not detected, `bridge_version` `None` that the
+  add-on didn't report one (the app asks it via `fetch_version` only while
+  Blender is running). No styling of its own: colors are theme variables in
+  markup, and the `.align-right` primitive puts it against the command
+  palette key (a second `dock: right` would overlap that key).
 
 ## Conventions
 - **A widget never navigates.** It names where it leads (`target`) and posts a

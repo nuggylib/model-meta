@@ -7,6 +7,7 @@ from pathlib import PurePath
 
 from model_meta.core.blender_bridge import (
     TEXTURES_VERSION,
+    UVS_VERSION,
     MeshReport,
     MeshTarget,
     MeshTextures,
@@ -15,12 +16,21 @@ from model_meta.core.blender_bridge import (
     SceneMesh,
     WeightTarget,
 )
-from model_meta.core.results import FieldCheck, MeshRoleResult, TextureMapOverride
+from model_meta.core.results import (
+    FieldCheck,
+    MeshRoleResult,
+    MeshRolesResult,
+    TextureMapOverride,
+    TextureMapsCheck,
+    UvUnwrapCheck,
+)
 from model_meta.core.spec import MeshRole
 from model_meta.specs import parenting
 
 NO_MESHES = "no meshes matched"
 OLD_ADDON = f"add-on before {'.'.join(map(str, TEXTURES_VERSION))}"
+OLD_UVS_ADDON = f"add-on before {'.'.join(map(str, UVS_VERSION))}"
+NO_UV_MAP = "no uv map"
 
 
 def plan(
@@ -51,7 +61,7 @@ def evaluate(
     roles: Mapping[str, MeshRole],
     report: MeshReport,
     overrides: Mapping[str, Sequence[TextureMapOverride]] | None = None,
-) -> dict[str, MeshRoleResult]:
+) -> MeshRolesResult:
     """Pass a `report` fetched with `plan(roles, ...)`, so its items line up."""
     weight_targets, textured, _ = plan(roles, report.meshes)
     scene = _Scene(
@@ -119,12 +129,17 @@ def _role_result(
         if not is_set(role):
             continue
         if problem is not None:
-            checks[field] = FieldCheck([{"error": problem}])
+            checks[field] = _failed(field, problem)
         elif not matched and field != "count":
-            checks[field] = FieldCheck([{"error": NO_MESHES}])
+            checks[field] = _failed(field, NO_MESHES)
         else:
             checks[field] = check(role, matched, scene)
-    return MeshRoleResult([mesh.name for mesh in matched], checks)
+    return MeshRoleResult([mesh.name for mesh in matched], **checks)
+
+
+def _failed(field: str, error: str) -> FieldCheck:
+    check_type = _CHECK_TYPES.get(field, FieldCheck)
+    return check_type([{"error": error}])
 
 
 def _count(role: MeshRole, matched: list[SceneMesh], _scene: _Scene) -> FieldCheck:
@@ -162,12 +177,12 @@ def _weight(role: MeshRole, matched: list[SceneMesh], scene: _Scene) -> FieldChe
 
 def _texture_maps(
     role: MeshRole, matched: list[SceneMesh], scene: _Scene
-) -> FieldCheck:
+) -> TextureMapsCheck:
     names = {mesh.name for mesh in matched}
     shared = [[n for n in group if n in names] for group in scene.duplicates]
     duplicates = [group for group in shared if len(group) > 1]
     if scene.textures is None:
-        return FieldCheck([{"error": OLD_ADDON}], duplicates=duplicates)
+        return TextureMapsCheck([{"error": OLD_ADDON}], duplicates=duplicates)
     failures = []
     for mesh in matched:
         result = scene.textures[mesh.name]
@@ -194,19 +209,27 @@ def _texture_maps(
                     "mesh": mesh.name,
                     "missing": missing,
                     "expected": [expected[name] for name in missing],
-                    **_unwrap(mesh.name, scene),
                 }
             )
-    return FieldCheck(failures, duplicates=duplicates)
+    return TextureMapsCheck(failures, duplicates=duplicates)
 
 
-def _unwrap(mesh: str, scene: _Scene) -> dict[str, object]:
+def _uv_unwrap(
+    _role: MeshRole, matched: list[SceneMesh], scene: _Scene
+) -> UvUnwrapCheck:
     if scene.uvs is None:
-        return {}
-    result = scene.uvs[mesh]
-    if result.error is not None:
-        return {"uv_error": result.error}
-    return {"has_default_uv_map": True} if result.has_default_uv_map else {}
+        return UvUnwrapCheck([{"error": OLD_UVS_ADDON}])
+    failures = []
+    warnings = []
+    for mesh in matched:
+        result = scene.uvs[mesh.name]
+        if result.error is not None:
+            failures.append({"mesh": mesh.name, "error": result.error})
+        elif not result.has_uv_map:
+            failures.append({"mesh": mesh.name, "error": NO_UV_MAP})
+        elif result.has_default_uv_map:
+            warnings.append({"mesh": mesh.name})
+    return UvUnwrapCheck(failures, warnings=warnings)
 
 
 def _material_slots(
@@ -226,8 +249,10 @@ _CHECKS = (
     ("vtx_grp", lambda role: role.vtx_grp is not None, _vtx_grp),
     ("weight", lambda role: role.weight is not None, _weight),
     ("texture_maps", lambda role: bool(role.texture_maps), _texture_maps),
+    ("uv_unwrap", lambda role: bool(role.texture_maps), _uv_unwrap),
     ("material_slots", lambda role: bool(role.material_slots), _material_slots),
 )
+_CHECK_TYPES = {"texture_maps": TextureMapsCheck, "uv_unwrap": UvUnwrapCheck}
 
 
 def _matched(

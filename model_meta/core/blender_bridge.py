@@ -26,10 +26,24 @@ class OpenFile:
 
 
 @dataclass(frozen=True)
-class Armatures:
-    """`names` is `None` while Blender is busy."""
+class SceneBone:
+    """`parent` is `None` for a root bone."""
 
-    names: list[str] | None
+    name: str
+    parent: str | None
+
+
+@dataclass(frozen=True)
+class SceneArmature:
+    name: str
+    bones: list[SceneBone]
+
+
+@dataclass(frozen=True)
+class Armatures:
+    """`armatures` is `None` while Blender is busy."""
+
+    armatures: list[SceneArmature] | None
 
 
 @dataclass(frozen=True)
@@ -85,6 +99,7 @@ class MeshUvs:
     """With `error` set (`"no mesh"` / `"in edit mode"`), the rest is empty."""
 
     mesh: str
+    has_uv_map: bool
     has_default_uv_map: bool
     error: str | None = None
 
@@ -294,20 +309,39 @@ def _targets(targets: Sequence[WeightTarget | MeshTarget]) -> dict:
     return {"meshes": [asdict(target) for target in targets]}
 
 
+async def fetch_version(port: int = PORT, timeout: float = 2.0) -> str | None:
+    """`None` for an add-on older than `get_version`. Raises `BridgeError` when the add-on
+    can't be reached, doesn't answer within `timeout`, or answers anything else."""
+    async with _connection("get_version", port, timeout) as bridge:
+        await bridge.send({"type": "get_version"})
+        try:
+            message = await asyncio.wait_for(bridge.receive(), timeout)
+        except TimeoutError as exc:
+            raise BridgeError("The Blender add-on didn't answer.") from exc
+    if not isinstance(message, _Version):
+        raise _unexpected()
+    return message.version
+
+
 @asynccontextmanager
-async def _subscription(kind: str, port: int, timeout: float):
+async def _connection(kind: str, port: int, timeout: float):
     try:
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(HOST, port), timeout
         )
     except (OSError, TimeoutError) as exc:
         raise BridgeError("The Blender add-on isn't reachable.") from exc
-    bridge = _Bridge(reader, writer, kind)
     try:
-        await bridge.subscribe()
-        yield bridge
+        yield _Bridge(reader, writer, kind)
     finally:
         writer.close()
+
+
+@asynccontextmanager
+async def _subscription(kind: str, port: int, timeout: float):
+    async with _connection(kind, port, timeout) as bridge:
+        await bridge.subscribe()
+        yield bridge
 
 
 class _Bridge:
@@ -377,8 +411,7 @@ def _parse(line: bytes):
         version = result.get("version")
         if isinstance(version, str):
             return _Version(version)
-        armatures = result.get("armatures")
-        if _is_str_list(armatures):
+        if (armatures := _armatures(result.get("armatures"))) is not None:
             return Armatures(armatures)
         revision = result.get("meshes_revision")
         if _is_whole(revision):
@@ -413,6 +446,30 @@ def _page(result: dict) -> _Page | None:
     if None in items:
         return None
     return _Page(revision, key, items, next_cursor)
+
+
+def _armatures(items: object) -> list[SceneArmature] | None:
+    if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+        return None
+    parsed = [_scene_armature(item) for item in items]
+    return None if None in parsed else parsed
+
+
+def _scene_armature(item: dict) -> SceneArmature | None:
+    name, bones = item.get("name"), item.get("bones")
+    if not isinstance(name, str) or not isinstance(bones, list):
+        return None
+    parsed = [_scene_bone(bone) for bone in bones]
+    return None if None in parsed else SceneArmature(name, parsed)
+
+
+def _scene_bone(item: object) -> SceneBone | None:
+    if not isinstance(item, dict):
+        return None
+    name, parent = item.get("name"), item.get("parent")
+    if isinstance(name, str) and (parent is None or isinstance(parent, str)):
+        return SceneBone(name, parent)
+    return None
 
 
 def _scene_mesh(item: dict) -> SceneMesh | None:
@@ -454,12 +511,14 @@ def _texture_image(item: dict) -> TextureImage | None:
 
 def _mesh_uvs(item: dict) -> MeshUvs | None:
     mesh, error = item.get("mesh"), item.get("error")
-    default = item.get("has_default_uv_map")
+    maps, default = item.get("uv_maps"), item.get("has_default_uv_map")
     if not isinstance(mesh, str):
         return None
     if "error" in item:
-        return MeshUvs(mesh, False, error) if isinstance(error, str) else None
-    return MeshUvs(mesh, default) if isinstance(default, bool) else None
+        return MeshUvs(mesh, False, False, error) if isinstance(error, str) else None
+    if not isinstance(maps, list) or not isinstance(default, bool):
+        return None
+    return MeshUvs(mesh, bool(maps), default)
 
 
 def _mesh_modifiers(item: dict) -> MeshModifiers | None:

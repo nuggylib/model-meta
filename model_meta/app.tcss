@@ -1,12 +1,43 @@
 /* Application-level styles for Model Meta. */
 
-/* The shared config vocabulary. The dashboard and the per-section detail
-   screens render the same kinds of line — a heading, a configured value, a
-   muted sub-detail — so these are app-level classes rather than per-screen
-   copies. */
-.section-title {
+.body {
+    margin: 0 1 1 1;
+    padding: 0 1 0 0;
+}
+
+.layout-heading-content {
+    margin: 1 1 0 1;
+    padding: 0 1 0 0;
+    border-bottom: solid $secondary;
+}
+
+/* Keeps its top margin as the gap under the Header. */
+.layout-heading-content:empty {
+    border-bottom: none;
+}
+
+.layout-heading-content > * {
+    margin-bottom: 1;
+}
+
+.options-list-container > * {
+    margin-bottom: 1;
+}
+
+.options-list-container OptionList {
+    height: 11;  /* 5 options + 4 separators + 2 border */
+}
+
+.section-heading {
+    width: 100%;
+    background: $primary;
+    padding-left: 1;
+    margin-bottom: 1;
+}
+
+.h2 {
     text-style: bold;
-    color: $accent;
+    color: #000000;
 }
 
 .config-value {
@@ -15,6 +46,172 @@
 
 .config-detail {
     color: $text-muted;
+}
+
+.description {
+    color: $text-muted;
+}
+
+/* Takes the rest of a horizontal row, its text against the right end. */
+.align-right {
+    width: 1fr;
+    text-align: right;
+    padding-right: 1;
+}
+
+/* Fills the rest of the body and centers its children, a line apart. Children
+   shrink to their content, or the centering wouldn't show; the max-width makes
+   long text wrap instead of running off screen. */
+.centered {
+    height: 1fr;
+    align: center middle;
+}
+
+.centered > * {
+    width: auto;
+    max-width: 100%;
+    margin-bottom: 1;
+}
+
+.centered > *:last-child {
+    margin-bottom: 0;
+}
+
+.field-label {
+    width: auto;
+    margin-right: 1;
+}
+
+.column-heading {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.fixes-panel {
+    background: $panel;
+    padding: 1 2 1 2;
+    height: 12;
+}
+
+/* The header row plus 11 checks; the rest scroll beneath it. */
+.armature-checks {
+    max-height: 12;
+}
+
+.section-progress-bar {
+    margin-bottom: 1;
+}
+
+.nested-progress-items {
+    padding-left: 2;
+}
+
+.progress-summary {
+    margin-top: 1;
+}
+
+
+.progress-summary > *,
+.nested-progress-items > * {
+    margin-bottom: 1;
+}
+
+Reports > * {
+    margin-bottom: 1;
+}
+
+Header {
+    background: $primary;
+    color: #000000;
+}
+
+Tabs:focus Tab.-active {
+    background: $accent;
+}
+
+OptionList {
+    border: tall $panel;
+}
+
+OptionList:focus {
+    border: tall $accent;
+}
+
+OptionList:focus > .option-list--option-highlighted {
+    background: $panel 50%;
+    color: $accent
+}
+
+Collapsible {
+    background: $background;
+}
+
+/* Textual's default is 1 0 0 3; a lone padding-right would zero the other sides. */
+Collapsible Contents {
+    padding: 1 1 0 3;
+}
+
+Collapsible Contents > * {
+    margin-bottom: 1;
+}
+
+CollapsibleTitle,
+CollapsibleTitle:hover,
+CollapsibleTitle:focus {
+    background: transparent;
+    color: $accent;
+}
+
+Button.-primary:focus {
+    border: tall #FFFFFF;
+}
+
+* {
+    scrollbar-color: #FFFFFF 50%;
+    scrollbar-size-vertical: 1;
+}
+
+HorizontalGroup {
+    width: 100%;
+    height: auto;
+}
+
+/* Equal-width children with a 5-column gap between them. */
+.columns > * {
+    width: 1fr;
+    margin-right: 5;
+}
+
+.columns > *:last-child {
+    margin-right: 0;
+}
+
+/* Textual's Bar defaults to a fixed 32 columns. */
+ProgressBar {
+    width: 100%;
+}
+
+ProgressBar Bar {
+    width: 1fr;
+}
+
+/* The unfilled part is drawn in the background color. */
+ProgressBar Bar > .bar--bar {
+    color: $secondary;
+    background: $secondary 30%;
+}
+
+/* Warnings still count toward 100%, so the bar only turns green without them. */
+ProgressBar.-warned Bar > .bar--complete {
+    color: $secondary;
+}
+
+ProgressBar #percentage {
+    color: $accent;
+}
+
+ProgressBar.-passed #percentage {
+    color: $success;
 }
 
 /* The rail is painted on every row and only its color changes, keeping the text
@@ -54,29 +251,18 @@ FixPanel .fix-step {
 
 /* -- dashboard ----------------------------------------------------------- */
 
-/* A top-aligned column of config sections (Blender → Models → Godot), not a
+/* A top-aligned column of config sections (Specs → Models → Godot), not a
    single centered line. */
 DashboardScreen #config-panel {
     width: 100%;
     height: auto;
     padding: 1 2;
 }
-
-/* Sections are focusable cards (SectionCard): arrow keys move between them and
-   enter opens one. The left rail is painted on *every* card, not just the
-   focused one, so only its color changes with focus — a border that appeared on
-   focus would shift the row's text sideways as the user moved through. */
-DashboardScreen .section {
-    width: 100%;
-    height: auto;
+DashboardScreen #config-panel > * {
     margin-bottom: 1;
-    border-left: thick $panel;
-    padding-left: 1;
 }
-
-DashboardScreen .section:focus {
-    border-left: thick $accent;
-    background: $boost;
+DashboardScreen #config-panel > :last-child {
+    margin-bottom: 0;
 }
 
 /* -- detail screens ------------------------------------------------------ */
@@ -92,33 +278,28 @@ DashboardScreen .section:focus {
     margin-top: 1;
 }
 
-/* -- model dashboard screen ---------------------------------------------- */
+/* -- model report screen ------------------------------------------------- */
 
-ModelDashboardScreen #model-header {
+ModelReportScreen #model-header {
     height: auto;
     margin-bottom: 1;
 }
 
-ModelDashboardScreen #model-heading {
+ModelReportScreen #model-heading {
     height: auto;
 }
 
-ModelDashboardScreen #model-title {
+ModelReportScreen #model-title {
     width: auto;
-}
-
-ModelDashboardScreen #connection-status {
-    width: auto;
-    margin-left: 1;
 }
 
 /* Root rows are SelectableRows: rail, padding and "▸ " put their text 4 columns
    in, so nested rows start there too. */
-ModelDashboardScreen .model-item-depth-1 {
+ModelReportScreen .model-item-depth-1 {
     padding-left: 7;
 }
 
-ModelDashboardScreen .model-item-depth-2 {
+ModelReportScreen .model-item-depth-2 {
     padding-left: 10;
 }
 
@@ -221,34 +402,6 @@ SpecsScreen #specs-empty {
    header, the fix block, and the footer. `can_focus=False` on the container
    (set in Python) keeps it out of the row focus chain. */
 SpecsScreen #detail-panel {
-    height: 1fr;
-}
-
-/* -- Models screen ------------------------------------------------------- */
-
-ModelsScreen #models-summary {
-    margin-bottom: 1;
-}
-
-ModelsScreen .models-group {
-    width: 100%;
-    height: auto;
-    margin-bottom: 1;
-}
-
-ModelsScreen .models-directory {
-    text-style: bold;
-}
-
-ModelsScreen .models-files {
-    width: 100%;
-    height: auto;
-}
-
-/* The model list scrolls; `height: 1fr` gives it whatever is left between the
-   header, the docked fix block, and the footer. `can_focus=False` on the
-   container (set in Python) keeps it out of the row focus chain. */
-ModelsScreen #detail-panel {
     height: 1fr;
 }
 

@@ -1,9 +1,9 @@
 from model_meta.checks import modifiers
 from model_meta.core.blender_bridge import MeshModifiers
 from model_meta.core.results import FieldCheck, MeshRoleResult, ModifiersResult
-from model_meta.core.spec import Modifiers, RequiredModifiers
+from model_meta.core.spec import ModifiersSpec, RequiredModifiers
 
-MODS = Modifiers(
+MODS = ModifiersSpec(
     required=RequiredModifiers(["ARMATURE"]),
     allowed=["TRIANGULATE"],
     warn=["MIRROR", "SUBSURF"],

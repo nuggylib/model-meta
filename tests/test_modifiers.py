@@ -2,12 +2,12 @@
 
 import pytest
 
-from model_meta.core.spec import Modifiers, RequiredModifiers
+from model_meta.core.spec import ModifiersSpec, RequiredModifiers
 from model_meta.specs import modifiers, schema
 
 
 def _mods(skinned_meshes=("ARMATURE",), allowed=(), warn=(), fail=()):
-    return Modifiers(
+    return ModifiersSpec(
         required=RequiredModifiers(skinned_meshes=list(skinned_meshes)),
         allowed=list(allowed),
         warn=list(warn),

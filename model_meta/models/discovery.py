@@ -49,3 +49,12 @@ def find_blend_files(directory: Path, max_depth: int = DEFAULT_MAX_DEPTH) -> lis
             except OSError:
                 continue  # unstattable entry — skip it, keep its siblings
     return sorted(results)
+
+
+def relative_label(model: Path, root: Path) -> str:
+    """The model's path relative to its configured directory, `/`-separated on every OS."""
+    try:
+        return model.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        # The scan resolves its root, so a symlinked dir yields outside paths.
+        return model.name

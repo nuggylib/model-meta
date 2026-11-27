@@ -20,11 +20,10 @@ _RESULTS_KEYS = (
 @dataclass(frozen=True)
 class FieldCheck:
     """One spec field's check: a dict of facts per failure. A `warning` check's failures
-    are warnings. `duplicates` groups same-shape meshes, for `texture_maps`."""
+    are warnings."""
 
     failures: list[dict[str, object]]
     warning: bool = False
-    duplicates: list[list[str]] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -37,7 +36,6 @@ class FieldCheck:
             raise ValueError(f"`{where}` is not an object.")
         passed, failures = data.get("passed"), data.get("failures")
         warning = data.get("warning", False)
-        duplicates = data.get("duplicates", [])
         if not isinstance(passed, bool):
             raise ValueError(f"`{where}.passed` is not a boolean.")
         if not isinstance(failures, list) or not all(
@@ -48,21 +46,101 @@ class FieldCheck:
             raise ValueError(f"`{where}.passed` disagrees with its failures.")
         if not isinstance(warning, bool):
             raise ValueError(f"`{where}.warning` is not a boolean.")
-        if not isinstance(duplicates, list) or not all(
-            isinstance(group, list) and all(isinstance(name, str) for name in group)
-            for group in duplicates
-        ):
-            raise ValueError(f"`{where}.duplicates` is not a list of name lists.")
-        return cls(failures, warning, duplicates)
+        return cls(failures, warning)
 
     def to_dict(self) -> dict:
         warning = {"warning": True} if self.warning else {}
+        return {"passed": self.passed, "failures": self.failures, **warning}
+
+
+@dataclass(frozen=True)
+class TextureMapsCheck(FieldCheck):
+    """`duplicates` groups same-shape meshes and doesn't affect `passed`."""
+
+    duplicates: list[list[str]] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: object, *, where: str) -> Self:
+        """Raises `ValueError` naming `where` for a malformed check."""
+        check = FieldCheck.from_dict(data, where=where)
+        duplicates = data.get("duplicates", [])
+        if not isinstance(duplicates, list) or not all(
+            _is_str_list(group) for group in duplicates
+        ):
+            raise ValueError(f"`{where}.duplicates` is not a list of name lists.")
+        return cls(check.failures, check.warning, duplicates)
+
+    def to_dict(self) -> dict:
         duplicates = {"duplicates": self.duplicates} if self.duplicates else {}
+        return {**super().to_dict(), **duplicates}
+
+
+@dataclass(frozen=True)
+class UvUnwrapCheck(FieldCheck):
+    """`warnings` holds a dict of facts per mesh still on a default UV map, and doesn't
+    affect `passed`."""
+
+    warnings: list[dict[str, object]] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: object, *, where: str) -> Self:
+        """Raises `ValueError` naming `where` for a malformed check."""
+        check = FieldCheck.from_dict(data, where=where)
+        warnings = data.get("warnings", [])
+        if not isinstance(warnings, list) or not all(
+            isinstance(warning, dict) for warning in warnings
+        ):
+            raise ValueError(f"`{where}.warnings` is not a list of objects.")
+        return cls(check.failures, check.warning, warnings)
+
+    def to_dict(self) -> dict:
+        return {**super().to_dict(), "warnings": self.warnings}
+
+
+@dataclass(frozen=True)
+class ArmatureResult:
+    """In an armature that exists, a missing bone is only in `missing_bones`:
+    the add-on can't report a parent for it. A missing armature fails every
+    parenting rule, so each child is in both."""
+
+    object_name: str
+    exists: bool
+    missing_bones: list[str] = field(default_factory=list)
+    missing_parenting_rules: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def passed(self) -> bool:
+        return (
+            self.exists and not self.missing_bones and not self.missing_parenting_rules
+        )
+
+    @classmethod
+    def from_dict(cls, data: object, *, where: str) -> Self:
+        """Raises `ValueError` naming `where`."""
+        if not isinstance(data, dict):
+            raise ValueError(f"`{where}` is not an object.")
+        object_name, exists = data.get("object_name"), data.get("exists")
+        bones, rules = data.get("missing_bones"), data.get("missing_parenting_rules")
+        if not isinstance(object_name, str):
+            raise ValueError(f"`{where}.object_name` is not a string.")
+        if not isinstance(exists, bool):
+            raise ValueError(f"`{where}.exists` is not a boolean.")
+        if not _is_str_list(bones):
+            raise ValueError(f"`{where}.missing_bones` is not a list of strings.")
+        if not isinstance(rules, dict) or not all(
+            _is_str_list(children) for children in rules.values()
+        ):
+            raise ValueError(
+                f"`{where}.missing_parenting_rules` is not a map of string lists."
+            )
+        return cls(object_name, exists, bones, rules)
+
+    def to_dict(self) -> dict:
         return {
-            "passed": self.passed,
-            "failures": self.failures,
-            **warning,
-            **duplicates,
+            "object_name": self.object_name,
+            "exists": self.exists,
+            "missing_bones": self.missing_bones,
+            "missing_parenting_rules": self.missing_parenting_rules,
         }
 
 
@@ -101,42 +179,69 @@ class ModifiersResult:
 
 @dataclass(frozen=True)
 class MeshRoleResult:
-    """`meshes` are the names `mesh_regex` matched; `checks` holds only the role's set
-    fields. `modifiers` checks just those meshes, and is `None` until it has run."""
+    """`meshes` are the names `mesh_regex` matched. A `None` check's field isn't set in
+    the role's spec, and `uv_unwrap` is `None` when `texture_maps` isn't; `modifiers`
+    is `None` until it has run."""
 
     meshes: list[str]
-    checks: dict[str, FieldCheck]
+    count: FieldCheck | None = None
+    vtx_grp: FieldCheck | None = None
+    weight: FieldCheck | None = None
+    texture_maps: TextureMapsCheck | None = None
+    uv_unwrap: UvUnwrapCheck | None = None
+    material_slots: FieldCheck | None = None
     modifiers: ModifiersResult | None = None
+    extra: dict[str, object] = field(default_factory=dict)
+
+    @property
+    def checks(self) -> dict[str, FieldCheck]:
+        """The set fields' checks, in spec order."""
+        return {
+            key: check
+            for key in _ROLE_CHECKS
+            if (check := getattr(self, key)) is not None
+        }
 
     @classmethod
     def from_dict(cls, data: object, *, where: str) -> Self:
-        """Every key but `meshes` and `modifiers` is a field's check. Raises `ValueError`
-        naming `where`."""
+        """Raises `ValueError` naming `where`."""
         if not isinstance(data, dict):
             raise ValueError(f"`{where}` is not an object.")
         meshes = data.get("meshes")
-        if not isinstance(meshes, list) or not all(
-            isinstance(name, str) for name in meshes
-        ):
+        if not _is_str_list(meshes):
             raise ValueError(f"`{where}.meshes` is not a list of strings.")
         checks = {
-            field: FieldCheck.from_dict(check, where=f"{where}.{field}")
-            for field, check in data.items()
-            if field not in ("meshes", "modifiers")
+            key: check_type.from_dict(data[key], where=f"{where}.{key}")
+            for key, check_type in _ROLE_CHECKS.items()
+            if key in data
         }
         modifiers = None
         if "modifiers" in data:
             modifiers = ModifiersResult.from_dict(
                 data["modifiers"], where=f"{where}.modifiers"
             )
-        return cls(meshes, checks, modifiers)
+        extra = {key: value for key, value in data.items() if key not in _ROLE_KEYS}
+        return cls(meshes, **checks, modifiers=modifiers, extra=extra)
 
     def to_dict(self) -> dict:
-        checks = {field: check.to_dict() for field, check in self.checks.items()}
+        checks = {key: check.to_dict() for key, check in self.checks.items()}
         modifiers = (
             {} if self.modifiers is None else {"modifiers": self.modifiers.to_dict()}
         )
-        return {"meshes": self.meshes, **checks, **modifiers}
+        return {"meshes": self.meshes, **checks, **modifiers, **self.extra}
+
+
+_ROLE_CHECKS: dict[str, type[FieldCheck]] = {
+    "count": FieldCheck,
+    "vtx_grp": FieldCheck,
+    "weight": FieldCheck,
+    "texture_maps": TextureMapsCheck,
+    "uv_unwrap": UvUnwrapCheck,
+    "material_slots": FieldCheck,
+}
+_ROLE_KEYS = ("meshes", *_ROLE_CHECKS, "modifiers")
+
+MeshRolesResult = dict[str, MeshRoleResult]
 
 
 @dataclass(frozen=True)
@@ -169,13 +274,10 @@ class TextureMapOverride:
 
 @dataclass
 class Results(JsonDocument):
-    """A `None` check was never run and is omitted on write. `texture_map_overrides`
-    is the user's, by role name, and is omitted while empty."""
-
     model_file: str
-    spec: str
-    armature: bool | None = None
-    mesh_roles: dict[str, MeshRoleResult] | None = None
+    spec: str | None
+    armature: ArmatureResult | None = None
+    mesh_roles: MeshRolesResult | None = None
     modifiers: ModifiersResult | None = None
     texture_map_overrides: dict[str, list[TextureMapOverride]] = field(
         default_factory=dict
@@ -189,17 +291,25 @@ class Results(JsonDocument):
         digest = hashlib.sha1(str(model_file).encode("utf-8")).hexdigest()[:8]
         return results_dir / f"{model_file.stem}-{digest}.json"
 
+    def unlinked(self) -> Self:
+        return type(self)(
+            model_file=self.model_file,
+            spec=None,
+            texture_map_overrides=self.texture_map_overrides,
+            path=self.path,
+        )
+
     @classmethod
     def from_dict(cls, data: dict, *, path: Path) -> Self:
         model_file = data.get("model_file")
         if not isinstance(model_file, str):
             raise ValueError("`model_file` is not a string.")
         spec = data.get("spec")
-        if not isinstance(spec, str):
+        if "spec" in data and not isinstance(spec, str):
             raise ValueError("`spec` is not a string.")
-        armature = data.get("armature")
-        if "armature" in data and not isinstance(armature, bool):
-            raise ValueError("`armature` is not a boolean.")
+        armature = None
+        if "armature" in data:
+            armature = ArmatureResult.from_dict(data["armature"], where="armature")
         roles = data.get("mesh_roles")
         if "mesh_roles" in data and not isinstance(roles, dict):
             raise ValueError("`mesh_roles` is not an object.")
@@ -226,7 +336,8 @@ class Results(JsonDocument):
 
     def to_dict(self) -> dict:
         known = {
-            "armature": self.armature,
+            "spec": self.spec,
+            "armature": None if self.armature is None else self.armature.to_dict(),
             "mesh_roles": None
             if self.mesh_roles is None
             else {name: role.to_dict() for name, role in self.mesh_roles.items()},
@@ -237,13 +348,16 @@ class Results(JsonDocument):
             }
             or None,
         }
-        checks = {key: value for key, value in known.items() if value is not None}
+        present = {key: value for key, value in known.items() if value is not None}
         return {
             "model_file": self.model_file,
-            "spec": self.spec,
-            **checks,
+            **present,
             **self.extra,
         }
+
+
+def _is_str_list(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
 def _overrides(data: object) -> dict[str, list[TextureMapOverride]]:

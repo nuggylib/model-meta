@@ -2,7 +2,13 @@ import json
 
 import pytest
 
-from model_meta.core.spec import Armature, MeshRole, Modifiers, RequiredModifiers, Spec
+from model_meta.core.spec import (
+    ArmatureSpec,
+    MeshRole,
+    ModifiersSpec,
+    RequiredModifiers,
+    Spec,
+)
 
 _FULL = {
     "model_type": "vehicle",
@@ -62,7 +68,7 @@ def test_a_full_spec_parses_into_typed_fields(tmp_path):
     assert spec.mesh_roles["window_fl"] == MeshRole(
         vtx_grp="window_fl", mesh_regex="^window_fl"
     )
-    assert spec.modifiers == Modifiers(
+    assert spec.modifiers == ModifiersSpec(
         required=RequiredModifiers(skinned_meshes=["ARMATURE"]),
         allowed=["TRIANGULATE", "WEIGHTED_NORMAL"],
         warn=["MIRROR"],
@@ -127,9 +133,9 @@ def test_unknown_keys_survive_at_every_level(tmp_path):
 
 def test_missing_keys_default_and_are_added_on_write(tmp_path):
     spec = _spec({"model_type": "vehicle"}, tmp_path)
-    assert spec.armature == Armature()
+    assert spec.armature == ArmatureSpec()
     assert spec.mesh_roles == {}
-    assert spec.modifiers == Modifiers()
+    assert spec.modifiers == ModifiersSpec()
     assert spec.to_dict() == {
         "model_type": "vehicle",
         "armature": {
