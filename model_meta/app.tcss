@@ -50,7 +50,6 @@
 
 .description {
     color: $text-muted;
-    margin-bottom: 1;
 }
 
 /* Takes the rest of a horizontal row, its text against the right end. */
